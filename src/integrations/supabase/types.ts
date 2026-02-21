@@ -295,6 +295,60 @@ export type Database = {
         }
         Relationships: []
       }
+      shifts: {
+        Row: {
+          created_at: string
+          date: string
+          department: Database["public"]["Enums"]["department"]
+          end_time: string | null
+          id: string
+          is_day_off: boolean
+          start_time: string | null
+          store_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          department: Database["public"]["Enums"]["department"]
+          end_time?: string | null
+          id?: string
+          is_day_off?: boolean
+          start_time?: string | null
+          store_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          department?: Database["public"]["Enums"]["department"]
+          end_time?: string | null
+          id?: string
+          is_day_off?: boolean
+          start_time?: string | null
+          store_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shifts_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shifts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_coverage_requirements: {
         Row: {
           created_at: string
