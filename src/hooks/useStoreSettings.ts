@@ -7,6 +7,7 @@ export type StoreRules = Tables<"store_rules">;
 export type OpeningHour = Tables<"store_opening_hours">;
 export type CoverageReq = Tables<"store_coverage_requirements">;
 export type ShiftTemplate = Tables<"store_shift_templates">;
+export type AllowedTime = Tables<"store_shift_allowed_times">;
 
 export const DAY_LABELS = [
   "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica",
@@ -89,6 +90,55 @@ export function useShiftTemplates(storeId: string | undefined) {
       return (data ?? []) as ShiftTemplate[];
     },
     enabled: !!storeId,
+  });
+}
+
+export function useAllowedTimes(storeId: string | undefined) {
+  return useQuery({
+    queryKey: ["store-allowed-times", storeId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("store_shift_allowed_times")
+        .select("*")
+        .eq("store_id", storeId!)
+        .order("department")
+        .order("kind")
+        .order("hour");
+      if (error) throw error;
+      return (data ?? []) as AllowedTime[];
+    },
+    enabled: !!storeId,
+  });
+}
+
+export function useSaveAllowedTimes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      storeId,
+      times,
+    }: {
+      storeId: string;
+      times: { department: "sala" | "cucina"; kind: "entry" | "exit"; hour: number; is_active: boolean }[];
+    }) => {
+      const { error: delErr } = await supabase
+        .from("store_shift_allowed_times")
+        .delete()
+        .eq("store_id", storeId);
+      if (delErr) throw delErr;
+      if (times.length > 0) {
+        const inserts = times.map((t) => ({ ...t, store_id: storeId }));
+        const { error: insErr } = await supabase
+          .from("store_shift_allowed_times")
+          .insert(inserts as any);
+        if (insErr) throw insErr;
+      }
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["store-allowed-times", vars.storeId] });
+      toast.success("Entrate/Uscite aggiornate");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore salvataggio entrate/uscite"),
   });
 }
 
