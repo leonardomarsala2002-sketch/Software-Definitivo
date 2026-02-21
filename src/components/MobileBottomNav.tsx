@@ -1,14 +1,17 @@
 import { useLocation, Link } from "react-router-dom";
-import { bottomNavItems } from "@/config/navigation";
+import { bottomNavItems, filterNavByRole } from "@/config/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 export function MobileBottomNav() {
   const location = useLocation();
+  const { role } = useAuth();
+  const visibleItems = filterNavByRole(bottomNavItems, role);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-card/95 backdrop-blur-lg md:hidden">
       <div className="flex h-[4.25rem] items-center justify-around px-1 pb-1">
-        {bottomNavItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.url === "/"
               ? location.pathname === "/"
