@@ -14,6 +14,7 @@ export interface EmployeeRow {
   is_active: boolean;
   primary_store_name: string | null;
   primary_store_id: string | null;
+  availability_count: number;
 }
 
 export interface AvailabilityRow {
@@ -39,8 +40,18 @@ export interface ExceptionRow {
 }
 
 const DAY_LABELS = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+const DAY_LABELS_SHORT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
-export { DAY_LABELS };
+export { DAY_LABELS, DAY_LABELS_SHORT };
+
+/** Check if an employee is "ready" for shift generation */
+export function isEmployeeReady(emp: EmployeeRow): boolean {
+  return (
+    !!emp.department &&
+    emp.weekly_contract_hours > 0 &&
+    emp.availability_count > 0
+  );
+}
 
 export function useEmployeeList() {
   const { role, stores } = useAuth();
@@ -49,7 +60,6 @@ export function useEmployeeList() {
   return useQuery({
     queryKey: ["employees", role, storeIds],
     queryFn: async (): Promise<EmployeeRow[]> => {
-      // Get employee details (RLS handles filtering)
       const { data: details, error: detailsErr } = await supabase
         .from("employee_details")
         .select("user_id, department, weekly_contract_hours, phone, is_active");
@@ -59,14 +69,17 @@ export function useEmployeeList() {
 
       const userIds = details.map((d) => d.user_id);
 
-      // Fetch profiles and store assignments in parallel
-      const [profilesRes, assignmentsRes] = await Promise.all([
+      const [profilesRes, assignmentsRes, availRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds),
         supabase
           .from("user_store_assignments")
           .select("user_id, store_id, is_primary, stores(name)")
           .in("user_id", userIds)
           .eq("is_primary", true),
+        supabase
+          .from("employee_availability")
+          .select("user_id")
+          .in("user_id", userIds),
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
@@ -76,6 +89,12 @@ export function useEmployeeList() {
       const storeMap = new Map(
         assignmentsRes.data?.map((a: any) => [a.user_id, { name: a.stores?.name, id: a.store_id }]) ?? []
       );
+
+      // Count availability records per user
+      const availCountMap = new Map<string, number>();
+      (availRes.data ?? []).forEach((a) => {
+        availCountMap.set(a.user_id, (availCountMap.get(a.user_id) ?? 0) + 1);
+      });
 
       return details.map((d) => {
         const profile = profileMap.get(d.user_id);
@@ -91,6 +110,7 @@ export function useEmployeeList() {
           is_active: d.is_active,
           primary_store_name: store?.name ?? null,
           primary_store_id: store?.id ?? null,
+          availability_count: availCountMap.get(d.user_id) ?? 0,
         };
       });
     },
@@ -157,6 +177,23 @@ export function useUpdateEmployeeDetails() {
   });
 }
 
+export function useBulkCreateAvailability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Omit<AvailabilityRow, "id">[]) => {
+      const { error } = await supabase.from("employee_availability").insert(rows as any);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      const userId = vars[0]?.user_id;
+      if (userId) qc.invalidateQueries({ queryKey: ["employee-availability", userId] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      toast.success("Disponibilità salvata");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore"),
+  });
+}
+
 export function useCreateAvailability() {
   const qc = useQueryClient();
   return useMutation({
@@ -166,6 +203,7 @@ export function useCreateAvailability() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["employee-availability", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
       toast.success("Disponibilità aggiunta");
     },
     onError: (err: any) => toast.error(err.message ?? "Errore"),
@@ -182,6 +220,7 @@ export function useDeleteAvailability() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["employee-availability", vars.userId] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
       toast.success("Disponibilità eliminata");
     },
     onError: (err: any) => toast.error(err.message ?? "Errore"),

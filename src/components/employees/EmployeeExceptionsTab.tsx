@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeExceptions, useCreateException, useDeleteException } from "@/hooks/useEmployees";
@@ -34,10 +34,13 @@ interface Props {
 }
 
 export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Props) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { data: exceptions, isLoading } = useEmployeeExceptions(userId);
   const createExc = useCreateException();
   const deleteExc = useDeleteException();
+
+  const isOwnProfile = user?.id === userId;
+  const isEmployee = role === "employee";
 
   const [showForm, setShowForm] = useState(false);
   const [excType, setExcType] = useState<string>("ferie");
@@ -82,27 +85,33 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
   if (isLoading) {
     return (
       <div className="space-y-3 py-2">
-        {[1, 2].map((i) => (
-          <Skeleton key={i} className="h-14 w-full" />
-        ))}
+        {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
       </div>
     );
   }
 
   return (
     <div className="space-y-4 py-2">
-      {exceptions && exceptions.length === 0 && !showForm && (
+      {/* Employee hint: use Richieste */}
+      {isEmployee && isOwnProfile && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-start gap-2">
+          <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            Per richiedere ferie, permessi o modifiche orario, usa la sezione <strong>Richieste</strong> nel menu principale.
+          </p>
+        </div>
+      )}
+
+      {exceptions && exceptions.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-6">Nessuna eccezione futura</p>
       )}
 
       {exceptions?.map((exc) => (
         <div key={exc.id} className="rounded-lg border border-border p-3 flex items-start justify-between gap-2">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant={TYPE_COLORS[exc.exception_type] ?? "outline"} className="text-[11px]">
-                {TYPE_LABELS[exc.exception_type] ?? exc.exception_type}
-              </Badge>
-            </div>
+            <Badge variant={TYPE_COLORS[exc.exception_type] ?? "outline"} className="text-[11px]">
+              {TYPE_LABELS[exc.exception_type] ?? exc.exception_type}
+            </Badge>
             <p className="text-sm text-foreground">
               {new Date(exc.start_date).toLocaleDateString("it-IT")} – {new Date(exc.end_date).toLocaleDateString("it-IT")}
             </p>
@@ -133,14 +142,10 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
           <div className="space-y-1.5">
             <Label className="text-xs">Tipo</Label>
             <Select value={excType} onValueChange={setExcType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(TYPE_LABELS).map(([val, label]) => (
-                  <SelectItem key={val} value={val}>
-                    {label}
-                  </SelectItem>
+                  <SelectItem key={val} value={val}>{label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -160,12 +165,8 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleAdd} disabled={createExc.isPending} className="flex-1">
-              Salva
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>
-              Annulla
-            </Button>
+            <Button size="sm" onClick={handleAdd} disabled={createExc.isPending} className="flex-1">Salva</Button>
+            <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
           </div>
         </div>
       )}
