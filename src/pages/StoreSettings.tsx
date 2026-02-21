@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Settings, Plus, Pencil, ShieldCheck, CalendarClock, LayoutGrid, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Settings, Plus, Pencil, ShieldCheck, CalendarClock, LayoutGrid, LogIn, CheckCircle2, AlertCircle } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useStoreRules, useOpeningHours, useCoverageRequirements, useShiftTemplates,
-  useInitStoreConfig, useUpdateStoreRules, useUpdateOpeningHours, useSaveCoverage, useSaveShiftTemplates,
+  useStoreRules, useOpeningHours, useCoverageRequirements, useAllowedTimes,
+  useInitStoreConfig, useUpdateStoreRules, useUpdateOpeningHours, useSaveCoverage, useSaveAllowedTimes,
   DAY_LABELS,
 } from "@/hooks/useStoreSettings";
 import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
-import ShiftTemplatesModal from "@/components/store-settings/ShiftTemplatesModal";
+import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
 
 function SettingsSkeleton() {
   return (
@@ -34,20 +34,20 @@ const StoreSettings = () => {
   const { data: rules, isLoading: loadingRules } = useStoreRules(storeId);
   const { data: hours = [], isLoading: loadingHours } = useOpeningHours(storeId);
   const { data: coverage = [], isLoading: loadingCoverage } = useCoverageRequirements(storeId);
-  const { data: templates = [], isLoading: loadingTemplates } = useShiftTemplates(storeId);
+  const { data: allowedTimes = [], isLoading: loadingAllowed } = useAllowedTimes(storeId);
 
   const initConfig = useInitStoreConfig();
   const updateRules = useUpdateStoreRules();
   const updateHours = useUpdateOpeningHours();
   const saveCoverage = useSaveCoverage();
-  const saveTemplates = useSaveShiftTemplates();
+  const saveAllowed = useSaveAllowedTimes();
 
   const [rulesOpen, setRulesOpen] = useState(false);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [allowedOpen, setAllowedOpen] = useState(false);
 
-  const isLoading = loadingRules || loadingHours || loadingCoverage || loadingTemplates;
+  const isLoading = loadingRules || loadingHours || loadingCoverage || loadingAllowed;
   const readOnly = role === "employee";
   const hasConfig = !!rules;
 
@@ -92,11 +92,11 @@ const StoreSettings = () => {
       onEdit: () => setCoverageOpen(true),
     },
     {
-      title: "Turni Possibili",
-      icon: Clock,
-      summary: templates.length > 0 ? `${templates.length} template` : "Nessun template",
-      configured: templates.length > 0,
-      onEdit: () => setTemplatesOpen(true),
+      title: "Entrate / Uscite",
+      icon: LogIn,
+      summary: allowedTimes.length > 0 ? `${allowedTimes.length} ore configurate` : "Non configurate",
+      configured: allowedTimes.length > 0,
+      onEdit: () => setAllowedOpen(true),
       optional: true,
     },
   ];
@@ -209,12 +209,17 @@ const StoreSettings = () => {
               readOnly={readOnly}
             />
           )}
-          <ShiftTemplatesModal
-            open={templatesOpen}
-            onOpenChange={setTemplatesOpen}
-            templates={templates}
-            onSave={(t) => storeId && saveTemplates.mutate({ storeId, templates: t })}
-            isSaving={saveTemplates.isPending}
+          <AllowedTimesModal
+            open={allowedOpen}
+            onOpenChange={setAllowedOpen}
+            allowedTimes={allowedTimes.map(t => ({
+              department: t.department as "sala" | "cucina",
+              kind: t.kind as "entry" | "exit",
+              hour: t.hour,
+              is_active: t.is_active,
+            }))}
+            onSave={(times) => storeId && saveAllowed.mutate({ storeId, times })}
+            isSaving={saveAllowed.isPending}
             readOnly={readOnly}
           />
         </>

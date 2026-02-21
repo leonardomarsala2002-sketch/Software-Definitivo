@@ -433,6 +433,47 @@ export type Database = {
           },
         ]
       }
+      store_shift_allowed_times: {
+        Row: {
+          created_at: string
+          department: Database["public"]["Enums"]["department"]
+          hour: number
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["shift_time_kind"]
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department: Database["public"]["Enums"]["department"]
+          hour: number
+          id?: string
+          is_active?: boolean
+          kind: Database["public"]["Enums"]["shift_time_kind"]
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"]
+          hour?: number
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["shift_time_kind"]
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_shift_allowed_times_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_shift_templates: {
         Row: {
           created_at: string
@@ -582,6 +623,7 @@ export type Database = {
         | "malattia"
         | "modifica_orario"
         | "altro"
+      shift_time_kind: "entry" | "exit"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -719,6 +761,7 @@ export const Constants = {
         "modifica_orario",
         "altro",
       ],
+      shift_time_kind: ["entry", "exit"],
     },
   },
 } as const
