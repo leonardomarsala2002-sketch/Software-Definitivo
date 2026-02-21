@@ -1,5 +1,15 @@
 import { useState, useMemo } from "react";
-import { Settings, Plus, Pencil, ShieldCheck, CalendarClock, LayoutGrid, LogIn, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Settings,
+  Plus,
+  Pencil,
+  ShieldCheck,
+  CalendarClock,
+  LayoutGrid,
+  LogIn,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -8,8 +18,15 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useStoreRules, useOpeningHours, useCoverageRequirements, useAllowedTimes,
-  useInitStoreConfig, useUpdateStoreRules, useUpdateOpeningHours, useSaveCoverage, useSaveAllowedTimes,
+  useStoreRules,
+  useOpeningHours,
+  useCoverageRequirements,
+  useAllowedTimes,
+  useInitStoreConfig,
+  useUpdateStoreRules,
+  useUpdateOpeningHours,
+  useSaveCoverage,
+  useSaveAllowedTimes,
   DAY_LABELS,
 } from "@/hooks/useStoreSettings";
 import RulesModal from "@/components/store-settings/RulesModal";
@@ -155,7 +172,7 @@ const StoreSettings = () => {
                       <div className="rounded-lg bg-primary/10 p-1.5">
                         <card.icon className="h-4 w-4 text-primary" />
                       </div>
-                      <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
+                      <h3 className="text-sm font-semibold text-foreground">asdasd {card.title}</h3>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
@@ -166,7 +183,10 @@ const StoreSettings = () => {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => { e.stopPropagation(); card.onEdit(); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            card.onEdit();
+                          }}
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
@@ -212,7 +232,7 @@ const StoreSettings = () => {
           <AllowedTimesModal
             open={allowedOpen}
             onOpenChange={setAllowedOpen}
-            allowedTimes={allowedTimes.map(t => ({
+            allowedTimes={allowedTimes.map((t) => ({
               department: t.department as "sala" | "cucina",
               kind: t.kind as "entry" | "exit",
               hour: t.hour,
