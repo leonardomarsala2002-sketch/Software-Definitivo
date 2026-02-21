@@ -54,24 +54,23 @@ export default function AcceptInvite() {
 
     (async () => {
       try {
-        // Use a public-safe query — RLS allows reading own invitations by email,
-        // but for unauthenticated users we use a service-side edge function.
-        // However the trigger approach means we just need to display info.
-        // We'll query directly — if user isn't logged in RLS will block,
-        // so we use the anon key to fetch via a simple select with token match.
-        const { data, error: fetchErr } = await supabase
-          .from("invitations")
-          .select("email, role, status, expires_at, store_id, stores(name)")
-          .eq("token", token)
-          .maybeSingle();
+        // Use public edge function (service_role) to bypass RLS before login
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzcnvfqbbzkqyvolokvt";
+        const resp = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/get-invitation-by-token?token=${encodeURIComponent(token)}`,
+          { headers: { "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Y252ZnFiYnprcXl2b2xva3Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2MTA4MzUsImV4cCI6MjA4NzE4NjgzNX0.ONAGYoMOkaR0uKI0pHpjKrjhdT7vmJyOEdmpP58pQZ0" } }
+        );
+        const result = await resp.json();
 
-        if (fetchErr) throw fetchErr;
-
-        if (!data) {
+        if (!resp.ok || result.error === "not_found" || !result.data) {
           setError("Invito non trovato.");
           setLoading(false);
           return;
         }
+
+        if (result.error) throw new Error(result.error);
+
+        const data = result.data;
 
         if (data.status !== "pending") {
           setError("Questo invito è già stato utilizzato.");
