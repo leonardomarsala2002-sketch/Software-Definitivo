@@ -1,0 +1,220 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+
+export interface EmployeeRow {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  department: "sala" | "cucina";
+  weekly_contract_hours: number;
+  phone: string | null;
+  is_active: boolean;
+  primary_store_name: string | null;
+  primary_store_id: string | null;
+}
+
+export interface AvailabilityRow {
+  id: string;
+  user_id: string;
+  store_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  availability_type: "available" | "unavailable";
+}
+
+export interface ExceptionRow {
+  id: string;
+  user_id: string;
+  store_id: string;
+  exception_type: "ferie" | "permesso" | "malattia" | "modifica_orario" | "altro";
+  start_date: string;
+  end_date: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+const DAY_LABELS = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+
+export { DAY_LABELS };
+
+export function useEmployeeList() {
+  const { role, stores } = useAuth();
+  const storeIds = stores.map((s) => s.id);
+
+  return useQuery({
+    queryKey: ["employees", role, storeIds],
+    queryFn: async (): Promise<EmployeeRow[]> => {
+      // Get employee details (RLS handles filtering)
+      const { data: details, error: detailsErr } = await supabase
+        .from("employee_details")
+        .select("user_id, department, weekly_contract_hours, phone, is_active");
+
+      if (detailsErr) throw detailsErr;
+      if (!details || details.length === 0) return [];
+
+      const userIds = details.map((d) => d.user_id);
+
+      // Fetch profiles and store assignments in parallel
+      const [profilesRes, assignmentsRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds),
+        supabase
+          .from("user_store_assignments")
+          .select("user_id, store_id, is_primary, stores(name)")
+          .in("user_id", userIds)
+          .eq("is_primary", true),
+      ]);
+
+      if (profilesRes.error) throw profilesRes.error;
+      if (assignmentsRes.error) throw assignmentsRes.error;
+
+      const profileMap = new Map(profilesRes.data?.map((p) => [p.id, p]) ?? []);
+      const storeMap = new Map(
+        assignmentsRes.data?.map((a: any) => [a.user_id, { name: a.stores?.name, id: a.store_id }]) ?? []
+      );
+
+      return details.map((d) => {
+        const profile = profileMap.get(d.user_id);
+        const store = storeMap.get(d.user_id);
+        return {
+          user_id: d.user_id,
+          full_name: profile?.full_name ?? null,
+          email: profile?.email ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+          department: d.department as "sala" | "cucina",
+          weekly_contract_hours: d.weekly_contract_hours,
+          phone: d.phone,
+          is_active: d.is_active,
+          primary_store_name: store?.name ?? null,
+          primary_store_id: store?.id ?? null,
+        };
+      });
+    },
+    enabled: !!role,
+  });
+}
+
+export function useEmployeeAvailability(userId: string | null) {
+  return useQuery({
+    queryKey: ["employee-availability", userId],
+    queryFn: async (): Promise<AvailabilityRow[]> => {
+      const { data, error } = await supabase
+        .from("employee_availability")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("day_of_week")
+        .order("start_time");
+      if (error) throw error;
+      return (data ?? []) as AvailabilityRow[];
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useEmployeeExceptions(userId: string | null) {
+  return useQuery({
+    queryKey: ["employee-exceptions", userId],
+    queryFn: async (): Promise<ExceptionRow[]> => {
+      const today = new Date().toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("employee_exceptions")
+        .select("*")
+        .eq("user_id", userId!)
+        .gte("end_date", today)
+        .order("start_date");
+      if (error) throw error;
+      return (data ?? []) as ExceptionRow[];
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useUpdateEmployeeDetails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      updates,
+    }: {
+      userId: string;
+      updates: { department?: string; weekly_contract_hours?: number; phone?: string | null; is_active?: boolean };
+    }) => {
+      const { error } = await supabase
+        .from("employee_details")
+        .update(updates as any)
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      toast.success("Dettagli aggiornati");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore aggiornamento"),
+  });
+}
+
+export function useCreateAvailability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: Omit<AvailabilityRow, "id">) => {
+      const { error } = await supabase.from("employee_availability").insert(row as any);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["employee-availability", vars.user_id] });
+      toast.success("Disponibilità aggiunta");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore"),
+  });
+}
+
+export function useDeleteAvailability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, userId }: { id: string; userId: string }) => {
+      const { error } = await supabase.from("employee_availability").delete().eq("id", id);
+      if (error) throw error;
+      return userId;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["employee-availability", vars.userId] });
+      toast.success("Disponibilità eliminata");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore"),
+  });
+}
+
+export function useCreateException() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: Omit<ExceptionRow, "id" | "created_at">) => {
+      const { error } = await supabase.from("employee_exceptions").insert(row as any);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["employee-exceptions", vars.user_id] });
+      toast.success("Eccezione aggiunta");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore"),
+  });
+}
+
+export function useDeleteException() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, userId }: { id: string; userId: string }) => {
+      const { error } = await supabase.from("employee_exceptions").delete().eq("id", id);
+      if (error) throw error;
+      return userId;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["employee-exceptions", vars.userId] });
+      toast.success("Eccezione eliminata");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore"),
+  });
+}
