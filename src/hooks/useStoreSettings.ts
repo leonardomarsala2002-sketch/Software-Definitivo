@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
@@ -17,6 +16,20 @@ export const DAY_LABELS = [
   "Sabato",
   "Domenica",
 ];
+
+export function generateSlots(opening: string, closing: string): string[] {
+  const slots: string[] = [];
+  const [oh, om] = opening.split(":").map(Number);
+  const [ch, cm] = closing.split(":").map(Number);
+  const startMin = oh * 60 + (om || 0);
+  const endMin = ch * 60 + (cm || 0);
+  for (let m = startMin; m < endMin; m += 60) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    slots.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+  }
+  return slots;
+}
 
 export function useStoreRules(storeId: string | undefined) {
   return useQuery({
@@ -71,13 +84,11 @@ export function useInitStoreConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (storeId: string) => {
-      // Create store_rules with defaults
       const { error: rulesErr } = await supabase
         .from("store_rules")
         .insert({ store_id: storeId } as any);
       if (rulesErr) throw rulesErr;
 
-      // Create 7 opening hours rows (Mon-Sun, 09:00-22:00)
       const hours: TablesInsert<"store_opening_hours">[] = Array.from(
         { length: 7 },
         (_, i) => ({
@@ -135,7 +146,6 @@ export function useUpdateOpeningHours() {
       storeId: string;
       hours: OpeningHour[];
     }) => {
-      // Upsert each row
       for (const h of hours) {
         const { error } = await supabase
           .from("store_opening_hours")
@@ -171,7 +181,6 @@ export function useSaveCoverage() {
         min_staff_required: number;
       }[];
     }) => {
-      // Delete existing and re-insert
       const { error: delErr } = await supabase
         .from("store_coverage_requirements")
         .delete()

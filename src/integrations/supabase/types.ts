@@ -381,6 +381,8 @@ export type Database = {
           mandatory_days_off_per_week: number
           max_daily_hours_per_employee: number
           max_daily_team_hours: number
+          max_daily_team_hours_cucina: number
+          max_daily_team_hours_sala: number
           max_split_shifts_per_employee: number
           max_weekly_hours_per_employee: number
           store_id: string
@@ -392,6 +394,8 @@ export type Database = {
           mandatory_days_off_per_week?: number
           max_daily_hours_per_employee?: number
           max_daily_team_hours?: number
+          max_daily_team_hours_cucina?: number
+          max_daily_team_hours_sala?: number
           max_split_shifts_per_employee?: number
           max_weekly_hours_per_employee?: number
           store_id: string
@@ -403,6 +407,8 @@ export type Database = {
           mandatory_days_off_per_week?: number
           max_daily_hours_per_employee?: number
           max_daily_team_hours?: number
+          max_daily_team_hours_cucina?: number
+          max_daily_team_hours_sala?: number
           max_split_shifts_per_employee?: number
           max_weekly_hours_per_employee?: number
           store_id?: string
