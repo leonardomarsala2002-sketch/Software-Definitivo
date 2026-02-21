@@ -15,6 +15,7 @@ import AuditLog from "@/pages/AuditLog";
 import Invitations from "@/pages/Invitations";
 import Info from "@/pages/Info";
 import Login from "@/pages/Login";
+import AcceptInvite from "@/pages/AcceptInvite";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/invite" element={<AcceptInvite />} />
             <Route
               element={
                 <ProtectedRoute>

@@ -22,6 +22,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthorized: boolean;
   signOut: () => Promise<void>;
+  refreshUserData: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthorized,
         signOut,
+        refreshUserData: loadUserData,
       }}
     >
       {children}
