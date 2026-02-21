@@ -49,9 +49,7 @@ Deno.serve(async (req) => {
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: claimsData, error: claimsErr } = await anonClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
+    const { data: claimsData, error: claimsErr } = await anonClient.auth.getClaims(authHeader.replace("Bearer ", ""));
     if (claimsErr || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -109,7 +107,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const inviteUrl = `${publicAppUrl}/invite?token=${inv.token}`;
+    const inviteUrl = `${publicAppUrl}invite?token=${inv.token}`;
     const storeName = (inv as any).stores?.name ?? "—";
     const roleName = roleLabels[inv.role] ?? inv.role;
     const deptName = inv.department ? (deptLabels[inv.department] ?? inv.department) : "—";
