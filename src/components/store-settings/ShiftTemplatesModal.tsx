@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Save, Plus, Trash2 } from "lucide-react";
 import type { ShiftTemplate } from "@/hooks/useStoreSettings";
+import HourPicker from "./HourPicker";
 
 interface Props {
   open: boolean;
@@ -100,20 +100,16 @@ export default function ShiftTemplatesModal({ open, onOpenChange, templates, onS
               const gIdx = getGlobalIdx(deptIdx);
               return (
                 <div key={deptIdx} className="flex items-center gap-1.5 rounded-md border border-border/30 bg-accent/10 px-2 py-1.5">
-                  <Input
-                    type="time"
+                  <HourPicker
                     value={t.start_time}
                     disabled={readOnly}
-                    className="h-7 flex-1 text-xs"
-                    onChange={(e) => updateField(gIdx, "start_time", e.target.value)}
+                    onChange={(v) => updateField(gIdx, "start_time", v)}
                   />
                   <span className="text-muted-foreground text-xs">–</span>
-                  <Input
-                    type="time"
+                  <HourPicker
                     value={t.end_time}
                     disabled={readOnly}
-                    className="h-7 flex-1 text-xs"
-                    onChange={(e) => updateField(gIdx, "end_time", e.target.value)}
+                    onChange={(v) => updateField(gIdx, "end_time", v)}
                   />
                   <Badge
                     variant={t.is_active ? "default" : "secondary"}

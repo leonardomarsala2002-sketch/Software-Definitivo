@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Save, Copy, ChevronRight, ChevronLeft, Check } from "lucide-react";
 import { toast } from "sonner";
 import { DAY_LABELS, type OpeningHour } from "@/hooks/useStoreSettings";
+import HourPicker from "./HourPicker";
 
 interface Props {
   open: boolean;
@@ -17,8 +17,6 @@ interface Props {
   isSaving: boolean;
   readOnly: boolean;
 }
-
-const PRESETS = ["09:00", "10:00", "11:00", "12:00", "14:00", "18:00", "22:00", "23:00", "24:00"];
 
 export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, isSaving, readOnly }: Props) {
   const [step, setStep] = useState(0);
@@ -35,16 +33,8 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
     setSelectedDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
   };
 
-  const selectAll = () => setSelectedDays([0, 1, 2, 3, 4, 5, 6]);
-
   const update = (idx: number, field: "opening_time" | "closing_time", value: string) => {
     setForm((prev) => prev.map((h, i) => (i === idx ? { ...h, [field]: value } : h)));
-  };
-
-  const applyToSelected = (opening: string, closing: string) => {
-    setForm((prev) =>
-      prev.map((h) => selectedDays.includes(h.day_of_week) ? { ...h, opening_time: opening, closing_time: closing } : h)
-    );
   };
 
   const applyToAll = () => {
@@ -56,7 +46,10 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
 
   const handleSave = () => {
     for (const h of form) {
-      if (h.closing_time <= h.opening_time) {
+      const openH = parseInt(h.opening_time.split(":")[0], 10);
+      const closeH = parseInt(h.closing_time.split(":")[0], 10);
+      // 24:00 means midnight close — always valid if opening < 24
+      if (closeH !== 24 && closeH !== 0 && closeH <= openH) {
         toast.error(`${DAY_LABELS[h.day_of_week]}: chiusura deve essere dopo apertura`);
         return;
       }
@@ -97,7 +90,7 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
                 </Badge>
               ))}
             </div>
-            <Button variant="ghost" size="sm" className="text-xs" onClick={selectAll}>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSelectedDays([0,1,2,3,4,5,6])}>
               Seleziona tutti
             </Button>
             <div className="flex justify-end">
@@ -110,46 +103,22 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
 
         {step === 1 && (
           <div className="space-y-3 py-1">
-            {/* Quick set for selected days */}
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Preset rapidi</p>
-              <div className="flex flex-wrap gap-1">
-                {PRESETS.map((t) => (
-                  <Badge
-                    key={t}
-                    variant="secondary"
-                    className="cursor-pointer text-[11px] px-2 py-0.5 hover:bg-primary hover:text-primary-foreground transition-colors"
-                    onClick={() => {
-                      // Copy to clipboard-like: set as opening for quick use
-                      toast.info(`Usa ${t} come riferimento`);
-                    }}
-                  >
-                    {t}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
               {form.filter((h) => selectedDays.includes(h.day_of_week)).map((h) => {
                 const idx = form.findIndex((x) => x.id === h.id);
                 return (
                   <div key={h.id} className="flex items-center gap-2 rounded-md border border-border/40 bg-accent/20 px-2.5 py-1.5">
                     <span className="w-10 text-xs font-medium shrink-0">{DAY_LABELS[h.day_of_week]?.slice(0, 3)}</span>
-                    <Input
-                      type="time"
+                    <HourPicker
                       value={h.opening_time}
                       disabled={readOnly}
-                      className="h-8 flex-1 text-xs"
-                      onChange={(e) => update(idx, "opening_time", e.target.value)}
+                      onChange={(v) => update(idx, "opening_time", v)}
                     />
                     <span className="text-muted-foreground text-xs">–</span>
-                    <Input
-                      type="time"
+                    <HourPicker
                       value={h.closing_time}
                       disabled={readOnly}
-                      className="h-8 flex-1 text-xs"
-                      onChange={(e) => update(idx, "closing_time", e.target.value)}
+                      onChange={(v) => update(idx, "closing_time", v)}
                     />
                   </div>
                 );
@@ -159,8 +128,12 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
             {!readOnly && selectedDays.length > 1 && (
               <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
                 const first = form.find((h) => h.day_of_week === selectedDays[0]);
-                if (first) applyToSelected(first.opening_time, first.closing_time);
-                toast.info("Orario del primo giorno applicato ai selezionati");
+                if (first) {
+                  setForm((prev) =>
+                    prev.map((h) => selectedDays.includes(h.day_of_week) ? { ...h, opening_time: first.opening_time, closing_time: first.closing_time } : h)
+                  );
+                  toast.info("Orario applicato ai giorni selezionati");
+                }
               }}>
                 <Copy className="mr-1 h-3 w-3" /> Applica primo a tutti i selezionati
               </Button>
@@ -183,7 +156,7 @@ export default function OpeningHoursModal({ open, onOpenChange, hours, onSave, i
               {form.map((h) => (
                 <div key={h.id} className="flex items-center justify-between rounded-md border border-border/30 bg-accent/10 px-3 py-1.5">
                   <span className="text-xs font-medium">{DAY_LABELS[h.day_of_week]}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground font-mono">
                     {h.opening_time.slice(0, 5)} – {h.closing_time.slice(0, 5)}
                   </span>
                 </div>
