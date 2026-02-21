@@ -1,11 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
@@ -23,26 +18,26 @@ interface Props {
 
 export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving, readOnly }: Props) {
   const [form, setForm] = useState({
-    max_daily_team_hours_sala: (rules as any).max_daily_team_hours_sala ?? 40,
-    max_daily_team_hours_cucina: (rules as any).max_daily_team_hours_cucina ?? 40,
-    max_split_shifts_per_employee: rules.max_split_shifts_per_employee,
+    max_team_hours_sala_per_week: (rules as any).max_team_hours_sala_per_week ?? 240,
+    max_team_hours_cucina_per_week: (rules as any).max_team_hours_cucina_per_week ?? 240,
+    max_split_shifts_per_employee_per_week: (rules as any).max_split_shifts_per_employee_per_week ?? 3,
     mandatory_days_off_per_week: rules.mandatory_days_off_per_week,
   });
 
   useEffect(() => {
     setForm({
-      max_daily_team_hours_sala: (rules as any).max_daily_team_hours_sala ?? 40,
-      max_daily_team_hours_cucina: (rules as any).max_daily_team_hours_cucina ?? 40,
-      max_split_shifts_per_employee: rules.max_split_shifts_per_employee,
+      max_team_hours_sala_per_week: (rules as any).max_team_hours_sala_per_week ?? 240,
+      max_team_hours_cucina_per_week: (rules as any).max_team_hours_cucina_per_week ?? 240,
+      max_split_shifts_per_employee_per_week: (rules as any).max_split_shifts_per_employee_per_week ?? 3,
       mandatory_days_off_per_week: rules.mandatory_days_off_per_week,
     });
   }, [rules]);
 
   const fields: { key: keyof typeof form; label: string; min: number; max: number }[] = [
-    { key: "max_daily_team_hours_sala", label: "Max ore giornaliere team Sala", min: 1, max: 999 },
-    { key: "max_daily_team_hours_cucina", label: "Max ore giornaliere team Cucina", min: 1, max: 999 },
-    { key: "max_split_shifts_per_employee", label: "Max spezzati / dipendente", min: 0, max: 5 },
-    { key: "mandatory_days_off_per_week", label: "Giorni liberi obbligatori / settimana", min: 0, max: 7 },
+    { key: "max_team_hours_sala_per_week", label: "Max ore Sala / sett.", min: 1, max: 999 },
+    { key: "max_team_hours_cucina_per_week", label: "Max ore Cucina / sett.", min: 1, max: 999 },
+    { key: "max_split_shifts_per_employee_per_week", label: "Max spezzati / dip. / sett.", min: 0, max: 14 },
+    { key: "mandatory_days_off_per_week", label: "Giorni liberi / sett.", min: 0, max: 7 },
   ];
 
   const handleSave = () => {
@@ -52,16 +47,15 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="backdrop-blur-xl bg-card/90 border-border/50 shadow-2xl sm:max-w-md">
+      <DialogContent className="backdrop-blur-xl bg-card/95 border-border/50 shadow-2xl sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-lg">Regole Team</DialogTitle>
-          <DialogDescription>Configura i limiti operativi per il team.</DialogDescription>
+          <DialogTitle className="text-base">Regole Team</DialogTitle>
+          <DialogDescription className="text-xs">Limiti settimanali del team.</DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-5 py-2">
+        <div className="grid grid-cols-1 gap-3 py-1">
           {fields.map((f) => (
-            <div key={f.key} className="flex items-center justify-between gap-4">
-              <span className="text-sm text-foreground">{f.label}</span>
+            <div key={f.key} className="flex items-center justify-between gap-3">
+              <span className="text-[13px] text-foreground">{f.label}</span>
               <NumberStepper
                 value={form[f.key]}
                 onChange={(v) => setForm((prev) => ({ ...prev, [f.key]: v }))}
@@ -72,12 +66,11 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
             </div>
           ))}
         </div>
-
         {!readOnly && (
           <DialogFooter>
             <Button onClick={handleSave} disabled={isSaving} size="sm">
-              <Save className="mr-1.5 h-4 w-4" />
-              Salva regole
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              Salva
             </Button>
           </DialogFooter>
         )}

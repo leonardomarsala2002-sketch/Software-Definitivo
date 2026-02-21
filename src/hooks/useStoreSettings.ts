@@ -6,15 +6,10 @@ import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 export type StoreRules = Tables<"store_rules">;
 export type OpeningHour = Tables<"store_opening_hours">;
 export type CoverageReq = Tables<"store_coverage_requirements">;
+export type ShiftTemplate = Tables<"store_shift_templates">;
 
 export const DAY_LABELS = [
-  "Lunedì",
-  "Martedì",
-  "Mercoledì",
-  "Giovedì",
-  "Venerdì",
-  "Sabato",
-  "Domenica",
+  "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica",
 ];
 
 export function generateSlots(opening: string, closing: string): string[] {
@@ -80,6 +75,23 @@ export function useCoverageRequirements(storeId: string | undefined) {
   });
 }
 
+export function useShiftTemplates(storeId: string | undefined) {
+  return useQuery({
+    queryKey: ["store-shift-templates", storeId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("store_shift_templates")
+        .select("*")
+        .eq("store_id", storeId!)
+        .order("department")
+        .order("start_time");
+      if (error) throw error;
+      return (data ?? []) as ShiftTemplate[];
+    },
+    enabled: !!storeId,
+  });
+}
+
 export function useInitStoreConfig() {
   const qc = useQueryClient();
   return useMutation({
@@ -115,13 +127,7 @@ export function useInitStoreConfig() {
 export function useUpdateStoreRules() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      storeId,
-      updates,
-    }: {
-      storeId: string;
-      updates: Partial<StoreRules>;
-    }) => {
+    mutationFn: async ({ storeId, updates }: { storeId: string; updates: Partial<StoreRules> }) => {
       const { error } = await supabase
         .from("store_rules")
         .update(updates as any)
@@ -139,20 +145,11 @@ export function useUpdateStoreRules() {
 export function useUpdateOpeningHours() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      storeId,
-      hours,
-    }: {
-      storeId: string;
-      hours: OpeningHour[];
-    }) => {
+    mutationFn: async ({ storeId, hours }: { storeId: string; hours: OpeningHour[] }) => {
       for (const h of hours) {
         const { error } = await supabase
           .from("store_opening_hours")
-          .update({
-            opening_time: h.opening_time,
-            closing_time: h.closing_time,
-          } as any)
+          .update({ opening_time: h.opening_time, closing_time: h.closing_time } as any)
           .eq("id", h.id);
         if (error) throw error;
       }
@@ -174,19 +171,13 @@ export function useSaveCoverage() {
       rows,
     }: {
       storeId: string;
-      rows: {
-        day_of_week: number;
-        hour_slot: string;
-        department: "sala" | "cucina";
-        min_staff_required: number;
-      }[];
+      rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[];
     }) => {
       const { error: delErr } = await supabase
         .from("store_coverage_requirements")
         .delete()
         .eq("store_id", storeId);
       if (delErr) throw delErr;
-
       if (rows.length > 0) {
         const inserts = rows.map((r) => ({ ...r, store_id: storeId }));
         const { error: insErr } = await supabase
@@ -200,5 +191,36 @@ export function useSaveCoverage() {
       toast.success("Copertura aggiornata");
     },
     onError: (err: any) => toast.error(err.message ?? "Errore salvataggio copertura"),
+  });
+}
+
+export function useSaveShiftTemplates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      storeId,
+      templates,
+    }: {
+      storeId: string;
+      templates: { department: "sala" | "cucina"; start_time: string; end_time: string; is_active: boolean }[];
+    }) => {
+      const { error: delErr } = await supabase
+        .from("store_shift_templates")
+        .delete()
+        .eq("store_id", storeId);
+      if (delErr) throw delErr;
+      if (templates.length > 0) {
+        const inserts = templates.map((t) => ({ ...t, store_id: storeId }));
+        const { error: insErr } = await supabase
+          .from("store_shift_templates")
+          .insert(inserts as any);
+        if (insErr) throw insErr;
+      }
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["store-shift-templates", vars.storeId] });
+      toast.success("Template turni aggiornati");
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore salvataggio template"),
   });
 }

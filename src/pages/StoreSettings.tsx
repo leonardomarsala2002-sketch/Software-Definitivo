@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Settings, Plus, Pencil, Clock, Users, ShieldCheck, CalendarClock, LayoutGrid } from "lucide-react";
+import { Settings, Plus, Pencil, ShieldCheck, CalendarClock, LayoutGrid, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -8,25 +8,20 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useStoreRules,
-  useOpeningHours,
-  useCoverageRequirements,
-  useInitStoreConfig,
-  useUpdateStoreRules,
-  useUpdateOpeningHours,
-  useSaveCoverage,
+  useStoreRules, useOpeningHours, useCoverageRequirements, useShiftTemplates,
+  useInitStoreConfig, useUpdateStoreRules, useUpdateOpeningHours, useSaveCoverage, useSaveShiftTemplates,
   DAY_LABELS,
-  generateSlots,
 } from "@/hooks/useStoreSettings";
 import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
+import ShiftTemplatesModal from "@/components/store-settings/ShiftTemplatesModal";
 
 function SettingsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {[1, 2, 3].map((i) => (
-        <Skeleton key={i} className="h-40 w-full rounded-xl" />
+    <div className="grid gap-3 sm:grid-cols-2">
+      {[1, 2, 3, 4].map((i) => (
+        <Skeleton key={i} className="h-28 w-full rounded-xl" />
       ))}
     </div>
   );
@@ -39,19 +34,25 @@ const StoreSettings = () => {
   const { data: rules, isLoading: loadingRules } = useStoreRules(storeId);
   const { data: hours = [], isLoading: loadingHours } = useOpeningHours(storeId);
   const { data: coverage = [], isLoading: loadingCoverage } = useCoverageRequirements(storeId);
+  const { data: templates = [], isLoading: loadingTemplates } = useShiftTemplates(storeId);
 
   const initConfig = useInitStoreConfig();
   const updateRules = useUpdateStoreRules();
   const updateHours = useUpdateOpeningHours();
   const saveCoverage = useSaveCoverage();
+  const saveTemplates = useSaveShiftTemplates();
 
   const [rulesOpen, setRulesOpen] = useState(false);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
-  const isLoading = loadingRules || loadingHours || loadingCoverage;
+  const isLoading = loadingRules || loadingHours || loadingCoverage || loadingTemplates;
   const readOnly = role === "employee";
   const hasConfig = !!rules;
+
+  // Readiness check
+  const isReady = hasConfig && hours.length > 0 && coverage.length > 0;
 
   // Summaries
   const hoursSummary = useMemo(() => {
@@ -59,23 +60,68 @@ const StoreSettings = () => {
     const times = hours.map((h) => `${h.opening_time.slice(0, 5)}–${h.closing_time.slice(0, 5)}`);
     const unique = [...new Set(times)];
     if (unique.length === 1) return `Lun–Dom ${unique[0]}`;
-    return `Lun–Dom ${hours[0].opening_time.slice(0, 5)}–${hours[0].closing_time.slice(0, 5)} (variabile)`;
+    return `${hours[0].opening_time.slice(0, 5)}–${hours[0].closing_time.slice(0, 5)} (variabile)`;
   }, [hours]);
 
-  const totalSlots = useMemo(() => {
-    return coverage.length;
-  }, [coverage]);
+  const rulesSummary = useMemo(() => {
+    if (!rules) return "Non configurate";
+    const r = rules as any;
+    return `Sala ${r.max_team_hours_sala_per_week ?? "–"}h · Cucina ${r.max_team_hours_cucina_per_week ?? "–"}h / sett.`;
+  }, [rules]);
+
+  const cards = [
+    {
+      title: "Regole Team",
+      icon: ShieldCheck,
+      summary: rulesSummary,
+      configured: hasConfig,
+      onEdit: () => setRulesOpen(true),
+    },
+    {
+      title: "Orari Apertura",
+      icon: CalendarClock,
+      summary: hoursSummary,
+      configured: hours.length > 0,
+      onEdit: () => setHoursOpen(true),
+    },
+    {
+      title: "Copertura Minima",
+      icon: LayoutGrid,
+      summary: coverage.length > 0 ? `${coverage.length} slot configurati` : "Non configurata",
+      configured: coverage.length > 0,
+      onEdit: () => setCoverageOpen(true),
+    },
+    {
+      title: "Turni Possibili",
+      icon: Clock,
+      summary: templates.length > 0 ? `${templates.length} template` : "Nessun template",
+      configured: templates.length > 0,
+      onEdit: () => setTemplatesOpen(true),
+      optional: true,
+    },
+  ];
 
   return (
     <div>
       <PageHeader
         title="Impostazioni Store"
-        subtitle={
-          activeStore
-            ? `Configurazione per ${activeStore.name}`
-            : "Regole, orari e copertura dello store"
-        }
+        subtitle={activeStore ? `Configurazione per ${activeStore.name}` : "Regole, orari e copertura"}
       />
+
+      {/* Readiness badge */}
+      {hasConfig && !isLoading && (
+        <div className="mb-4">
+          {isReady ? (
+            <Badge variant="default" className="bg-success text-success-foreground gap-1.5 text-xs px-3 py-1">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Store pronto per generazione
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="gap-1.5 text-xs px-3 py-1">
+              <AlertCircle className="h-3.5 w-3.5" /> Configurazione incompleta
+            </Badge>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <SettingsSkeleton />
@@ -88,108 +134,49 @@ const StoreSettings = () => {
           />
           {!readOnly && (
             <div className="mt-6 flex justify-center">
-              <Button
-                onClick={() => storeId && initConfig.mutate(storeId)}
-                disabled={initConfig.isPending}
-                size="lg"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Crea configurazione iniziale
+              <Button onClick={() => storeId && initConfig.mutate(storeId)} disabled={initConfig.isPending} size="lg">
+                <Plus className="mr-2 h-4 w-4" /> Crea configurazione iniziale
               </Button>
             </div>
           )}
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Card 1: Regole Team */}
-            <Card className="border border-border/60 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <ShieldCheck className="h-4 w-4 text-primary" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {cards.map((card) => (
+              <Card
+                key={card.title}
+                className="border border-border/60 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                onClick={card.onEdit}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-lg bg-primary/10 p-1.5">
+                        <card.icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
                     </div>
-                    <h3 className="text-sm font-semibold text-foreground">Regole Team</h3>
-                  </div>
-                  {!readOnly && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setRulesOpen(true)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-                <div className="space-y-2 text-[13px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Max ore Sala</span>
-                    <span className="font-medium">{(rules as any).max_daily_team_hours_sala ?? "–"} h/giorno</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Max ore Cucina</span>
-                    <span className="font-medium">{(rules as any).max_daily_team_hours_cucina ?? "–"} h/giorno</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Max spezzati</span>
-                    <span className="font-medium">{rules.max_split_shifts_per_employee}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Giorni liberi</span>
-                    <span className="font-medium">{rules.mandatory_days_off_per_week}/sett.</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card 2: Orari di apertura */}
-            <Card className="border border-border/60 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <CalendarClock className="h-4 w-4 text-primary" />
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                        {card.configured ? "✓" : card.optional ? "Opzionale" : "Da fare"}
+                      </Badge>
+                      {!readOnly && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); card.onEdit(); }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
-                    <h3 className="text-sm font-semibold text-foreground">Orari Apertura</h3>
                   </div>
-                  {!readOnly && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setHoursOpen(true)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-                <p className="text-[13px] text-muted-foreground mb-3">{hoursSummary}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {hours.map((h) => (
-                    <Badge key={h.id} variant="secondary" className="text-[11px] font-normal">
-                      {DAY_LABELS[h.day_of_week]?.slice(0, 3)} {h.opening_time.slice(0, 5)}–{h.closing_time.slice(0, 5)}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card 3: Copertura minima */}
-            <Card className="border border-border/60 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <LayoutGrid className="h-4 w-4 text-primary" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-foreground">Copertura Minima</h3>
-                  </div>
-                  {!readOnly && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCoverageOpen(true)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="text-[11px]">
-                    {totalSlots} slot configurati
-                  </Badge>
-                </div>
-                <p className="text-[13px] text-muted-foreground">{hoursSummary}</p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{card.summary}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           {/* Modals */}
@@ -201,7 +188,6 @@ const StoreSettings = () => {
             isSaving={updateRules.isPending}
             readOnly={readOnly}
           />
-
           {hours.length > 0 && (
             <OpeningHoursModal
               open={hoursOpen}
@@ -212,7 +198,6 @@ const StoreSettings = () => {
               readOnly={readOnly}
             />
           )}
-
           {hours.length > 0 && (
             <CoverageModal
               open={coverageOpen}
@@ -224,6 +209,14 @@ const StoreSettings = () => {
               readOnly={readOnly}
             />
           )}
+          <ShiftTemplatesModal
+            open={templatesOpen}
+            onOpenChange={setTemplatesOpen}
+            templates={templates}
+            onSave={(t) => storeId && saveTemplates.mutate({ storeId, templates: t })}
+            isSaving={saveTemplates.isPending}
+            readOnly={readOnly}
+          />
         </>
       )}
     </div>
