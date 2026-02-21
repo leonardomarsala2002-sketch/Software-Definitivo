@@ -172,7 +172,7 @@ const StoreSettings = () => {
                       <div className="rounded-lg bg-primary/10 p-1.5">
                         <card.icon className="h-4 w-4 text-primary" />
                       </div>
-                      <h3 className="text-sm font-semibold text-foreground">asdasd {card.title}</h3>
+                      <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
