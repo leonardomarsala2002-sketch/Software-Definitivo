@@ -14,6 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      employee_availability: {
+        Row: {
+          availability_type: Database["public"]["Enums"]["availability_type"]
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          start_time: string
+          store_id: string
+          user_id: string
+        }
+        Insert: {
+          availability_type?: Database["public"]["Enums"]["availability_type"]
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          id?: string
+          start_time: string
+          store_id: string
+          user_id: string
+        }
+        Update: {
+          availability_type?: Database["public"]["Enums"]["availability_type"]
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          start_time?: string
+          store_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_availability_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_availability_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_details: {
+        Row: {
+          created_at: string
+          department: Database["public"]["Enums"]["department"]
+          id: string
+          is_active: boolean
+          phone: string | null
+          updated_at: string
+          user_id: string
+          weekly_contract_hours: number
+        }
+        Insert: {
+          created_at?: string
+          department: Database["public"]["Enums"]["department"]
+          id?: string
+          is_active?: boolean
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+          weekly_contract_hours?: number
+        }
+        Update: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"]
+          id?: string
+          is_active?: boolean
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+          weekly_contract_hours?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_details_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_exceptions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          exception_type: Database["public"]["Enums"]["exception_type"]
+          id: string
+          notes: string | null
+          start_date: string
+          store_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date: string
+          exception_type: Database["public"]["Enums"]["exception_type"]
+          id?: string
+          notes?: string | null
+          start_date: string
+          store_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string
+          exception_type?: Database["public"]["Enums"]["exception_type"]
+          id?: string
+          notes?: string | null
+          start_date?: string
+          store_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_exceptions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_exceptions_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_exceptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           created_at: string
@@ -185,6 +332,14 @@ export type Database = {
     }
     Enums: {
       app_role: "super_admin" | "admin" | "employee"
+      availability_type: "available" | "unavailable"
+      department: "sala" | "cucina"
+      exception_type:
+        | "ferie"
+        | "permesso"
+        | "malattia"
+        | "modifica_orario"
+        | "altro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -313,6 +468,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["super_admin", "admin", "employee"],
+      availability_type: ["available", "unavailable"],
+      department: ["sala", "cucina"],
+      exception_type: [
+        "ferie",
+        "permesso",
+        "malattia",
+        "modifica_orario",
+        "altro",
+      ],
     },
   },
 } as const
