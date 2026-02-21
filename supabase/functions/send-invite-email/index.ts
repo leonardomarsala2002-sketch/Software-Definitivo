@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const inviteUrl = `${publicAppUrl}/invite?token=${inv.token}`;
+    const inviteUrl = `${publicAppUrl}invite?token=${inv.token}`;
     const storeName = (inv as any).stores?.name ?? "—";
     const roleName = roleLabels[inv.role] ?? inv.role;
     const deptName = inv.department ? (deptLabels[inv.department] ?? inv.department) : "—";
