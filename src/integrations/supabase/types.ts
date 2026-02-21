@@ -62,6 +62,57 @@ export type Database = {
           },
         ]
       }
+      employee_constraints: {
+        Row: {
+          created_at: string
+          custom_days_off: number | null
+          custom_max_daily_hours: number | null
+          custom_max_split_shifts: number | null
+          custom_max_weekly_hours: number | null
+          id: string
+          store_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_days_off?: number | null
+          custom_max_daily_hours?: number | null
+          custom_max_split_shifts?: number | null
+          custom_max_weekly_hours?: number | null
+          id?: string
+          store_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_days_off?: number | null
+          custom_max_daily_hours?: number | null
+          custom_max_split_shifts?: number | null
+          custom_max_weekly_hours?: number | null
+          id?: string
+          store_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_constraints_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_constraints_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_details: {
         Row: {
           created_at: string
@@ -243,6 +294,129 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      store_coverage_requirements: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          department: Database["public"]["Enums"]["department"]
+          hour_slot: string
+          id: string
+          min_staff_required: number
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          department: Database["public"]["Enums"]["department"]
+          hour_slot: string
+          id?: string
+          min_staff_required?: number
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          department?: Database["public"]["Enums"]["department"]
+          hour_slot?: string
+          id?: string
+          min_staff_required?: number
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_coverage_requirements_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_opening_hours: {
+        Row: {
+          closing_time: string
+          created_at: string
+          day_of_week: number
+          id: string
+          opening_time: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          closing_time: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          opening_time: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          closing_time?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          opening_time?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_opening_hours_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_rules: {
+        Row: {
+          created_at: string
+          generation_enabled: boolean
+          mandatory_days_off_per_week: number
+          max_daily_hours_per_employee: number
+          max_daily_team_hours: number
+          max_split_shifts_per_employee: number
+          max_weekly_hours_per_employee: number
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          generation_enabled?: boolean
+          mandatory_days_off_per_week?: number
+          max_daily_hours_per_employee?: number
+          max_daily_team_hours?: number
+          max_split_shifts_per_employee?: number
+          max_weekly_hours_per_employee?: number
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          generation_enabled?: boolean
+          mandatory_days_off_per_week?: number
+          max_daily_hours_per_employee?: number
+          max_daily_team_hours?: number
+          max_split_shifts_per_employee?: number
+          max_weekly_hours_per_employee?: number
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_rules_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: true
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       stores: {
         Row: {
