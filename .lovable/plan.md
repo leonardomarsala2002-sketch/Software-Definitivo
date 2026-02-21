@@ -1,225 +1,156 @@
 
 
-# Piano Tecnico: Autenticazione e Autorizzazione Multi-Store
+# Piano: Struttura Dati Gestione Dipendenti Multi-Store
 
-## 1. Modello dei Ruoli
+## Panoramica
 
-Il sistema prevede un **ruolo globale** (non per store) salvato in una tabella dedicata `user_roles`, separata da `profiles`. I tre ruoli sono definiti come enum PostgreSQL:
-
-- **super_admin** -- accesso completo a tutti gli store e configurazioni globali
-- **admin** -- gestisce solo gli store a cui e' assegnato
-- **employee** -- sola lettura sul proprio store, puo' creare richieste personali
-
-L'appartenenza a uno o piu' store e' gestita dalla tabella `user_store_assignments`, che e' indipendente dal ruolo.
+Il sistema attuale ha gia' `profiles` (dati Google), `user_roles` (ruolo globale) e `user_store_assignments` (associazione utente-store). Per la gestione operativa dei dipendenti servono tre nuove tabelle che estendono questo modello senza duplicarlo.
 
 ---
 
-## 2. Schema Tabelle Auth/Autorizzazione
+## 1. Nuovi Enum
 
-### 2.1 Enum `app_role`
-
+### `department`
 ```text
-super_admin | admin | employee
+sala | cucina
 ```
 
-### 2.2 Tabella `profiles`
-
-Dati anagrafici dell'utente, creata automaticamente al primo login tramite trigger.
-
-| Colonna       | Tipo      | Note                                    |
-|---------------|-----------|-----------------------------------------|
-| id            | uuid PK   | FK -> auth.users(id) ON DELETE CASCADE  |
-| full_name     | text      | Estratto da Google profile              |
-| avatar_url    | text      | Estratto da Google profile              |
-| email         | text      | Estratto da Google profile              |
-| created_at    | timestamptz | default now()                         |
-| updated_at    | timestamptz | default now()                         |
-
-Nessun campo `role` in questa tabella.
-
-### 2.3 Tabella `user_roles`
-
-Ruolo globale dell'utente. Tabella separata per sicurezza (previene privilege escalation).
-
-| Colonna  | Tipo      | Note                                   |
-|----------|-----------|----------------------------------------|
-| id       | uuid PK   | default gen_random_uuid()              |
-| user_id  | uuid      | FK -> auth.users(id) ON DELETE CASCADE, UNIQUE |
-| role     | app_role  | NOT NULL                               |
-
-Un utente ha esattamente un ruolo globale.
-
-### 2.4 Tabella `user_store_assignments`
-
-Associazione utente-store (molti a molti).
-
-| Colonna    | Tipo      | Note                                  |
-|------------|-----------|---------------------------------------|
-| id         | uuid PK   | default gen_random_uuid()             |
-| user_id    | uuid      | FK -> auth.users(id) ON DELETE CASCADE|
-| store_id   | uuid      | FK -> stores(id) ON DELETE CASCADE    |
-| is_primary | boolean   | default false                         |
-| created_at | timestamptz | default now()                       |
-
-Vincolo UNIQUE su (user_id, store_id).
-
-### 2.5 Tabella `invitations`
-
-Gestione inviti. Solo utenti autenticati con ruolo superiore possono invitare.
-
-| Colonna       | Tipo        | Note                                 |
-|---------------|-------------|--------------------------------------|
-| id            | uuid PK     | default gen_random_uuid()            |
-| email         | text        | NOT NULL, email invitato             |
-| role          | app_role    | NOT NULL, ruolo assegnato            |
-| store_id      | uuid        | FK -> stores(id), nullable per super_admin |
-| invited_by    | uuid        | FK -> auth.users(id)                 |
-| token         | text        | UNIQUE, per link invito              |
-| status        | text        | 'pending' / 'accepted' / 'expired'  |
-| expires_at    | timestamptz | default now() + interval '7 days'    |
-| created_at    | timestamptz | default now()                        |
-
----
-
-## 3. Collegamento profiles <-> auth.users
-
-- `profiles.id` e' una FK diretta a `auth.users(id)` con ON DELETE CASCADE
-- Un **trigger** `on_auth_user_created` (AFTER INSERT su `auth.users`) crea automaticamente la riga in `profiles` estraendo `full_name`, `avatar_url`, `email` dai metadati Google
-- Il trigger **non** crea un ruolo: il ruolo viene assegnato solo quando l'utente accetta un invito
-
----
-
-## 4. Flusso Inviti (Solo su Invito)
-
+### `availability_type`
 ```text
-1. Admin/Super Admin crea invito -> riga in `invitations` con token univoco
-2. Email inviata all'invitato (tramite Edge Function + Supabase Email)
-3. Invitato clicca link -> pagina /invite?token=xxx
-4. Invitato fa login con Google OAuth
-5. Dopo login, Edge Function o trigger verifica:
-   a. Esiste un invito pending per quell'email?
-   b. Se si: crea user_roles + user_store_assignments, invito -> 'accepted'
-   c. Se no: accesso negato, sessione terminata
+available | unavailable
 ```
 
-### Regola gerarchia inviti
-
-| Chi invita    | Puo' assegnare         |
-|---------------|------------------------|
-| super_admin   | admin, employee        |
-| admin         | employee (solo nei propri store) |
-| employee      | nessuno                |
-
-Questa validazione avviene server-side (Edge Function o trigger di validazione).
-
----
-
-## 5. Funzione Helper `has_role` (Security Definer)
-
-Funzione PostgreSQL `SECURITY DEFINER` che verifica il ruolo senza causare ricorsione RLS:
-
+### `exception_type`
 ```text
-has_role(user_id, role) -> boolean
+ferie | permesso | malattia | modifica_orario | altro
 ```
 
-Usata in tutte le policy RLS al posto di query dirette su `user_roles`.
+---
 
-Funzione aggiuntiva:
+## 2. Nuove Tabelle
+
+### 2.1 `employee_details`
+
+Dati operativi del dipendente, separati da `profiles` (che resta per dati Google). Relazione 1:1 con `profiles.id`.
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| id | uuid PK | default gen_random_uuid() |
+| user_id | uuid NOT NULL UNIQUE | FK -> profiles(id) ON DELETE CASCADE |
+| department | department NOT NULL | sala o cucina |
+| weekly_contract_hours | integer NOT NULL | default 40 |
+| phone | text | nullable |
+| is_active | boolean NOT NULL | default true |
+| created_at | timestamptz | default now() |
+| updated_at | timestamptz | default now() |
+
+**Perche' tabella separata e non estensione di `profiles`?**
+- `profiles` e' auto-popolata dal trigger Google OAuth e contiene solo dati identita'
+- I dati operativi (reparto, ore contratto) sono gestiti da admin, non dall'utente
+- Separazione netta: dati identita' vs dati lavorativi
+- Lo `store_id` primario e' gia' in `user_store_assignments.is_primary`, non va duplicato
+
+### 2.2 `employee_availability`
+
+Disponibilita' ricorrente settimanale del dipendente.
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| id | uuid PK | default gen_random_uuid() |
+| user_id | uuid NOT NULL | FK -> profiles(id) ON DELETE CASCADE |
+| store_id | uuid NOT NULL | FK -> stores(id) ON DELETE CASCADE |
+| day_of_week | smallint NOT NULL | 0=lunedi' ... 6=domenica |
+| start_time | time NOT NULL | es. 09:00 |
+| end_time | time NOT NULL | es. 18:00 |
+| availability_type | availability_type NOT NULL | default 'available' |
+| created_at | timestamptz | default now() |
+
+Vincolo UNIQUE su (user_id, store_id, day_of_week, start_time).
+Vincolo CHECK: day_of_week tra 0 e 6.
+Vincolo CHECK: end_time > start_time.
+
+### 2.3 `employee_exceptions`
+
+Eccezioni temporanee (ferie, permessi, malattia, modifiche orario).
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| id | uuid PK | default gen_random_uuid() |
+| user_id | uuid NOT NULL | FK -> profiles(id) ON DELETE CASCADE |
+| store_id | uuid NOT NULL | FK -> stores(id) ON DELETE CASCADE |
+| exception_type | exception_type NOT NULL | |
+| start_date | date NOT NULL | |
+| end_date | date NOT NULL | |
+| notes | text | nullable |
+| created_by | uuid | FK -> profiles(id), chi ha creato l'eccezione |
+| created_at | timestamptz | default now() |
+
+Vincolo: end_date >= start_date (via trigger di validazione, non CHECK con now()).
+
+---
+
+## 3. Relazioni
 
 ```text
-get_user_role(user_id) -> app_role
+profiles (1) --- (1) employee_details
+    |                    
+    +--- (N) employee_availability
+    |                    
+    +--- (N) employee_exceptions
+    |
+    +--- (N) user_store_assignments --- stores
 ```
 
-Per recuperare il ruolo corrente dell'utente (usata nel frontend via RPC).
+- `employee_details.user_id` -> `profiles.id`
+- `employee_availability.user_id` -> `profiles.id`, `.store_id` -> `stores.id`
+- `employee_exceptions.user_id` -> `profiles.id`, `.store_id` -> `stores.id`
+- Lo store primario si ricava da `user_store_assignments WHERE is_primary = true`
 
 ---
 
-## 6. Funzione Helper `is_store_member`
+## 4. Policy RLS
 
-```text
-is_store_member(user_id, store_id) -> boolean
-```
+Tutte le tabelle usano le funzioni Security Definer gia' esistenti: `has_role()` e `is_store_member()`.
 
-Security definer che verifica l'appartenenza a uno store. Usata nelle RLS policy di tutte le tabelle con `store_id`.
+### 4.1 `employee_details`
 
----
+| Operazione | Regola |
+|------------|--------|
+| SELECT | super_admin: tutto; admin: utenti dei propri store (join con user_store_assignments); employee: solo il proprio record (user_id = auth.uid()) |
+| INSERT | super_admin: tutto; admin: solo per utenti nei propri store |
+| UPDATE | super_admin: tutto; admin: solo per utenti nei propri store |
+| DELETE | solo super_admin |
 
-## 7. Linee Guida RLS
+### 4.2 `employee_availability`
 
-Ogni tabella con `store_id` seguira' questo pattern:
+| Operazione | Regola |
+|------------|--------|
+| SELECT | super_admin: tutto; admin: dove is_store_member(uid, store_id); employee: solo propri record |
+| INSERT | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
+| UPDATE | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
+| DELETE | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
 
-- **super_admin**: accesso completo (SELECT/INSERT/UPDATE/DELETE)
-- **admin**: accesso solo dove `is_store_member(auth.uid(), store_id)` e' true
-- **employee**: SELECT solo dove `is_store_member(auth.uid(), store_id)` e' true; INSERT/UPDATE solo su tabelle specifiche (es. time_off_requests) dove `user_id = auth.uid()`
+### 4.3 `employee_exceptions`
 
-La tabella `user_roles` avra' RLS:
-- SELECT: ogni utente puo' leggere il proprio ruolo; super_admin puo' leggere tutti
-- INSERT/UPDATE/DELETE: solo via funzioni server-side (service_role key)
-
-La tabella `profiles` avra' RLS:
-- SELECT: utenti autenticati possono leggere profili dei colleghi nello stesso store
-- UPDATE: solo il proprio profilo
-
----
-
-## 8. Protezione Route Frontend
-
-### AuthProvider (React Context)
-
-- Wrappa l'intera app
-- Ascolta `onAuthStateChange` per stato sessione
-- Carica ruolo utente e store assegnati
-- Espone: `user`, `role`, `stores`, `activeStore`, `isLoading`
-
-### Route Guard
-
-- Componente `ProtectedRoute` che verifica autenticazione
-- Se non autenticato: redirect a `/login`
-- Se autenticato ma senza ruolo (invito non accettato): schermata "Accesso non autorizzato"
-
-### Visibilita' condizionale
-
-| Route              | super_admin | admin | employee |
-|--------------------|-------------|-------|----------|
-| Dashboard          | si          | si    | si       |
-| Calendario Team    | si          | si    | si (read)|
-| Calendario Pers.   | si          | si    | si       |
-| Richieste          | si          | si    | si       |
-| Dipendenti         | si          | si    | no       |
-| Impostazioni Store | si          | si    | no       |
-| Audit Log          | si          | no    | no       |
-| Info               | si          | si    | si       |
-
-La sidebar e la bottom nav filtrano le voci in base al ruolo.
+Stesse regole di `employee_availability`, con l'aggiunta che l'employee puo' fare INSERT delle proprie eccezioni (per richiedere ferie/permessi).
 
 ---
 
-## 9. Pagina Login
+## 5. Trigger e Automazioni
 
-- Pagina `/login` con un unico bottone "Accedi con Google"
-- Chiama `supabase.auth.signInWithOAuth({ provider: 'google' })`
-- Dopo il redirect, `AuthProvider` verifica ruolo e store
-- Se l'utente non ha un invito accettato, viene mostrato un messaggio di errore e la sessione viene invalidata
+1. **update_updated_at**: riutilizzare il trigger esistente `update_updated_at_column()` su `employee_details`
+2. **Validazione date**: trigger BEFORE INSERT/UPDATE su `employee_exceptions` per verificare `end_date >= start_date`
 
 ---
 
-## 10. Prerequisito: Configurazione Google OAuth
+## 6. Riepilogo Tecnico - Ordine Migrazione
 
-Prima dell'implementazione, sara' necessario configurare il provider Google nella dashboard Supabase:
-- Abilitare Google sotto Authentication > Providers
-- Configurare Client ID e Client Secret dalla Google Cloud Console
-- Impostare il redirect URL corretto
+1. Creare enum `department`, `availability_type`, `exception_type`
+2. Creare tabella `employee_details` con FK, UNIQUE, trigger updated_at
+3. Creare tabella `employee_availability` con FK, UNIQUE, CHECK
+4. Creare tabella `employee_exceptions` con FK, trigger validazione
+5. Abilitare RLS su tutte e tre le tabelle
+6. Creare policy RLS per ciascuna tabella seguendo lo schema sopra
 
----
-
-## Riepilogo Ordine di Implementazione
-
-1. Configurazione Google OAuth nella dashboard Supabase
-2. Migration: enum `app_role`, tabelle `profiles`, `user_roles`, `user_store_assignments`, `invitations`
-3. Migration: trigger auto-creazione profilo al signup
-4. Migration: funzioni helper `has_role`, `get_user_role`, `is_store_member`
-5. Migration: RLS policies su tutte le tabelle auth
-6. Frontend: AuthProvider, pagina Login, ProtectedRoute
-7. Frontend: filtro navigazione per ruolo
-8. Edge Function: gestione inviti (creazione + accettazione)
+Nessuna modifica al frontend in questa fase.
 
