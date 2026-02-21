@@ -69,18 +69,28 @@ export default function InviteForm() {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) throw new Error("Email non valida");
 
-      const { error } = await supabase.from("invitations").insert({
+      const { data, error } = await supabase.from("invitations").insert({
         email: email.trim().toLowerCase(),
         role: selectedRole as AppRole,
         store_id: selectedStoreId,
         department: selectedDepartment as Department,
         invited_by: user?.id ?? null,
-      });
+      }).select("id").single();
 
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      toast.success("Invito creato con successo!");
+    onSuccess: async (data) => {
+      // Send invite email
+      try {
+        const { error: fnErr } = await supabase.functions.invoke("send-invite-email", {
+          body: { invitation_id: data.id },
+        });
+        if (fnErr) throw fnErr;
+        toast.success("Invito creato e email inviata!");
+      } catch {
+        toast.warning("Invito creato, ma invio email fallito.");
+      }
       setEmail("");
       setSelectedRole("");
       setSelectedStoreId("");
