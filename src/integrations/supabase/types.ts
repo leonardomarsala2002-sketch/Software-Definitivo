@@ -596,6 +596,54 @@ export type Database = {
         }
         Relationships: []
       }
+      time_off_requests: {
+        Row: {
+          created_at: string
+          department: string
+          id: string
+          notes: string | null
+          request_date: string
+          request_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          selected_hour: number | null
+          status: string
+          store_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department: string
+          id?: string
+          notes?: string | null
+          request_date: string
+          request_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selected_hour?: number | null
+          status?: string
+          store_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          id?: string
+          notes?: string | null
+          request_date?: string
+          request_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selected_hour?: number | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
