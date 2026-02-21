@@ -81,12 +81,27 @@ export default function InviteForm() {
       return data;
     },
     onSuccess: async (data) => {
-      // Send invite email
+      // Send invite email via direct fetch
       try {
-        const { error: fnErr } = await supabase.functions.invoke("send-invite-email", {
-          body: { invitation_id: data.id },
-        });
-        if (fnErr) throw fnErr;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("No session");
+
+        const res = await fetch(
+          `https://hzcnvfqbbzkqyvolokvt.supabase.co/functions/v1/send-invite-email`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ invitation_id: data.id }),
+          }
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
         toast.success("Invito creato e email inviata!");
       } catch {
         toast.warning("Invito creato, ma invio email fallito.");
