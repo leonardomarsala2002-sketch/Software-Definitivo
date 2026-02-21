@@ -1,5 +1,6 @@
 import { NavLink } from "@/components/NavLink";
-import { navItems } from "@/config/navigation";
+import { navItems, filterNavByRole } from "@/config/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -15,10 +16,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { UtensilsCrossed } from "lucide-react";
 
-const mainItems = navItems.filter((i) => i.section === "main");
-const secondaryItems = navItems.filter((i) => i.section === "secondary");
-
 export function AppSidebar() {
+  const { role } = useAuth();
+  const filtered = filterNavByRole(navItems, role);
+  const mainItems = filtered.filter((i) => i.section === "main");
+  const secondaryItems = filtered.filter((i) => i.section === "secondary");
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="px-5 py-5">
