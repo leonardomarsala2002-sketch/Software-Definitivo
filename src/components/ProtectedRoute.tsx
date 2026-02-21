@@ -1,10 +1,34 @@
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, LogOut } from "lucide-react";
+import { UtensilsCrossed, LogOut, ShieldCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+const isDev =
+  window.location.hostname === "localhost" ||
+  window.location.hostname.includes("preview") ||
+  window.location.hostname.includes("lovable.app");
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthorized, signOut } = useAuth();
+  const [bootstrapping, setBootstrapping] = useState(false);
+
+  const handleBootstrap = async () => {
+    if (!user) return;
+    setBootstrapping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("bootstrap-admin");
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Super Admin creato! Ricaricamento...");
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err: any) {
+      toast.error(err.message || "Errore durante il bootstrap");
+      setBootstrapping(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -41,14 +65,27 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </div>
-          <Button
-            onClick={signOut}
-            variant="outline"
-            className="gap-2 rounded-xl"
-          >
-            <LogOut className="h-4 w-4" />
-            Esci
-          </Button>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={signOut}
+              variant="outline"
+              className="gap-2 rounded-xl"
+            >
+              <LogOut className="h-4 w-4" />
+              Esci
+            </Button>
+            {isDev && (
+              <Button
+                onClick={handleBootstrap}
+                variant="secondary"
+                disabled={bootstrapping}
+                className="gap-2 rounded-xl text-xs"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {bootstrapping ? "Creazione in corso..." : "Bootstrap Super Admin (solo sviluppo)"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
