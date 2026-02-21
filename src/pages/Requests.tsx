@@ -1,19 +1,139 @@
-import { Inbox } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Inbox, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import RequestForm from "@/components/requests/RequestForm";
+import RequestsList from "@/components/requests/RequestsList";
+import { useAuth } from "@/contexts/AuthContext";
+import { useStoreRequests, useMyRequests } from "@/hooks/useRequests";
+import { useEmployeeList } from "@/hooks/useEmployees";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
-const Requests = () => (
-  <div>
-    <PageHeader
-      title="Richieste"
-      subtitle="Ferie, permessi, cambi turno e malattie"
-    />
-    <EmptyState
-      icon={<Inbox className="h-6 w-6" />}
-      title="Nessuna richiesta"
-      description="Le richieste di ferie, permessi e cambi turno appariranno qui."
-    />
-  </div>
-);
+const Requests = () => {
+  const { user, role, activeStore } = useAuth();
+  const storeId = activeStore?.id;
+  const isAdmin = role === "super_admin" || role === "admin";
+
+  const [showForm, setShowForm] = useState(false);
+
+  // Get employee's department
+  const { data: myDetails } = useQuery({
+    queryKey: ["my-employee-details", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employee_details")
+        .select("department")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  const department = (myDetails?.department as "sala" | "cucina") ?? "sala";
+
+  // Admin sees all store requests, employee sees own
+  const { data: storeRequests, isLoading: storeLoading } = useStoreRequests(isAdmin ? storeId : undefined);
+  const { data: myRequests, isLoading: myLoading } = useMyRequests(!isAdmin ? user?.id : undefined);
+
+  const requests = isAdmin ? storeRequests : myRequests;
+  const isLoading = isAdmin ? storeLoading : myLoading;
+
+  // For admin: get profiles to show names
+  const { data: employees } = useEmployeeList();
+  const profileMap = useMemo(() => {
+    const m = new Map<string, string>();
+    employees?.forEach((e) => m.set(e.user_id, e.full_name ?? e.email ?? ""));
+    return m;
+  }, [employees]);
+
+  const pendingRequests = requests?.filter((r) => r.status === "pending") ?? [];
+  const otherRequests = requests?.filter((r) => r.status !== "pending") ?? [];
+
+  return (
+    <div>
+      <PageHeader
+        title="Richieste"
+        subtitle="Ferie, permessi, cambi turno e malattie"
+      >
+        {!showForm && (
+          <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" />
+            Nuova richiesta
+          </Button>
+        )}
+      </PageHeader>
+
+      {showForm && storeId && (
+        <Card className="mb-6 border border-border/60 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Nuova richiesta</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RequestForm
+              department={department}
+              storeId={storeId}
+              onClose={() => setShowForm(false)}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {(!requests || requests.length === 0) && !isLoading && !showForm ? (
+        <EmptyState
+          icon={<Inbox className="h-6 w-6" />}
+          title="Nessuna richiesta"
+          description="Le richieste di ferie, permessi e cambi turno appariranno qui."
+        />
+      ) : (
+        <Tabs defaultValue="pending" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="pending" className="text-xs">
+              In attesa ({pendingRequests.length})
+            </TabsTrigger>
+            <TabsTrigger value="history" className="text-xs">
+              Storico ({otherRequests.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending">
+            {pendingRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Nessuna richiesta in attesa
+              </p>
+            ) : (
+              <RequestsList
+                requests={pendingRequests}
+                isLoading={isLoading ?? false}
+                profiles={profileMap}
+                isAdmin={isAdmin}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="history">
+            {otherRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Nessuna richiesta nello storico
+              </p>
+            ) : (
+              <RequestsList
+                requests={otherRequests}
+                isLoading={isLoading ?? false}
+                profiles={profileMap}
+                isAdmin={isAdmin}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  );
+};
 
 export default Requests;
