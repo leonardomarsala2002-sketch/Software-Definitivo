@@ -384,6 +384,9 @@ export type Database = {
           max_daily_team_hours_cucina: number
           max_daily_team_hours_sala: number
           max_split_shifts_per_employee: number
+          max_split_shifts_per_employee_per_week: number
+          max_team_hours_cucina_per_week: number
+          max_team_hours_sala_per_week: number
           max_weekly_hours_per_employee: number
           store_id: string
           updated_at: string
@@ -397,6 +400,9 @@ export type Database = {
           max_daily_team_hours_cucina?: number
           max_daily_team_hours_sala?: number
           max_split_shifts_per_employee?: number
+          max_split_shifts_per_employee_per_week?: number
+          max_team_hours_cucina_per_week?: number
+          max_team_hours_sala_per_week?: number
           max_weekly_hours_per_employee?: number
           store_id: string
           updated_at?: string
@@ -410,6 +416,9 @@ export type Database = {
           max_daily_team_hours_cucina?: number
           max_daily_team_hours_sala?: number
           max_split_shifts_per_employee?: number
+          max_split_shifts_per_employee_per_week?: number
+          max_team_hours_cucina_per_week?: number
+          max_team_hours_sala_per_week?: number
           max_weekly_hours_per_employee?: number
           store_id?: string
           updated_at?: string
@@ -419,6 +428,47 @@ export type Database = {
             foreignKeyName: "store_rules_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: true
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_shift_templates: {
+        Row: {
+          created_at: string
+          department: Database["public"]["Enums"]["department"]
+          end_time: string
+          id: string
+          is_active: boolean
+          start_time: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department: Database["public"]["Enums"]["department"]
+          end_time: string
+          id?: string
+          is_active?: boolean
+          start_time: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"]
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_shift_templates_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
             referencedRelation: "stores"
             referencedColumns: ["id"]
           },

@@ -7,33 +7,34 @@ interface Props {
   min?: number;
   max?: number;
   disabled?: boolean;
-  label?: string;
+  compact?: boolean;
 }
 
-export default function NumberStepper({ value, onChange, min = 0, max = 999, disabled, label }: Props) {
+export default function NumberStepper({ value, onChange, min = 0, max = 999, disabled, compact }: Props) {
+  const size = compact ? "h-6 w-6" : "h-7 w-7";
+  const iconSize = compact ? "h-3 w-3" : "h-3.5 w-3.5";
   return (
-    <div className="flex items-center gap-2">
-      {label && <span className="mr-auto text-sm text-muted-foreground">{label}</span>}
+    <div className="flex items-center gap-1.5">
       <Button
         type="button"
         variant="outline"
         size="icon"
-        className="h-8 w-8 shrink-0"
+        className={`${size} shrink-0`}
         disabled={disabled || value <= min}
         onClick={() => onChange(Math.max(min, value - 1))}
       >
-        <Minus className="h-3.5 w-3.5" />
+        <Minus className={iconSize} />
       </Button>
-      <span className="w-8 text-center text-sm font-semibold tabular-nums">{value}</span>
+      <span className="w-7 text-center text-sm font-semibold tabular-nums">{value}</span>
       <Button
         type="button"
         variant="outline"
         size="icon"
-        className="h-8 w-8 shrink-0"
+        className={`${size} shrink-0`}
         disabled={disabled || value >= max}
         onClick={() => onChange(Math.min(max, value + 1))}
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus className={iconSize} />
       </Button>
     </div>
   );
