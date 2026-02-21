@@ -6,8 +6,8 @@ export function MobileBottomNav() {
   const location = useLocation();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card md:hidden">
-      <div className="flex h-16 items-center justify-around px-2">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-card/95 backdrop-blur-lg md:hidden">
+      <div className="flex h-[4.25rem] items-center justify-around px-1 pb-1">
         {bottomNavItems.map((item) => {
           const isActive =
             item.url === "/"
@@ -18,14 +18,26 @@ export function MobileBottomNav() {
               key={item.url}
               to={item.url}
               className={cn(
-                "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-xs transition-colors",
+                "flex flex-col items-center gap-1 rounded-2xl px-3 py-2 transition-all",
                 isActive
-                  ? "text-primary font-medium"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "text-primary"
+                  : "text-muted-foreground"
               )}
             >
-              <item.icon className="h-5 w-5" />
-              <span className="truncate max-w-[4.5rem]">{item.title}</span>
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
+                  isActive && "bg-accent shadow-sm"
+                )}
+              >
+                <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-accent-foreground")} />
+              </div>
+              <span className={cn(
+                "text-[10px] leading-none",
+                isActive ? "font-semibold" : "font-medium"
+              )}>
+                {item.title.length > 10 ? item.title.split(" ")[0] : item.title}
+              </span>
             </Link>
           );
         })}
