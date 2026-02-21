@@ -2,3 +2,6 @@ project_id = "hzcnvfqbbzkqyvolokvt"
 
 [functions.seed-employee-test-data]
 verify_jwt = false
+
+[functions.get-invitation-by-token]
+verify_jwt = false
