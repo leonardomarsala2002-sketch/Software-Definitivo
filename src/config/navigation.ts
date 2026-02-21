@@ -7,6 +7,7 @@ import {
   Settings,
   FileText,
   Info,
+  MailPlus,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -28,6 +29,7 @@ export const navItems: NavItem[] = [
   { title: "Richieste", url: "/requests", icon: Inbox, section: "main" },
   { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin"] },
   { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin"] },
+  { title: "Inviti", url: "/invitations", icon: MailPlus, section: "secondary", roles: ["super_admin", "admin"] },
   { title: "Audit Log", url: "/audit-log", icon: FileText, section: "secondary", roles: ["super_admin"] },
   { title: "Info", url: "/info", icon: Info, section: "secondary" },
 ];
