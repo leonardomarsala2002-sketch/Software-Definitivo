@@ -6,10 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, Info } from "lucide-react";
+import { Plus, Trash2, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeExceptions, useCreateException, useDeleteException } from "@/hooks/useEmployees";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { startOfWeek, format, addDays } from "date-fns";
 
 const TYPE_LABELS: Record<string, string> = {
   ferie: "Ferie",
@@ -35,6 +38,7 @@ interface Props {
 
 export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Props) {
   const { user, role } = useAuth();
+  const queryClient = useQueryClient();
   const { data: exceptions, isLoading } = useEmployeeExceptions(userId);
   const createExc = useCreateException();
   const deleteExc = useDeleteException();
@@ -47,6 +51,7 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
 
   const handleAdd = () => {
     if (!storeId) {
@@ -72,14 +77,61 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
         created_by: user?.id ?? null,
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           setShowForm(false);
           setNotes("");
           setStartDate("");
           setEndDate("");
+
+          // Auto-trigger regeneration for sickness
+          if (excType === "malattia" && storeId && (role === "admin" || role === "super_admin")) {
+            await triggerPatchRegeneration(storeId, startDate, endDate, userId);
+          }
         },
       }
     );
+  };
+
+  const triggerPatchRegeneration = async (storeId: string, start: string, end: string, affectedUserId: string) => {
+    setRegenerating(true);
+    try {
+      // Find weeks that overlap with the sickness period
+      const sickStart = new Date(start);
+      const sickEnd = new Date(end);
+      const weeksToRegenerate = new Set<string>();
+
+      let d = new Date(sickStart);
+      while (d <= sickEnd) {
+        const weekMon = startOfWeek(d, { weekStartsOn: 1 });
+        weeksToRegenerate.add(format(weekMon, "yyyy-MM-dd"));
+        d = addDays(d, 7);
+      }
+
+      for (const weekStart of weeksToRegenerate) {
+        const { error } = await supabase.functions.invoke("generate-optimized-schedule", {
+          body: {
+            store_id: storeId,
+            week_start_date: weekStart,
+            mode: "patch",
+            affected_user_id: affectedUserId,
+          },
+        });
+        if (error) {
+          console.error("Patch regeneration error:", error);
+          toast.error(`Errore rigenerazione settimana ${weekStart}`);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["generation-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
+      toast.success("Turni rigenerati automaticamente per coprire l'assenza");
+    } catch (err) {
+      console.error("Patch regeneration failed:", err);
+      toast.error("Errore nella rigenerazione automatica dei turni");
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   if (isLoading) {
@@ -92,6 +144,14 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
 
   return (
     <div className="space-y-4 py-2">
+      {/* Regeneration in progress */}
+      {regenerating && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <p className="text-xs text-primary font-medium">Rigenerazione turni in corso per coprire l'assenza...</p>
+        </div>
+      )}
+
       {/* Employee hint: use Richieste */}
       {isEmployee && isOwnProfile && (
         <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-start gap-2">
@@ -164,8 +224,18 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
             <Label className="text-xs">Note (opzionale)</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
+          {excType === "malattia" && (role === "admin" || role === "super_admin") && (
+            <div className="rounded-md border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 p-2">
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                💡 I turni del dipendente verranno automaticamente rigenerati per coprire l'assenza.
+              </p>
+            </div>
+          )}
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleAdd} disabled={createExc.isPending} className="flex-1">Salva</Button>
+            <Button size="sm" onClick={handleAdd} disabled={createExc.isPending || regenerating} className="flex-1">
+              {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Salva
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
           </div>
         </div>

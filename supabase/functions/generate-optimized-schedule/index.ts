@@ -567,7 +567,8 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date } = body;
+    const { store_id, week_start_date, mode, affected_user_id } = body;
+    const isPatchMode = mode === "patch";
     const MAX_ITERATIONS = 40;
 
     if (!store_id || !week_start_date) {
@@ -650,10 +651,18 @@ Deno.serve(async (req) => {
       if (runErr || !run) throw new Error(`Failed to create generation run: ${runErr?.message}`);
 
       try {
-        // Delete existing drafts for this dept
-        await adminClient.from("shifts").delete()
-          .eq("store_id", store_id).eq("department", dept)
-          .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
+        if (isPatchMode && affected_user_id) {
+          // PATCH MODE: only delete affected user's draft shifts, keep others intact
+          await adminClient.from("shifts").delete()
+            .eq("store_id", store_id).eq("department", dept)
+            .eq("status", "draft").eq("user_id", affected_user_id)
+            .gte("date", week_start_date).lte("date", weekEnd);
+        } else {
+          // FULL MODE: delete all existing drafts for this dept
+          await adminClient.from("shifts").delete()
+            .eq("store_id", store_id).eq("department", dept)
+            .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
+        }
 
         let bestResult: IterationResult | null = null;
         let fallbackUsed = false;
@@ -709,11 +718,120 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update run
+        // Compute optimization suggestions server-side
+        const deptSuggestions: any[] = [];
+        const empMapForSugg = new Map(employees.map(e => [e.user_id, e]));
+        const { data: profilesForSugg } = await adminClient
+          .from("profiles").select("id, full_name").in("id", employees.map(e => e.user_id));
+        const nameMap = new Map((profilesForSugg ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
+
+        // Uncovered slot suggestions
+        for (const slot of uncoveredSlots) {
+          const h = parseInt(slot.hour.split(":")[0], 10);
+          const d = new Date(slot.date + "T00:00:00");
+          const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+          deptSuggestions.push({
+            id: `uncov-${slot.date}-${h}`,
+            type: "uncovered",
+            severity: "critical",
+            title: `Copertura mancante ${dayLabel} ore ${h}:00`,
+            description: `Slot non coperto. Assegnazione necessaria.`,
+            actionLabel: "Vai al giorno",
+            declineLabel: "Ignora",
+            date: slot.date,
+          });
+        }
+
+        // Surplus suggestions
+        const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
+        for (const dateStr of weekDates) {
+          const dow = getDayOfWeek(dateStr);
+          const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+          const dayShifts = insertedShifts.filter(s => s.date === dateStr);
+
+          for (const cov of dayCov) {
+            const h = parseInt(cov.hour_slot.split(":")[0], 10);
+            const coveringShifts: GeneratedShift[] = [];
+            for (const s of dayShifts) {
+              const sh = parseInt(s.start_time!.split(":")[0], 10);
+              let eh = parseInt(s.end_time!.split(":")[0], 10);
+              if (eh === 0) eh = 24;
+              if (h >= sh && h < eh) coveringShifts.push(s);
+            }
+
+            if (coveringShifts.length > cov.min_staff_required + 1) {
+              const rankedByBalance = [...coveringShifts].sort((a, b) =>
+                (hourBalances.get(b.user_id) ?? 0) - (hourBalances.get(a.user_id) ?? 0)
+              );
+              const candidate = rankedByBalance[0];
+              const empName = nameMap.get(candidate.user_id) ?? "Dipendente";
+              const empBalance = hourBalances.get(candidate.user_id) ?? 0;
+              const dayD = new Date(dateStr + "T00:00:00");
+              const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+
+              if (empBalance > 0) {
+                const reductionHours = Math.min(empBalance, 2);
+                deptSuggestions.push({
+                  id: `hourreduce-${dateStr}-${h}-${candidate.user_id}`,
+                  type: "hour_reduction",
+                  severity: "info",
+                  title: `Riduci ore ${empName} ${dayLabel}`,
+                  description: `Surplus (${coveringShifts.length}/${cov.min_staff_required}). ${empName} ha +${empBalance}h nel monte ore. Ridurre di ${reductionHours}h.`,
+                  actionLabel: "Applica Riduzione",
+                  declineLabel: "Ignora",
+                  userId: candidate.user_id,
+                  userName: empName,
+                  date: dateStr,
+                  suggestedHours: reductionHours,
+                });
+              } else {
+                deptSuggestions.push({
+                  id: `surplus-${dateStr}-${h}`,
+                  type: "surplus",
+                  severity: "warning",
+                  title: `Surplus ${dayLabel} ore ${h}:00`,
+                  description: `Troppe persone (${coveringShifts.length}/${cov.min_staff_required}). Rimuovere il turno di ${empName}?`,
+                  actionLabel: "Rimuovi Turno",
+                  declineLabel: "Ignora",
+                  userId: candidate.user_id,
+                  userName: empName,
+                  date: dateStr,
+                });
+              }
+            }
+          }
+        }
+
+        // Overtime balance suggestions
+        for (const emp of deptEmployees) {
+          const balance = hourBalances.get(emp.user_id) ?? 0;
+          if (Math.abs(balance) >= 3) {
+            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+            const direction = balance > 0 ? "eccesso" : "deficit";
+            const absBalance = Math.abs(balance);
+            deptSuggestions.push({
+              id: `balance-${emp.user_id}`,
+              type: "overtime_balance",
+              severity: absBalance >= 5 ? "warning" : "info",
+              title: `${empName}: ${direction} ${absBalance}h`,
+              description: balance > 0
+                ? `Ha accumulato +${absBalance}h. Ridurre di ${Math.min(absBalance, 2)}h questa settimana.`
+                : `Ha un deficit di ${absBalance}h. Aumentare le ore questa settimana.`,
+              actionLabel: balance > 0 ? "Applica Riduzione" : "Applica Aumento",
+              declineLabel: "Ignora",
+              userId: emp.user_id,
+              userName: empName,
+              suggestedHours: Math.min(absBalance, 2),
+            });
+          }
+        }
+
+        // Update run with notes AND suggestions
         const notes = [
           uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
           `fitness: ${fitnessScore.toFixed(1)}`,
           fallbackUsed ? "fallback spezzati +1 attivato" : null,
+          isPatchMode ? "modalità patch (solo buchi)" : null,
         ].filter(Boolean).join(" | ");
 
         await adminClient.from("generation_runs").update({
@@ -723,7 +841,8 @@ Deno.serve(async (req) => {
           fitness_score: fitnessScore,
           iterations_run: fallbackUsed ? MAX_ITERATIONS * 2 : MAX_ITERATIONS,
           hour_adjustments: hourAdjustments,
-        }).eq("id", run.id);
+          suggestions: deptSuggestions,
+        } as any).eq("id", run.id);
 
         results.push({
           department: dept,

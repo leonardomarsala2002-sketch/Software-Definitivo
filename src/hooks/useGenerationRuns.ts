@@ -17,6 +17,7 @@ export interface GenerationRun {
   fitness_score: number | null;
   iterations_run: number | null;
   hour_adjustments: Record<string, number> | null;
+  suggestions: any[] | null;
 }
 
 export function useWeekGenerationRuns(storeId: string | undefined, weekStart: string | undefined) {
@@ -39,9 +40,9 @@ export function useWeekGenerationRuns(storeId: string | undefined, weekStart: st
 export function useGenerateShifts() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { store_id: string; department: "sala" | "cucina"; week_start: string }) => {
-      const { data, error } = await supabase.functions.invoke("generate-shifts", {
-        body: params,
+    mutationFn: async (params: { store_id: string; department?: "sala" | "cucina"; week_start: string; mode?: "full" | "patch"; affected_user_id?: string }) => {
+      const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
+        body: { store_id: params.store_id, week_start_date: params.week_start, mode: params.mode, affected_user_id: params.affected_user_id },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -50,23 +51,27 @@ export function useGenerateShifts() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["shifts"] });
       qc.invalidateQueries({ queryKey: ["generation-runs"] });
-      const uncovered = data?.uncovered_slots?.length ?? 0;
-      if (uncovered > 0) {
-        toast.warning(`Turni generati con ${uncovered} slot non coperti`);
+      qc.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
+      qc.invalidateQueries({ queryKey: ["lending-suggestions"] });
+      const depts = data?.departments ?? [];
+      const totalUncovered = depts.reduce((acc: number, d: any) => acc + (d.uncovered ?? 0), 0);
+      if (totalUncovered > 0) {
+        toast.warning(`Turni generati con ${totalUncovered} slot non coperti`);
       } else {
-        toast.success(`Turni generati: ${data?.shifts_created ?? 0} turni, ${data?.days_off_created ?? 0} riposi`);
+        const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
+        toast.success(`Turni generati: ${totalShifts} turni`);
       }
     },
     onError: (err: any) => toast.error(err.message ?? "Errore generazione turni"),
   });
 }
 
-export function usePublishShifts() {
+export function usePublishWeek() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (generation_run_id: string) => {
+    mutationFn: async (params: { store_id: string; week_start: string }) => {
       const { data, error } = await supabase.functions.invoke("publish-shifts", {
-        body: { generation_run_id },
+        body: params,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
