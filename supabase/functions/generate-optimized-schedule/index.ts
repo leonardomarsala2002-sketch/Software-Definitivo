@@ -567,7 +567,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date, mode, affected_user_id } = body;
+    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date } = body;
     const isPatchMode = mode === "patch";
     const MAX_ITERATIONS = 40;
 
@@ -651,12 +651,26 @@ Deno.serve(async (req) => {
       if (runErr || !run) throw new Error(`Failed to create generation run: ${runErr?.message}`);
 
       try {
+        // Determine effective date range for patch mode
+        const today = getDateStr(new Date());
+        const patchStartDate = isPatchMode && exception_start_date 
+          ? (exception_start_date > today ? exception_start_date : today) 
+          : week_start_date;
+        const patchEndDate = isPatchMode && exception_end_date
+          ? (exception_end_date < weekEnd ? exception_end_date : weekEnd)
+          : weekEnd;
+        // Filter weekDates to only dates in the patch range
+        const effectiveWeekDates = isPatchMode 
+          ? weekDates.filter(d => d >= patchStartDate && d <= patchEndDate)
+          : weekDates;
+
         if (isPatchMode && affected_user_id) {
-          // PATCH MODE: only delete affected user's draft shifts, keep others intact
+          // PATCH MODE: delete affected user's shifts (draft OR published) from patchStartDate onward
           await adminClient.from("shifts").delete()
             .eq("store_id", store_id).eq("department", dept)
-            .eq("status", "draft").eq("user_id", affected_user_id)
-            .gte("date", week_start_date).lte("date", weekEnd);
+            .eq("user_id", affected_user_id)
+            .gte("date", patchStartDate).lte("date", patchEndDate)
+            .in("status", ["draft", "published"]);
         } else {
           // FULL MODE: delete all existing drafts for this dept
           await adminClient.from("shifts").delete()
@@ -669,9 +683,12 @@ Deno.serve(async (req) => {
         let splitOverride = 0;
 
         // Phase 1: Normal 40 iterations
+        // Use effective dates for iterations (in patch mode, only cover the affected range)
+        const iterDates = isPatchMode ? effectiveWeekDates : weekDates;
+        
         for (let i = 0; i < MAX_ITERATIONS; i++) {
           const result = runIteration(
-            store_id, dept, weekDates, employees, availability,
+            store_id, dept, iterDates, employees, availability,
             allExceptions, coverageData, allowedData, rules, run.id,
             openingHoursData, hourBalances, empConstraints, splitOverride,
             i > 0,
@@ -692,7 +709,7 @@ Deno.serve(async (req) => {
 
           for (let i = 0; i < MAX_ITERATIONS; i++) {
             const result = runIteration(
-              store_id, dept, weekDates, employees, availability,
+              store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
               openingHoursData, hourBalances, empConstraints, splitOverride,
               true,
@@ -1006,12 +1023,106 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Phase 4: Patch Mode Notifications ────────────────────────────
+    if (isPatchMode && affected_user_id) {
+      const resendKey = Deno.env.get("RESEND_API_KEY");
+      const publicAppUrl = Deno.env.get("PUBLIC_APP_URL");
+
+      // Get affected user name
+      const { data: affectedProfile } = await adminClient
+        .from("profiles").select("full_name").eq("id", affected_user_id).single();
+      const affectedName = affectedProfile?.full_name ?? "Dipendente";
+
+      // Get store info
+      const { data: storeInfo } = await adminClient
+        .from("stores").select("name").eq("id", store_id).single();
+      const storeName = storeInfo?.name ?? "Store";
+
+      // Audit log
+      await adminClient.from("audit_logs").insert({
+        user_id: callerUserId ?? affected_user_id,
+        user_name: callerUserId ? (await adminClient.from("profiles").select("full_name").eq("id", callerUserId).single()).data?.full_name : "Sistema",
+        action: "patch_regenerate",
+        entity_type: "shifts",
+        store_id,
+        details: {
+          description: `Rigenerazione per assenza di ${affectedName} (${exception_start_date ?? "?"} – ${exception_end_date ?? "?"})`,
+          affected_user_id,
+          affected_user_name: affectedName,
+          total_new_shifts: results.reduce((a, r) => a + r.shifts, 0),
+        },
+      });
+
+      // Send email to store admins
+      if (resendKey && publicAppUrl) {
+        const { data: storeAdmins } = await adminClient
+          .from("user_store_assignments").select("user_id").eq("store_id", store_id);
+        const adminUserIds = (storeAdmins ?? []).map(a => a.user_id);
+
+        if (adminUserIds.length > 0) {
+          const { data: adminRoles } = await adminClient
+            .from("user_roles").select("user_id, role")
+            .in("user_id", adminUserIds)
+            .in("role", ["admin", "super_admin"]);
+          const adminIds = (adminRoles ?? []).map(r => r.user_id);
+
+          if (adminIds.length > 0) {
+            const { data: adminProfiles } = await adminClient
+              .from("profiles").select("id, email, full_name").in("id", adminIds);
+
+            const totalShifts = results.reduce((a, r) => a + r.shifts, 0);
+            const totalUncovered = results.reduce((a, r) => a + r.uncovered, 0);
+
+            for (const admin of (adminProfiles ?? [])) {
+              if (!admin.email) continue;
+              try {
+                await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    from: "Shift Scheduler <onboarding@resend.dev>",
+                    to: [admin.email],
+                    subject: `⚠️ Copertura malattia – ${storeName}`,
+                    html: `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+<tr><td style="padding:40px 36px 16px;text-align:center;">
+<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">⚠️ Copertura per Malattia</h1>
+<p style="margin:0;font-size:14px;color:#71717a;">${storeName}</p>
+</td></tr>
+<tr><td style="padding:16px 36px;">
+<p style="font-size:14px;color:#18181b;line-height:1.6;">
+<strong>${affectedName}</strong> è assente per malattia dal <strong>${exception_start_date ?? "?"}</strong> al <strong>${exception_end_date ?? "?"}</strong>.
+</p>
+<p style="font-size:14px;color:#18181b;line-height:1.6;">
+L'AI ha generato una proposta di copertura con <strong>${totalShifts}</strong> turni redistribuiti${totalUncovered > 0 ? ` (${totalUncovered} slot ancora scoperti)` : ""}.
+</p>
+<p style="font-size:13px;color:#71717a;margin-top:12px;">
+I turni proposti sono in stato <strong>Draft</strong> e richiedono la tua approvazione nel Calendario Team.
+</p>
+</td></tr>
+<tr><td style="padding:24px 36px;text-align:center;">
+<a href="${publicAppUrl}/team-calendar" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 36px;border-radius:10px;text-decoration:none;">Rivedi Proposta</a>
+</td></tr></table></td></tr></table></body></html>`,
+                  }),
+                });
+              } catch (emailErr) {
+                console.error(`Failed to email admin ${admin.email}:`, emailErr);
+              }
+            }
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       store_id,
       week: { start: week_start_date, end: weekEnd },
       departments: results,
       lending_suggestions_created: lendingSuggestionsCreated,
+      is_patch: isPatchMode,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
