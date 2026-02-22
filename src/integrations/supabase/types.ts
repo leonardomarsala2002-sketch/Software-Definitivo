@@ -212,6 +212,63 @@ export type Database = {
           },
         ]
       }
+      employee_monthly_stats: {
+        Row: {
+          created_at: string
+          days_off_count: number
+          id: string
+          month: number
+          split_shifts_count: number
+          store_id: string
+          total_hours: number
+          updated_at: string
+          user_id: string
+          weekend_shifts_count: number
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          days_off_count?: number
+          id?: string
+          month: number
+          split_shifts_count?: number
+          store_id: string
+          total_hours?: number
+          updated_at?: string
+          user_id: string
+          weekend_shifts_count?: number
+          year: number
+        }
+        Update: {
+          created_at?: string
+          days_off_count?: number
+          id?: string
+          month?: number
+          split_shifts_count?: number
+          store_id?: string
+          total_hours?: number
+          updated_at?: string
+          user_id?: string
+          weekend_shifts_count?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_monthly_stats_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_monthly_stats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_stats: {
         Row: {
           created_at: string
@@ -322,6 +379,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      global_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
       }
       invitations: {
         Row: {
@@ -461,6 +545,7 @@ export type Database = {
           full_name: string | null
           id: string
           updated_at: string
+          vacation_balance: number
         }
         Insert: {
           avatar_url?: string | null
@@ -469,6 +554,7 @@ export type Database = {
           full_name?: string | null
           id: string
           updated_at?: string
+          vacation_balance?: number
         }
         Update: {
           avatar_url?: string | null
@@ -477,6 +563,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+          vacation_balance?: number
         }
         Relationships: []
       }
@@ -770,6 +857,7 @@ export type Database = {
       stores: {
         Row: {
           address: string | null
+          city: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -778,6 +866,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          city?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -786,6 +875,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          city?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
