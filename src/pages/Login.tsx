@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { UtensilsCrossed, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import ForgotPasswordDialog from "@/components/ForgotPasswordDialog";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -107,14 +108,17 @@ export default function Login() {
                 </button>
               </div>
             </div>
-            <Button
-              type="submit"
-              size="lg"
-              disabled={loading}
-              className="w-full rounded-xl text-[14px] font-semibold"
-            >
-              {loading ? "Accesso…" : "Accedi"}
-            </Button>
+            <div className="flex items-center justify-between">
+              <ForgotPasswordDialog />
+              <Button
+                type="submit"
+                size="lg"
+                disabled={loading}
+                className="rounded-xl text-[14px] font-semibold px-8"
+              >
+                {loading ? "Accesso…" : "Accedi"}
+              </Button>
+            </div>
           </form>
 
           {/* Divider */}
