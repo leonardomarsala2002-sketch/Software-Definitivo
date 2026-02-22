@@ -22,7 +22,6 @@ import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
 import { OptimizationPanel } from "@/components/team-calendar/OptimizationPanel";
-import { ScheduledSidebar } from "@/components/team-calendar/ScheduledSidebar";
 import EmptyState from "@/components/EmptyState";
 import { toast } from "sonner";
 
@@ -48,7 +47,6 @@ const TeamCalendar = () => {
   const [department, setDepartment] = useState<"sala" | "cucina">("sala");
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [sidebarDate, setSidebarDate] = useState<string | null>(null);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
@@ -318,24 +316,24 @@ const TeamCalendar = () => {
       />
 
       {/* Controls bar */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Month nav */}
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={prevMonth}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm font-semibold capitalize min-w-[140px] text-center">{monthLabel}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={nextMonth}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Department toggle */}
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-0.5">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
           {(["sala", "cucina"] as const).map((d) => (
             <button
               key={d}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors capitalize ${
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize ${
                 department === d
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -350,7 +348,7 @@ const TeamCalendar = () => {
         {/* Week selector */}
         <div className="flex items-center gap-1">
           <button
-            className={`px-2 py-1 text-[10px] font-medium rounded-lg transition-colors ${
+            className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
               selectedWeek === null
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground"
@@ -362,7 +360,7 @@ const TeamCalendar = () => {
           {Array.from({ length: totalWeeks }, (_, i) => (
             <button
               key={i}
-              className={`px-2 py-1 text-[10px] font-medium rounded-lg transition-colors ${
+              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
                 selectedWeek === i
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground"
@@ -441,7 +439,7 @@ const TeamCalendar = () => {
 
       {/* Generation run info banner */}
       {activeDraftRun && activeDraftRun.status === "completed" && (
-        <div className="mb-4 rounded-2xl border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+        <div className="mb-4 rounded-lg border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 flex items-start gap-2">
           <Wand2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800 dark:text-amber-300">
             <p className="font-semibold mb-1">
@@ -466,7 +464,7 @@ const TeamCalendar = () => {
 
       {/* Uncovered slots warning (only if no draft / optimization panel not shown) */}
       {(!hasDraftShifts || !canEdit) && uncoveredSlotsMap.size > 0 && (
-        <div className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
           <div className="text-xs text-destructive">
             <p className="font-semibold mb-1">Copertura insufficiente in {uncoveredSlotsMap.size} giorni</p>
@@ -488,33 +486,18 @@ const TeamCalendar = () => {
         <>
           <KpiCards shifts={shifts} employeeCount={employees.length} year={year} month={month} />
 
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 min-w-0">
-              <MonthGrid
-                year={year}
-                month={month}
-                shifts={shifts}
-                employees={employees}
-                department={department}
-                selectedWeek={selectedWeek}
-                onDayClick={(date) => setSidebarDate(date)}
-                uncoveredDates={uncoveredSlotsMap}
-                balances={[]}
-                currentStoreId={storeId}
-              />
-            </div>
-
-            {sidebarDate && (
-              <ScheduledSidebar
-                date={sidebarDate}
-                shifts={shifts}
-                employees={employees}
-                department={department}
-                onClose={() => setSidebarDate(null)}
-                onOpenDetail={(date) => setSelectedDate(date)}
-              />
-            )}
-          </div>
+          <MonthGrid
+            year={year}
+            month={month}
+            shifts={shifts}
+            employees={employees}
+            department={department}
+            selectedWeek={selectedWeek}
+            onDayClick={(date) => setSelectedDate(date)}
+            uncoveredDates={uncoveredSlotsMap}
+            balances={[]}
+            currentStoreId={storeId}
+          />
 
           {selectedDate && (
             <DayDetailDialog
