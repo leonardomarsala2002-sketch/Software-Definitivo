@@ -22,6 +22,8 @@ interface MonthGridProps {
   onDayClick: (date: string) => void;
   uncoveredDates?: Map<string, Set<number>>;
   balances?: EmployeeBalance[];
+  currentStoreId?: string;
+  storeLookup?: Map<string, string>; // store_id → store name
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -63,6 +65,8 @@ export function MonthGrid({
   onDayClick,
   uncoveredDates,
   balances,
+  currentStoreId,
+  storeLookup,
 }: MonthGridProps) {
   const today = new Date();
   const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -149,6 +153,8 @@ export function MonthGrid({
                   const balLabel = bal && Math.abs(bal.current_balance) >= 1
                     ? `${bal.current_balance > 0 ? "+" : ""}${bal.current_balance}h`
                     : null;
+                  const isLent = currentStoreId && s.store_id !== currentStoreId;
+                  const lentFromName = isLent && storeLookup ? storeLookup.get(s.store_id) : null;
                   return (
                     <div
                       key={s.id}
@@ -164,6 +170,11 @@ export function MonthGrid({
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
+                      {isLent && (
+                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                          Prestito{lentFromName ? ` da ${lentFromName}` : ""}
+                        </span>
+                      )}
                       {balLabel && (
                         <span className={cn(
                           "text-[7px] font-bold shrink-0 px-0.5 rounded",

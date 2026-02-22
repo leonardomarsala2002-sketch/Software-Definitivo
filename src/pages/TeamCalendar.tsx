@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
@@ -11,11 +12,12 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
-import { useEmployeeBalances, useOptimizationSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
+import { useEmployeeBalances, useAllStoreShortages, useOptimizationSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
@@ -34,6 +36,7 @@ function getWeekStartForWeek(year: number, month: number, weekIdx: number): stri
 }
 
 const TeamCalendar = () => {
+  const queryClient = useQueryClient();
   const { activeStore, role } = useAuth();
   const storeId = activeStore?.id;
   const canEdit = role === "super_admin" || role === "admin";
@@ -53,6 +56,7 @@ const TeamCalendar = () => {
   const { data: allowedTimes = [] } = useAllowedTimes(storeId);
   const { data: coverageReqs = [] } = useCoverageRequirements(storeId);
   const { data: balances = [] } = useEmployeeBalances(storeId);
+  const { data: crossStoreShortages = [] } = useAllStoreShortages(storeId, department, year, month);
 
   const currentWeekStart = useMemo(() => {
     if (selectedWeek !== null) {
@@ -96,7 +100,7 @@ const TeamCalendar = () => {
     [allowedTimes, department]
   );
 
-  // Optimization suggestions
+  // Optimization suggestions with cross-store lending priority
   const suggestions = useOptimizationSuggestions(
     shifts,
     department,
@@ -106,6 +110,7 @@ const TeamCalendar = () => {
     year,
     month,
     hasDraftShifts,
+    crossStoreShortages,
   );
 
   // Build uncovered slots map for visual highlighting
@@ -195,20 +200,48 @@ const TeamCalendar = () => {
     setShowPublishConfirm(false);
   };
 
-  const handleAcceptSuggestion = (suggestion: OptimizationSuggestion) => {
+  const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion) => {
     if (suggestion.type === "surplus" && suggestion.shiftId) {
       deleteShift.mutate(suggestion.shiftId);
       toast.success(`Turno di ${suggestion.userName} rimosso`);
-    } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
-      toast.info(`Riduzione ore per ${suggestion.userName} da applicare manualmente nel dettaglio giornaliero`);
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
-      // Optimistic: update shift's store_id to target store
-      updateShift.mutate({
-        id: suggestion.shiftId,
-        updates: {} as any, // The actual store reassignment would need a dedicated mutation
-      });
-      toast.success(`Richiesta di prestito per ${suggestion.userName} inviata a ${suggestion.targetStoreName ?? "store"}`);
+      // Update shift store_id to target store (lending)
+      const { error } = await supabase
+        .from("shifts")
+        .update({ store_id: suggestion.targetStoreId } as any)
+        .eq("id", suggestion.shiftId);
+      if (error) {
+        toast.error("Errore nel prestito: " + error.message);
+      } else {
+        toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
+        // Refresh shifts
+        queryClient.invalidateQueries({ queryKey: ["shifts"] });
+      }
+    } else if (suggestion.type === "hour_reduction" && suggestion.shiftId && suggestion.suggestedHours) {
+      // Reduce shift end_time by suggestedHours
+      const shift = shifts.find(s => s.id === suggestion.shiftId);
+      if (shift?.end_time) {
+        const endH = parseInt(shift.end_time.split(":")[0], 10);
+        const newEnd = Math.max(endH - suggestion.suggestedHours, parseInt(shift.start_time?.split(":")[0] ?? "0", 10) + 1);
+        updateShift.mutate({
+          id: suggestion.shiftId,
+          updates: { end_time: `${String(newEnd).padStart(2, "0")}:00:00` },
+        });
+        toast.success(`Turno di ${suggestion.userName} ridotto di ${suggestion.suggestedHours}h`);
+      }
+    } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
+      toast.info(`Bilanciamento ore per ${suggestion.userName}: applicare nel dettaglio giornaliero`);
     }
+  };
+
+  const handleApplyAll = () => {
+    const actionable = suggestions.filter(s => s.type !== "uncovered");
+    let applied = 0;
+    for (const s of actionable) {
+      handleAcceptSuggestion(s);
+      applied++;
+    }
+    toast.success(`${applied} soluzioni AI applicate`);
   };
 
   if (!storeId) {
@@ -354,6 +387,7 @@ const TeamCalendar = () => {
           suggestions={suggestions}
           onAccept={handleAcceptSuggestion}
           onDecline={() => {}}
+          onApplyAll={handleApplyAll}
           onNavigateToDay={(date) => setSelectedDate(date)}
         />
       )}
@@ -392,6 +426,7 @@ const TeamCalendar = () => {
             onDayClick={(date) => setSelectedDate(date)}
             uncoveredDates={uncoveredSlotsMap}
             balances={balances}
+            currentStoreId={storeId}
           />
 
           {selectedDate && (
