@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
-import { useGenerateShifts, usePublishWeek, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
+import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
 import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
@@ -49,6 +49,7 @@ const TeamCalendar = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
   const { data: shifts = [], isLoading: loadingShifts } = useMonthShifts(storeId, year, month);
   const { data: allEmployees = [], isLoading: loadingEmp } = useEmployeeList();
@@ -73,6 +74,7 @@ const TeamCalendar = () => {
 
   const generateShifts = useGenerateShifts();
   const publishWeek = usePublishWeek();
+  const approvePatch = useApprovePatchShifts();
   const createShift = useCreateShift();
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
@@ -91,6 +93,20 @@ const TeamCalendar = () => {
   const hasAnyDraftShifts = useMemo(() => {
     return shifts.some(s => s.status === "draft");
   }, [shifts]);
+
+  // Detect patch mode: drafts coexist with published shifts in the same week
+  const isPatchProposal = useMemo(() => {
+    const hasDrafts = shifts.some(s => s.status === "draft");
+    const hasPublished = shifts.some(s => s.status === "published");
+    return hasDrafts && hasPublished;
+  }, [shifts]);
+
+  // Get generation run IDs for patch approval
+  const patchRunIds = useMemo(() => {
+    return generationRuns
+      .filter(r => r.status === "completed" && r.notes?.includes("patch"))
+      .map(r => r.id);
+  }, [generationRuns]);
 
   const employees = useMemo(() => {
     return allEmployees
@@ -192,6 +208,16 @@ const TeamCalendar = () => {
     if (!storeId) return;
     publishWeek.mutate({ store_id: storeId, week_start: currentWeekStart });
     setShowPublishConfirm(false);
+  };
+
+  const handleApprovePatch = () => {
+    if (!storeId) return;
+    approvePatch.mutate({
+      store_id: storeId,
+      week_start: currentWeekStart,
+      generation_run_ids: patchRunIds,
+    });
+    setShowApproveConfirm(false);
   };
 
   const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion) => {
@@ -356,8 +382,26 @@ const TeamCalendar = () => {
               </Badge>
             )}
 
-            {/* Pubblica Settimana */}
-            {hasAnyDraftShifts && (
+            {/* Approva Proposta (patch mode: drafts alongside published) */}
+            {isPatchProposal && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => setShowApproveConfirm(true)}
+                disabled={approvePatch.isPending}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {approvePatch.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                Approva Proposta
+              </Button>
+            )}
+
+            {/* Pubblica Settimana (only if NOT a patch proposal) */}
+            {hasAnyDraftShifts && !isPatchProposal && (
               <Button
                 size="sm"
                 variant="default"
@@ -521,6 +565,26 @@ const TeamCalendar = () => {
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction onClick={handlePublishWeek} disabled={hasCriticalConflicts}>
               Pubblica
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Approve patch confirmation dialog */}
+      <AlertDialog open={showApproveConfirm} onOpenChange={setShowApproveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approva Proposta di Copertura</AlertDialogTitle>
+            <AlertDialogDescription>
+              L'AI ha generato una proposta di copertura per gestire un'assenza.
+              I turni draft verranno pubblicati e i dipendenti coinvolti riceveranno
+              un'email con l'aggiornamento dei turni.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleApprovePatch}>
+              Approva e Notifica
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -85,3 +85,23 @@ export function usePublishWeek() {
     onError: (err: any) => toast.error(err.message ?? "Errore pubblicazione turni"),
   });
 }
+
+export function useApprovePatchShifts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { store_id: string; week_start: string; generation_run_ids?: string[] }) => {
+      const { data, error } = await supabase.functions.invoke("approve-patch-shifts", {
+        body: params,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+      qc.invalidateQueries({ queryKey: ["generation-runs"] });
+      toast.success(`${data?.published ?? 0} turni approvati e notifiche inviate a ${data?.affected_users ?? 0} dipendenti`);
+    },
+    onError: (err: any) => toast.error(err.message ?? "Errore approvazione turni"),
+  });
+}
