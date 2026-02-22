@@ -745,11 +745,154 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Phase 3: Cross-Store Lending Detection ────────────────────────
+    let lendingSuggestionsCreated = 0;
+
+    // Get current store's city
+    const { data: currentStore } = await adminClient
+      .from("stores").select("id, city").eq("id", store_id).single();
+    const storeCity = currentStore?.city;
+
+    if (storeCity) {
+      // Find all same-city stores (excluding current)
+      const { data: sameCityStores } = await adminClient
+        .from("stores").select("id, name, city")
+        .eq("city", storeCity).eq("is_active", true).neq("id", store_id);
+
+      if (sameCityStores && sameCityStores.length > 0) {
+        // Collect all uncovered slots from ALL department results
+        const allUncoveredByDept = new Map<string, { date: string; hour: number; dept: "sala" | "cucina" }[]>();
+        
+        for (const res of results) {
+          const dept = res.department as "sala" | "cucina";
+          // Re-derive uncovered from the generation run notes (or re-query shifts)
+          // More reliable: query the draft shifts we just inserted and compare to coverage
+          const { data: draftShifts } = await adminClient
+            .from("shifts").select("*")
+            .eq("store_id", store_id).eq("department", dept)
+            .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
+
+          const deptCoverage = coverageData.filter(c => c.department === dept);
+
+          for (const dateStr of weekDates) {
+            const dow = getDayOfWeek(dateStr);
+            const dayCov = deptCoverage.filter(c => c.day_of_week === dow);
+            const dayShifts = (draftShifts ?? []).filter(s => s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
+
+            for (const cov of dayCov) {
+              const h = parseInt(cov.hour_slot.split(":")[0], 10);
+              let staffCount = 0;
+              for (const s of dayShifts) {
+                const sh = parseInt(String(s.start_time).split(":")[0], 10);
+                let eh = parseInt(String(s.end_time).split(":")[0], 10);
+                if (eh === 0) eh = 24;
+                if (h >= sh && h < eh) staffCount++;
+              }
+              if (staffCount < cov.min_staff_required) {
+                const arr = allUncoveredByDept.get(dept) ?? [];
+                arr.push({ date: dateStr, hour: h, dept });
+                allUncoveredByDept.set(dept, arr);
+              }
+            }
+          }
+        }
+
+        // For each uncovered slot, check same-city stores for surplus
+        for (const [dept, uncoveredSlots] of allUncoveredByDept) {
+          for (const slot of uncoveredSlots) {
+            const dow = getDayOfWeek(slot.date);
+
+            for (const otherStore of sameCityStores) {
+              // Get other store's coverage + shifts for this date+hour+dept
+              const [otherCovRes, otherShiftsRes] = await Promise.all([
+                adminClient.from("store_coverage_requirements").select("*")
+                  .eq("store_id", otherStore.id).eq("department", dept).eq("day_of_week", dow),
+                adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, department, date, store_id")
+                  .eq("store_id", otherStore.id).eq("department", dept).eq("date", slot.date)
+                  .in("status", ["draft", "published"]),
+              ]);
+
+              const otherCov = otherCovRes.data ?? [];
+              const otherShifts = (otherShiftsRes.data ?? []).filter(
+                s => !s.is_day_off && s.start_time && s.end_time
+              );
+
+              // Find coverage requirement for this hour
+              const covForHour = otherCov.find(c => parseInt(c.hour_slot.split(":")[0], 10) === slot.hour);
+              if (!covForHour) continue;
+
+              // Count staff covering this hour
+              let otherStaffCount = 0;
+              const coveringShifts: any[] = [];
+              for (const s of otherShifts) {
+                const sh = parseInt(String(s.start_time).split(":")[0], 10);
+                let eh = parseInt(String(s.end_time).split(":")[0], 10);
+                if (eh === 0) eh = 24;
+                if (slot.hour >= sh && slot.hour < eh) {
+                  otherStaffCount++;
+                  coveringShifts.push(s);
+                }
+              }
+
+              // Surplus: more staff than needed
+              if (otherStaffCount > covForHour.min_staff_required) {
+                // Pick an employee to lend (prefer highest hour balance)
+                const surplusUserIds = coveringShifts.map(s => s.user_id);
+                const { data: surplusStats } = await adminClient
+                  .from("employee_stats").select("user_id, current_balance")
+                  .eq("store_id", otherStore.id).in("user_id", surplusUserIds);
+
+                const balMap = new Map((surplusStats ?? []).map(s => [s.user_id, Number(s.current_balance)]));
+                const sorted = [...coveringShifts].sort((a, b) => (balMap.get(b.user_id) ?? 0) - (balMap.get(a.user_id) ?? 0));
+                const candidate = sorted[0];
+                if (!candidate) continue;
+
+                // Find the generation_run_id for this dept
+                const runId = results.find(r => r.department === dept)?.runId;
+                if (!runId) continue;
+
+                // Check if lending suggestion already exists
+                const { data: existing } = await adminClient
+                  .from("lending_suggestions").select("id")
+                  .eq("generation_run_id", runId)
+                  .eq("user_id", candidate.user_id)
+                  .eq("suggested_date", slot.date)
+                  .maybeSingle();
+
+                if (!existing) {
+                  const startTime = candidate.start_time;
+                  const endTime = candidate.end_time;
+
+                  await adminClient.from("lending_suggestions").insert({
+                    generation_run_id: runId,
+                    user_id: candidate.user_id,
+                    source_store_id: otherStore.id,
+                    target_store_id: store_id,
+                    department: dept,
+                    suggested_date: slot.date,
+                    suggested_start_time: startTime,
+                    suggested_end_time: endTime,
+                    reason: `Surplus a ${otherStore.name} (${otherStaffCount}/${covForHour.min_staff_required}), carenza a store corrente nello slot ${slot.hour}:00`,
+                    status: "pending",
+                  } as any);
+
+                  lendingSuggestionsCreated++;
+                }
+
+                break; // One lending per uncovered slot
+              }
+            }
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       store_id,
       week: { start: week_start_date, end: weekEnd },
       departments: results,
+      lending_suggestions_created: lendingSuggestionsCreated,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
