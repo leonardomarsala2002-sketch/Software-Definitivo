@@ -1,4 +1,4 @@
-# Welcome to progetto definitivo
+# Welcome to Shift Scheduler
 
 ## Project info
 
