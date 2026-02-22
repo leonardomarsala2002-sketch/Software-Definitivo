@@ -176,6 +176,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Audit log
+    const { data: callerProfile } = await adminClient.from("profiles").select("full_name").eq("id", userData.user.id).single();
+    await adminClient.from("audit_logs").insert({
+      user_id: userData.user.id,
+      user_name: callerProfile?.full_name ?? userData.user.email,
+      action: "publish",
+      entity_type: "shifts",
+      store_id: store_id,
+      details: {
+        description: `Pubblicati ${updatedShifts?.length ?? 0} turni per settimana ${week_start}`,
+        week_start,
+        week_end: weekEnd,
+        shifts_count: updatedShifts?.length ?? 0,
+      },
+    });
+
     return new Response(JSON.stringify({ ok: true, published: updatedShifts?.length ?? 0 }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

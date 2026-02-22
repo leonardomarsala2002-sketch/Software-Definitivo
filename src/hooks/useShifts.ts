@@ -40,6 +40,22 @@ export function useMonthShifts(storeId: string | undefined, year: number, month:
   });
 }
 
+async function logAudit(action: string, entityType: string, storeId: string, details: Record<string, any>) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+    await supabase.from("audit_logs").insert({
+      user_id: user.id,
+      user_name: profile?.full_name ?? user.email,
+      action,
+      entity_type: entityType,
+      store_id: storeId,
+      details,
+    } as any);
+  } catch { /* silent */ }
+}
+
 export function useCreateShift() {
   const qc = useQueryClient();
   return useMutation({
@@ -54,6 +70,10 @@ export function useCreateShift() {
     }) => {
       const { error } = await supabase.from("shifts").insert(shift as any);
       if (error) throw error;
+      await logAudit("create_shift", "shifts", shift.store_id, {
+        description: `Turno creato per ${shift.date} (${shift.start_time?.slice(0,5)}–${shift.end_time?.slice(0,5)})`,
+        date: shift.date, user_id: shift.user_id,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shifts"] });
@@ -69,12 +89,20 @@ export function useUpdateShift() {
     mutationFn: async ({
       id,
       updates,
+      storeId,
     }: {
       id: string;
       updates: Partial<Pick<ShiftRow, "start_time" | "end_time" | "is_day_off">>;
+      storeId?: string;
     }) => {
       const { error } = await supabase.from("shifts").update(updates as any).eq("id", id);
       if (error) throw error;
+      if (storeId) {
+        await logAudit("update_shift", "shifts", storeId, {
+          description: `Turno ${id} modificato`,
+          shift_id: id, updates,
+        });
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shifts"] });
@@ -87,9 +115,15 @@ export function useUpdateShift() {
 export function useDeleteShift() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (params: { id: string; storeId?: string }) => {
+      const { id, storeId } = typeof params === "string" ? { id: params, storeId: undefined } : params;
       const { error } = await supabase.from("shifts").delete().eq("id", id);
       if (error) throw error;
+      if (storeId) {
+        await logAudit("delete_shift", "shifts", storeId, {
+          description: `Turno ${id} eliminato`, shift_id: id,
+        });
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shifts"] });
