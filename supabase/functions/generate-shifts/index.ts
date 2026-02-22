@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface EmployeeData {
   user_id: string;
   department: "sala" | "cucina";
@@ -63,6 +65,15 @@ interface GeneratedShift {
   generation_run_id: string;
 }
 
+interface IterationResult {
+  shifts: GeneratedShift[];
+  uncoveredSlots: { date: string; hour: string }[];
+  fitnessScore: number;
+  hourAdjustments: Record<string, number>; // user_id -> delta from contract
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function parseHour(timeStr: string): number {
   const h = parseInt(timeStr.split(":")[0], 10);
   return h === 0 ? 24 : h;
@@ -88,14 +99,12 @@ function getWeekDates(weekStart: string): string[] {
   return dates;
 }
 
-function isAvailable(emp: string, dateStr: string, availability: AvSlot[], exceptions: ExceptionBlock[]): boolean {
-  // Check exceptions (blocks availability)
+function isAvailable(emp: string, dateStr: string, availability: AvailSlot[], exceptions: ExceptionBlock[]): boolean {
   for (const ex of exceptions) {
     if (ex.user_id === emp && dateStr >= ex.start_date && dateStr <= ex.end_date) {
       return false;
     }
   }
-  // Check availability slots
   const dow = getDayOfWeek(dateStr);
   return availability.some(a => a.user_id === emp && a.day_of_week === dow);
 }
@@ -107,8 +116,84 @@ function getAvailableHoursForDay(emp: string, dateStr: string, availability: Ava
     .map(a => ({ start: parseHour(a.start_time), end: parseHour(a.end_time) }));
 }
 
-// Simple greedy shift generation algorithm
-function generateShiftsForDepartment(
+// Fisher-Yates shuffle for randomization across iterations
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ─── Fitness Scoring ─────────────────────────────────────────────────────────
+
+const PENALTY_UNCOVERED = -50;   // Heavy penalty per uncovered slot
+const PENALTY_OVERCROWDED = -10; // Penalty per overcrowded slot
+const PENALTY_DRIFT_PER_H = -5;  // Per hour outside ±5h flexibility
+const BONUS_BALANCED = 2;        // Small bonus for balanced distribution
+
+function computeFitness(
+  shifts: GeneratedShift[],
+  uncoveredSlots: { date: string; hour: string }[],
+  employees: EmployeeData[],
+  coverage: CoverageReq[],
+  weekDates: string[],
+  hourBalances: Map<string, number>,
+): { score: number; hourAdjustments: Record<string, number> } {
+  let score = 0;
+
+  // 1) Uncovered slots penalty
+  score += uncoveredSlots.length * PENALTY_UNCOVERED;
+
+  // 2) Overcrowding penalty: check if assigned > required for any slot
+  for (const dateStr of weekDates) {
+    const dow = getDayOfWeek(dateStr);
+    const dayCov = coverage.filter(c => c.day_of_week === dow);
+    for (const c of dayCov) {
+      const h = parseInt(c.hour_slot.split(":")[0], 10);
+      const assigned = shifts.filter(s =>
+        !s.is_day_off && s.date === dateStr && s.department === c.department &&
+        s.start_time !== null && s.end_time !== null &&
+        parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
+      ).length;
+      if (assigned > c.min_staff_required + 1) {
+        score += (assigned - c.min_staff_required - 1) * PENALTY_OVERCROWDED;
+      }
+    }
+  }
+
+  // 3) Contractual drift penalty & hour adjustments
+  const hourAdjustments: Record<string, number> = {};
+  const weeklyHoursMap = new Map<string, number>();
+  for (const s of shifts) {
+    if (s.is_day_off || !s.start_time || !s.end_time) continue;
+    const dur = parseHour(s.end_time) - parseHour(s.start_time);
+    weeklyHoursMap.set(s.user_id, (weeklyHoursMap.get(s.user_id) ?? 0) + dur);
+  }
+
+  for (const emp of employees) {
+    const assigned = weeklyHoursMap.get(emp.user_id) ?? 0;
+    const balance = hourBalances.get(emp.user_id) ?? 0;
+    const target = emp.weekly_contract_hours - balance; // Compensate hour bank
+    const delta = assigned - target;
+    hourAdjustments[emp.user_id] = delta;
+
+    if (Math.abs(delta) > 5) {
+      score += (Math.abs(delta) - 5) * PENALTY_DRIFT_PER_H;
+    }
+    // Small bonus for being close to target
+    if (Math.abs(delta) <= 2) {
+      score += BONUS_BALANCED;
+    }
+  }
+
+  return { score, hourAdjustments };
+}
+
+// ─── Single Iteration Generator ──────────────────────────────────────────────
+
+function runIteration(
   storeId: string,
   department: "sala" | "cucina",
   weekDates: string[],
@@ -120,28 +205,24 @@ function generateShiftsForDepartment(
   rules: StoreRules,
   runId: string,
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
-): { shifts: GeneratedShift[]; uncoveredSlots: { date: string; hour: string }[] } {
+  hourBalances: Map<string, number>,
+  randomize: boolean,
+): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
 
   const entries = allowedTimes
     .filter(t => t.department === department && t.kind === "entry" && t.is_active)
-    .map(t => t.hour)
-    .sort((a, b) => a - b);
+    .map(t => t.hour).sort((a, b) => a - b);
   const exits = allowedTimes
     .filter(t => t.department === department && t.kind === "exit" && t.is_active)
-    .map(t => t.hour)
-    .sort((a, b) => a - b);
+    .map(t => t.hour).sort((a, b) => a - b);
 
   const shifts: GeneratedShift[] = [];
   const uncoveredSlots: { date: string; hour: string }[] = [];
 
-  // Track hours per employee for the week
   const weeklyHours = new Map<string, number>();
-  const dailyHours = new Map<string, Map<string, number>>(); // emp -> date -> hours
-  const daysWorked = new Map<string, Set<string>>(); // emp -> set of dates worked
-  const splitShiftsWeek = new Map<string, number>(); // emp -> count of split shifts this week
-  const dailyShiftCount = new Map<string, Map<string, number>>(); // emp -> date -> shift count
+  const daysWorked = new Map<string, Set<string>>();
 
   const maxDailyTeamHours = department === "sala" ? rules.max_daily_team_hours_sala : rules.max_daily_team_hours_cucina;
   const maxWeeklyTeamHours = department === "sala" ? rules.max_team_hours_sala_per_week : rules.max_team_hours_cucina_per_week;
@@ -149,108 +230,96 @@ function generateShiftsForDepartment(
 
   for (const emp of deptEmployees) {
     weeklyHours.set(emp.user_id, 0);
-    dailyHours.set(emp.user_id, new Map());
     daysWorked.set(emp.user_id, new Set());
-    splitShiftsWeek.set(emp.user_id, 0);
-    dailyShiftCount.set(emp.user_id, new Map());
   }
 
-  // For each day, figure out coverage needs and assign shifts
   for (const dateStr of weekDates) {
     const dow = getDayOfWeek(dateStr);
     const dayCoverage = deptCoverage.filter(c => c.day_of_week === dow);
-
     if (dayCoverage.length === 0) continue;
 
-    // Get opening hours for this day
     const oh = openingHours.find(h => h.day_of_week === dow);
     const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
     const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
     const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
 
-    // Fallback entries/exits if none configured
     const effectiveEntries = entries.length > 0 ? entries : [dayOpenH];
     const effectiveExits = exits.length > 0 ? exits : [effectiveClose];
 
-    // Determine required coverage slots: hour -> min_staff
     const hourCoverage = new Map<number, number>();
     for (const c of dayCoverage) {
       const h = parseInt(c.hour_slot.split(":")[0], 10);
       hourCoverage.set(h, c.min_staff_required);
     }
 
-    // Track daily team hours for this day
     let dailyTeamHoursUsed = 0;
 
-    // For each available employee, try to assign a shift covering as many needed hours as possible
-    const availableEmps = deptEmployees.filter(emp => {
+    let availableEmps = deptEmployees.filter(emp => {
       if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) return false;
-      // Check mandatory days off
       const worked = daysWorked.get(emp.user_id)!;
       if (worked.size >= (7 - rules.mandatory_days_off_per_week)) return false;
       return true;
     });
 
-    // Sort employees by hours used (least first) to balance
-    availableEmps.sort((a, b) => (weeklyHours.get(a.user_id) ?? 0) - (weeklyHours.get(b.user_id) ?? 0));
+    // Key difference: randomize order in iterations for diversity
+    if (randomize) {
+      availableEmps = shuffle(availableEmps);
+    } else {
+      // Sort by hours used (least first), with hour bank compensation
+      availableEmps.sort((a, b) => {
+        const aUsed = weeklyHours.get(a.user_id) ?? 0;
+        const bUsed = weeklyHours.get(b.user_id) ?? 0;
+        const aBalance = hourBalances.get(a.user_id) ?? 0;
+        const bBalance = hourBalances.get(b.user_id) ?? 0;
+        const aTarget = a.weekly_contract_hours - aBalance;
+        const bTarget = b.weekly_contract_hours - bBalance;
+        return (aUsed / Math.max(aTarget, 1)) - (bUsed / Math.max(bTarget, 1));
+      });
+    }
 
-    // Coverage tracking
-    const staffAssigned = new Map<number, number>(); // hour -> count
+    const staffAssigned = new Map<number, number>();
     for (const [h] of hourCoverage) {
       staffAssigned.set(h, 0);
     }
 
-    // Greedy: assign each employee a shift that covers uncovered hours
     for (const emp of availableEmps) {
       const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+      const balance = hourBalances.get(emp.user_id) ?? 0;
+      const adjustedTarget = emp.weekly_contract_hours - balance;
       const maxRemaining = Math.min(
-        emp.weekly_contract_hours - empWeeklyUsed,
+        Math.max(adjustedTarget - empWeeklyUsed, 0),
         rules.max_weekly_hours_per_employee - empWeeklyUsed,
         rules.max_daily_hours_per_employee,
       );
       if (maxRemaining <= 0) continue;
-
       if (weeklyTeamHoursUsed >= maxWeeklyTeamHours) break;
       if (dailyTeamHoursUsed >= maxDailyTeamHours) break;
 
-      // Check if there are still uncovered slots
       let hasUncovered = false;
       for (const [h, needed] of hourCoverage) {
-        if ((staffAssigned.get(h) ?? 0) < needed) {
-          hasUncovered = true;
-          break;
-        }
+        if ((staffAssigned.get(h) ?? 0) < needed) { hasUncovered = true; break; }
       }
       if (!hasUncovered) break;
 
-      // Get employee's available time ranges
       const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
       if (empAvail.length === 0) continue;
 
-      // Find best entry/exit combination
-      let bestStart = -1;
-      let bestEnd = -1;
-      let bestCoverage = 0;
+      let bestStart = -1, bestEnd = -1, bestCoverage = 0;
 
       for (const entry of effectiveEntries) {
         for (const exit of effectiveExits) {
           if (exit <= entry) continue;
           const duration = exit - entry;
-          if (duration > maxRemaining) continue;
-          if (duration > rules.max_daily_hours_per_employee) continue;
+          if (duration > maxRemaining || duration > rules.max_daily_hours_per_employee) continue;
           if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
 
-          // Check if within employee's availability
           const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
           if (!withinAvail) continue;
 
-          // Count how many uncovered hours this would cover
           let coverCount = 0;
           for (let h = entry; h < exit; h++) {
             const needed = hourCoverage.get(h);
-            if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) {
-              coverCount++;
-            }
+            if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) coverCount++;
           }
 
           if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
@@ -276,13 +345,10 @@ function generateShiftsForDepartment(
         });
 
         weeklyHours.set(emp.user_id, empWeeklyUsed + duration);
-        const empDaily = dailyHours.get(emp.user_id)!;
-        empDaily.set(dateStr, (empDaily.get(dateStr) ?? 0) + duration);
         daysWorked.get(emp.user_id)!.add(dateStr);
         dailyTeamHoursUsed += duration;
         weeklyTeamHoursUsed += duration;
 
-        // Update coverage
         for (let h = bestStart; h < bestEnd; h++) {
           if (staffAssigned.has(h)) {
             staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
@@ -291,41 +357,33 @@ function generateShiftsForDepartment(
       }
     }
 
-    // Assign days off for employees not assigned this day
+    // Assign days off
     for (const emp of deptEmployees) {
       if (!daysWorked.get(emp.user_id)?.has(dateStr)) {
-        // Check if they have availability for this day but weren't assigned (explicit day off)
-        const hasAvail = isAvailable(emp.user_id, dateStr, availability, exceptions);
-        if (hasAvail) {
+        if (isAvailable(emp.user_id, dateStr, availability, exceptions)) {
           shifts.push({
-            store_id: storeId,
-            user_id: emp.user_id,
-            date: dateStr,
-            start_time: null,
-            end_time: null,
-            department,
-            is_day_off: true,
-            status: "draft",
-            generation_run_id: runId,
+            store_id: storeId, user_id: emp.user_id, date: dateStr,
+            start_time: null, end_time: null, department,
+            is_day_off: true, status: "draft", generation_run_id: runId,
           });
         }
       }
     }
 
-    // Track uncovered slots
     for (const [h, needed] of hourCoverage) {
-      const assigned = staffAssigned.get(h) ?? 0;
-      if (assigned < needed) {
-        uncoveredSlots.push({
-          date: dateStr,
-          hour: `${String(h).padStart(2, "0")}:00`,
-        });
+      if ((staffAssigned.get(h) ?? 0) < needed) {
+        uncoveredSlots.push({ date: dateStr, hour: `${String(h).padStart(2, "0")}:00` });
       }
     }
   }
 
-  return { shifts, uncoveredSlots };
+  // Compute fitness
+  const { score, hourAdjustments } = computeFitness(shifts, uncoveredSlots, deptEmployees, deptCoverage, weekDates, hourBalances);
+
+  return { shifts, uncoveredSlots, fitnessScore: score, hourAdjustments };
 }
+
+// ─── Main Handler ────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -337,15 +395,13 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Auth check - allow service role calls (cron) or authenticated admin/super_admin
     const authHeader = req.headers.get("Authorization");
     let callerUserId: string | null = null;
 
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
-      // Check if it's the anon key (cron call)
       if (token === anonKey || token === serviceRoleKey) {
-        callerUserId = null; // system call
+        callerUserId = null;
       } else {
         const anonClient = createClient(supabaseUrl, anonKey, {
           global: { headers: { Authorization: authHeader } },
@@ -362,7 +418,6 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check caller role if not system call
     if (callerUserId) {
       const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: callerUserId });
       if (callerRole !== "super_admin" && callerRole !== "admin") {
@@ -374,6 +429,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { store_id, department, week_start } = body;
+    const iterations = body.iterations ?? 40;
 
     if (!store_id || !department || !week_start) {
       return new Response(JSON.stringify({ error: "store_id, department, week_start required" }), {
@@ -381,7 +437,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Calculate week_end (6 days after week_start)
     const startD = new Date(week_start + "T00:00:00Z");
     const endD = new Date(startD);
     endD.setUTCDate(endD.getUTCDate() + 6);
@@ -392,35 +447,22 @@ Deno.serve(async (req) => {
     const { data: run, error: runErr } = await adminClient
       .from("generation_runs")
       .insert({
-        store_id,
-        department,
-        week_start,
-        week_end: weekEnd,
-        status: "running",
-        created_by: callerUserId,
+        store_id, department, week_start, week_end: weekEnd,
+        status: "running", created_by: callerUserId,
       })
       .select("id")
       .single();
 
-    if (runErr || !run) {
-      throw new Error(`Failed to create generation run: ${runErr?.message}`);
-    }
+    if (runErr || !run) throw new Error(`Failed to create generation run: ${runErr?.message}`);
 
     try {
-      // Delete any existing draft shifts for this store/department/week
-      await adminClient
-        .from("shifts")
-        .delete()
-        .eq("store_id", store_id)
-        .eq("department", department)
-        .eq("status", "draft")
-        .gte("date", week_start)
-        .lte("date", weekEnd);
+      // Delete existing drafts
+      await adminClient.from("shifts").delete()
+        .eq("store_id", store_id).eq("department", department)
+        .eq("status", "draft").gte("date", week_start).lte("date", weekEnd);
 
-      // Fetch all needed data in parallel
-      const [
-        empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes,
-      ] = await Promise.all([
+      // Fetch all data in parallel
+      const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes] = await Promise.all([
         adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active"),
         adminClient.from("employee_availability").select("user_id, day_of_week, start_time, end_time").eq("store_id", store_id),
         adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", week_start),
@@ -429,30 +471,22 @@ Deno.serve(async (req) => {
         adminClient.from("store_rules").select("*").eq("store_id", store_id).single(),
         adminClient.from("store_opening_hours").select("*").eq("store_id", store_id),
         adminClient.from("time_off_requests").select("user_id, request_date, request_type, selected_hour, status")
-          .eq("store_id", store_id)
-          .eq("status", "approved")
-          .gte("request_date", week_start)
-          .lte("request_date", weekEnd),
+          .eq("store_id", store_id).eq("status", "approved").gte("request_date", week_start).lte("request_date", weekEnd),
+        adminClient.from("employee_stats").select("user_id, current_balance").eq("store_id", store_id),
       ]);
 
       if (rulesRes.error || !rulesRes.data) throw new Error("Store rules not found");
 
-      // Filter employees assigned to this store
       const { data: assignments } = await adminClient
-        .from("user_store_assignments")
-        .select("user_id")
-        .eq("store_id", store_id);
+        .from("user_store_assignments").select("user_id").eq("store_id", store_id);
       const storeUserIds = new Set((assignments ?? []).map(a => a.user_id));
 
       const employees = (empRes.data ?? []).filter(e => storeUserIds.has(e.user_id)) as EmployeeData[];
       const availability = (availRes.data ?? []) as AvailSlot[];
 
-      // Merge approved time-off requests into exceptions
       const baseExceptions = (excRes.data ?? []) as ExceptionBlock[];
       const approvedRequests = (requestsRes.data ?? []).map((r: any) => ({
-        user_id: r.user_id,
-        start_date: r.request_date,
-        end_date: r.request_date,
+        user_id: r.user_id, start_date: r.request_date, end_date: r.request_date,
       }));
       const allExceptions = [...baseExceptions, ...approvedRequests];
 
@@ -460,26 +494,37 @@ Deno.serve(async (req) => {
       const allowedData = (allowedRes.data ?? []) as AllowedTime[];
       const rules: StoreRules = rulesRes.data as any;
       const openingHoursData = (ohRes.data ?? []).map((h: any) => ({
-        day_of_week: h.day_of_week,
-        opening_time: h.opening_time,
-        closing_time: h.closing_time,
+        day_of_week: h.day_of_week, opening_time: h.opening_time, closing_time: h.closing_time,
       }));
 
-      const { shifts, uncoveredSlots } = generateShiftsForDepartment(
-        store_id,
-        department,
-        weekDates,
-        employees,
-        availability,
-        allExceptions,
-        coverageData,
-        allowedData,
-        rules,
-        run.id,
-        openingHoursData,
-      );
+      // Hour bank balances
+      const hourBalances = new Map<string, number>();
+      for (const s of (statsRes.data ?? [])) {
+        hourBalances.set(s.user_id, Number(s.current_balance));
+      }
 
-      // Insert shifts in batches
+      // ─── Run N iterations, keep best ───────────────────────────────────
+      let bestResult: IterationResult | null = null;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = runIteration(
+          store_id, department, weekDates, employees, availability,
+          allExceptions, coverageData, allowedData, rules, run.id,
+          openingHoursData, hourBalances,
+          i > 0, // first iteration is deterministic, rest randomized
+        );
+
+        if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
+          bestResult = result;
+        }
+
+        // Early exit if perfect score (no uncovered, no drift)
+        if (result.uncoveredSlots.length === 0 && result.fitnessScore >= 0) break;
+      }
+
+      const { shifts, uncoveredSlots, fitnessScore, hourAdjustments } = bestResult!;
+
+      // Insert best shifts
       if (shifts.length > 0) {
         const batchSize = 100;
         for (let i = 0; i < shifts.length; i += batchSize) {
@@ -489,19 +534,29 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Update run status
-      const notes = uncoveredSlots.length > 0
-        ? `${uncoveredSlots.length} slot non coperti`
-        : "Generazione completata con successo";
+      // Update hour bank balances
+      for (const [userId, delta] of Object.entries(hourAdjustments)) {
+        const newBalance = (hourBalances.get(userId) ?? 0) + delta;
+        await adminClient.from("employee_stats").upsert({
+          user_id: userId,
+          store_id,
+          current_balance: newBalance,
+        }, { onConflict: "user_id,store_id" });
+      }
 
-      await adminClient
-        .from("generation_runs")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          notes,
-        })
-        .eq("id", run.id);
+      // Update run
+      const notes = uncoveredSlots.length > 0
+        ? `${uncoveredSlots.length} slot non coperti (fitness: ${fitnessScore.toFixed(1)})`
+        : `Generazione completata con successo (fitness: ${fitnessScore.toFixed(1)})`;
+
+      await adminClient.from("generation_runs").update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        notes,
+        fitness_score: fitnessScore,
+        iterations_run: iterations,
+        hour_adjustments: hourAdjustments,
+      }).eq("id", run.id);
 
       return new Response(JSON.stringify({
         ok: true,
@@ -509,20 +564,19 @@ Deno.serve(async (req) => {
         shifts_created: shifts.filter(s => !s.is_day_off).length,
         days_off_created: shifts.filter(s => s.is_day_off).length,
         uncovered_slots: uncoveredSlots,
+        fitness_score: fitnessScore,
+        iterations_run: iterations,
+        hour_adjustments: hourAdjustments,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (genErr) {
-      // Mark run as failed
-      await adminClient
-        .from("generation_runs")
-        .update({
-          status: "failed",
-          completed_at: new Date().toISOString(),
-          error_message: (genErr as Error).message,
-        })
-        .eq("id", run.id);
+      await adminClient.from("generation_runs").update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+        error_message: (genErr as Error).message,
+      }).eq("id", run.id);
       throw genErr;
     }
   } catch (err) {

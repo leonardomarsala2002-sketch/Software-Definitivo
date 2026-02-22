@@ -212,6 +212,48 @@ export type Database = {
           },
         ]
       }
+      employee_stats: {
+        Row: {
+          created_at: string
+          current_balance: number
+          id: string
+          store_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          store_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          store_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_stats_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_stats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_runs: {
         Row: {
           completed_at: string | null
@@ -219,7 +261,10 @@ export type Database = {
           created_by: string | null
           department: Database["public"]["Enums"]["department"]
           error_message: string | null
+          fitness_score: number | null
+          hour_adjustments: Json | null
           id: string
+          iterations_run: number | null
           notes: string | null
           status: string
           store_id: string
@@ -233,7 +278,10 @@ export type Database = {
           created_by?: string | null
           department: Database["public"]["Enums"]["department"]
           error_message?: string | null
+          fitness_score?: number | null
+          hour_adjustments?: Json | null
           id?: string
+          iterations_run?: number | null
           notes?: string | null
           status?: string
           store_id: string
@@ -247,7 +295,10 @@ export type Database = {
           created_by?: string | null
           department?: Database["public"]["Enums"]["department"]
           error_message?: string | null
+          fitness_score?: number | null
+          hour_adjustments?: Json | null
           id?: string
+          iterations_run?: number | null
           notes?: string | null
           status?: string
           store_id?: string
@@ -324,6 +375,80 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lending_suggestions: {
+        Row: {
+          created_at: string
+          department: string
+          generation_run_id: string
+          id: string
+          reason: string | null
+          source_store_id: string
+          status: string
+          suggested_date: string
+          suggested_end_time: string
+          suggested_start_time: string
+          target_store_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department: string
+          generation_run_id: string
+          id?: string
+          reason?: string | null
+          source_store_id: string
+          status?: string
+          suggested_date: string
+          suggested_end_time: string
+          suggested_start_time: string
+          target_store_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          generation_run_id?: string
+          id?: string
+          reason?: string | null
+          source_store_id?: string
+          status?: string
+          suggested_date?: string
+          suggested_end_time?: string
+          suggested_start_time?: string
+          target_store_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lending_suggestions_generation_run_id_fkey"
+            columns: ["generation_run_id"]
+            isOneToOne: false
+            referencedRelation: "generation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_suggestions_source_store_id_fkey"
+            columns: ["source_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_suggestions_target_store_id_fkey"
+            columns: ["target_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
