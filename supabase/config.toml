@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.archive-shifts]
 verify_jwt = false
+
+[functions.generate-optimized-schedule]
+verify_jwt = false
