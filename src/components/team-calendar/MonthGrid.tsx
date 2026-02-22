@@ -7,15 +7,21 @@ interface Employee {
   full_name: string | null;
 }
 
+interface EmployeeBalance {
+  user_id: string;
+  current_balance: number;
+}
+
 interface MonthGridProps {
   year: number;
   month: number;
   shifts: ShiftRow[];
   employees: Employee[];
   department: "sala" | "cucina";
-  selectedWeek: number | null; // null = all
+  selectedWeek: number | null;
   onDayClick: (date: string) => void;
   uncoveredDates?: Map<string, Set<number>>;
+  balances?: EmployeeBalance[];
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -56,6 +62,7 @@ export function MonthGrid({
   selectedWeek,
   onDayClick,
   uncoveredDates,
+  balances,
 }: MonthGridProps) {
   const cells = useMemo(() => getMonthDays(year, month), [year, month]);
 
@@ -132,17 +139,33 @@ export function MonthGrid({
                 {dayShifts.slice(0, 4).map((s) => {
                   const emp = employees.find((e) => e.user_id === s.user_id);
                   const name = emp?.full_name?.split(" ")[0] ?? "?";
+                  const bal = balances?.find(b => b.user_id === s.user_id);
+                  const balLabel = bal && Math.abs(bal.current_balance) >= 1
+                    ? `${bal.current_balance > 0 ? "+" : ""}${bal.current_balance}h`
+                    : null;
                   return (
                     <div
                       key={s.id}
                       className={cn(
-                        "text-[9px] leading-tight truncate rounded px-1 py-0.5",
+                        "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
                         s.is_day_off
                           ? "bg-destructive/10 text-destructive"
-                          : "bg-primary/10 text-primary"
+                          : s.status === "draft"
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            : "bg-primary/10 text-primary"
                       )}
                     >
-                      {name} {formatShiftTime(s)}
+                      <span className="truncate">{name} {formatShiftTime(s)}</span>
+                      {balLabel && (
+                        <span className={cn(
+                          "text-[7px] font-bold shrink-0 px-0.5 rounded",
+                          bal!.current_balance > 0
+                            ? "text-amber-600 bg-amber-500/10"
+                            : "text-blue-600 bg-blue-500/10"
+                        )}>
+                          {balLabel}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
