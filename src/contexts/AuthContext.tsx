@@ -44,27 +44,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setRole(roleData as AppRole | null);
 
-      // Load stores via join
-      const { data: assignments } = await supabase
-        .from("user_store_assignments")
-        .select("store_id, is_primary, stores(id, name, address)")
-        .eq("user_id", userId);
+      // Super admin sees ALL stores; others see only assigned stores
+      if (roleData === "super_admin") {
+        const { data: allStores } = await supabase
+          .from("stores")
+          .select("id, name, address")
+          .eq("is_active", true)
+          .order("name");
 
-      if (assignments && assignments.length > 0) {
-        const storeList: StoreInfo[] = assignments.map((a: any) => ({
-          id: a.stores.id,
-          name: a.stores.name,
-          address: a.stores.address,
-          is_primary: a.is_primary,
-        }));
-        setStores(storeList);
-
-        // Set active store: primary first, or first available
-        const primary = storeList.find((s) => s.is_primary) || storeList[0];
-        setActiveStore(primary);
+        if (allStores && allStores.length > 0) {
+          const storeList: StoreInfo[] = allStores.map((s, i) => ({
+            id: s.id,
+            name: s.name,
+            address: s.address,
+            is_primary: i === 0,
+          }));
+          setStores(storeList);
+          setActiveStore(storeList[0]);
+        } else {
+          setStores([]);
+          setActiveStore(null);
+        }
       } else {
-        setStores([]);
-        setActiveStore(null);
+        const { data: assignments } = await supabase
+          .from("user_store_assignments")
+          .select("store_id, is_primary, stores(id, name, address)")
+          .eq("user_id", userId);
+
+        if (assignments && assignments.length > 0) {
+          const storeList: StoreInfo[] = assignments.map((a: any) => ({
+            id: a.stores.id,
+            name: a.stores.name,
+            address: a.stores.address,
+            is_primary: a.is_primary,
+          }));
+          setStores(storeList);
+          const primary = storeList.find((s) => s.is_primary) || storeList[0];
+          setActiveStore(primary);
+        } else {
+          setStores([]);
+          setActiveStore(null);
+        }
       }
     } catch (error) {
       console.error("Error loading user data:", error);
