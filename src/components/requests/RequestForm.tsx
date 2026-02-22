@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,26 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
 
+  // Thursday cutoff: check if the selected date falls in the "next week" that is being generated
+  const isDateLocked = useMemo(() => {
+    if (!date) return false;
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun
+    // If today is Thursday (4) or later (Fri=5, Sat=6, Sun=0), lock next week
+    const isThursdayOrLater = dayOfWeek >= 4 || dayOfWeek === 0;
+    if (!isThursdayOrLater) return false;
+
+    // Calculate next Monday
+    const daysUntilMon = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+    const nextMon = new Date(now);
+    nextMon.setDate(nextMon.getDate() + daysUntilMon);
+    const nextSun = new Date(nextMon);
+    nextSun.setDate(nextSun.getDate() + 6);
+
+    const selectedDate = new Date(date + "T00:00:00");
+    return selectedDate >= nextMon && selectedDate <= nextSun;
+  }, [date]);
+
   const needsHour = reqType === "morning_off" || reqType === "evening_off";
 
   // Get allowed hours for the selected type/department
@@ -68,6 +88,10 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
   const handleSubmit = () => {
     if (!user || !date) {
       toast.error("Seleziona una data");
+      return;
+    }
+    if (isDateLocked) {
+      toast.error("La generazione turni per la prossima settimana è già in corso. Le richieste per quella settimana sono bloccate.");
       return;
     }
     if (needsHour && selectedHour === null) {
@@ -110,6 +134,14 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
       <div className="space-y-1.5">
         <Label className="text-xs">Data</Label>
         <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setSelectedHour(null); }} />
+        {isDateLocked && (
+          <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 mt-1">
+            <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+            <p className="text-xs text-destructive">
+              La generazione turni per la prossima settimana è già in corso. Le richieste per quella settimana sono bloccate.
+            </p>
+          </div>
+        )}
       </div>
 
       {needsHour && (
@@ -161,7 +193,7 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
           size="sm"
           className="flex-1"
           onClick={handleSubmit}
-          disabled={createReq.isPending || (needsHour && (noHoursConfigured || selectedHour === null))}
+          disabled={createReq.isPending || isDateLocked || (needsHour && (noHoursConfigured || selectedHour === null))}
         >
           Invia richiesta
         </Button>

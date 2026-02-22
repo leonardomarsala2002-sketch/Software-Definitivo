@@ -15,6 +15,7 @@ interface MonthGridProps {
   department: "sala" | "cucina";
   selectedWeek: number | null; // null = all
   onDayClick: (date: string) => void;
+  uncoveredDates?: Map<string, Set<number>>;
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -54,6 +55,7 @@ export function MonthGrid({
   department,
   selectedWeek,
   onDayClick,
+  uncoveredDates,
 }: MonthGridProps) {
   const cells = useMemo(() => getMonthDays(year, month), [year, month]);
 
@@ -101,6 +103,8 @@ export function MonthGrid({
           const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const dayShifts = shiftsByDate.get(dateStr) ?? [];
           const isToday = todayStr === String(day);
+          const isUncovered = uncoveredDates?.has(dateStr);
+          const hasDraft = dayShifts.some((s: any) => s.status === "draft");
 
           return (
             <div
@@ -108,7 +112,9 @@ export function MonthGrid({
               className={cn(
                 "bg-card min-h-[80px] p-1.5 cursor-pointer transition-all hover:bg-accent/40",
                 dimmed && "opacity-40",
-                isToday && "ring-1 ring-primary/40"
+                isToday && "ring-1 ring-primary/40",
+                isUncovered && "bg-destructive/5 ring-1 ring-destructive/30",
+                hasDraft && !isUncovered && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
               )}
               onClick={() => onDayClick(dateStr)}
             >
