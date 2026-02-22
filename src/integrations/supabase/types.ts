@@ -325,6 +325,7 @@ export type Database = {
           notes: string | null
           status: string
           store_id: string
+          suggestions: Json | null
           updated_at: string
           week_end: string
           week_start: string
@@ -342,6 +343,7 @@ export type Database = {
           notes?: string | null
           status?: string
           store_id: string
+          suggestions?: Json | null
           updated_at?: string
           week_end: string
           week_start: string
@@ -359,6 +361,7 @@ export type Database = {
           notes?: string | null
           status?: string
           store_id?: string
+          suggestions?: Json | null
           updated_at?: string
           week_end?: string
           week_start?: string

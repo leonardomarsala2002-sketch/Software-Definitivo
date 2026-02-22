@@ -43,78 +43,83 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { generation_run_id } = await req.json();
-    if (!generation_run_id) {
-      return new Response(JSON.stringify({ error: "generation_run_id required" }), {
+    const body = await req.json();
+    const { store_id, week_start } = body;
+
+    if (!store_id || !week_start) {
+      return new Response(JSON.stringify({ error: "store_id and week_start required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get the run
-    const { data: run } = await adminClient
-      .from("generation_runs")
-      .select("*")
-      .eq("id", generation_run_id)
-      .single();
+    // Calculate week_end
+    const startD = new Date(week_start + "T00:00:00Z");
+    const endD = new Date(startD);
+    endD.setUTCDate(endD.getUTCDate() + 6);
+    const weekEnd = endD.toISOString().split("T")[0];
 
-    if (!run) {
-      return new Response(JSON.stringify({ error: "Run not found" }), {
+    // Get ALL generation runs for this week
+    const { data: runs } = await adminClient
+      .from("generation_runs")
+      .select("id, department, hour_adjustments")
+      .eq("store_id", store_id)
+      .eq("week_start", week_start)
+      .in("status", ["completed"]);
+
+    if (!runs || runs.length === 0) {
+      return new Response(JSON.stringify({ error: "No completed generation runs found for this week" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Update all draft shifts for this run to published
+    // Update ALL draft shifts for this store+week to published
     const { data: updatedShifts, error: updateErr } = await adminClient
       .from("shifts")
       .update({ status: "published" })
-      .eq("generation_run_id", generation_run_id)
+      .eq("store_id", store_id)
       .eq("status", "draft")
+      .gte("date", week_start)
+      .lte("date", weekEnd)
       .select("user_id, date, start_time, end_time, is_day_off, department");
 
     if (updateErr) throw new Error(updateErr.message);
 
-    // Update run status and lock it
-    await adminClient
-      .from("generation_runs")
-      .update({ status: "published", completed_at: new Date().toISOString() })
-      .eq("id", generation_run_id);
+    // Update ALL generation runs to published
+    for (const run of runs) {
+      await adminClient
+        .from("generation_runs")
+        .update({ status: "published", completed_at: new Date().toISOString() })
+        .eq("id", run.id);
 
-    // Commit hour bank balances from hour_adjustments
-    if (run.hour_adjustments && typeof run.hour_adjustments === "object") {
-      for (const [userId, delta] of Object.entries(run.hour_adjustments as Record<string, number>)) {
-        if (delta === 0) continue;
-        const clampedDelta = Math.max(-5, Math.min(5, delta));
-        
-        const { data: existing } = await adminClient
-          .from("employee_stats")
-          .select("id, current_balance")
-          .eq("user_id", userId)
-          .eq("store_id", run.store_id)
-          .maybeSingle();
+      // Commit hour bank from each run
+      if (run.hour_adjustments && typeof run.hour_adjustments === "object") {
+        for (const [userId, delta] of Object.entries(run.hour_adjustments as Record<string, number>)) {
+          if (delta === 0) continue;
+          const clampedDelta = Math.max(-5, Math.min(5, delta));
+          
+          const { data: existing } = await adminClient
+            .from("employee_stats")
+            .select("id, current_balance")
+            .eq("user_id", userId)
+            .eq("store_id", store_id)
+            .maybeSingle();
 
-        if (existing) {
-          await adminClient
-            .from("employee_stats")
-            .update({
-              current_balance: Number(existing.current_balance) + clampedDelta,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          await adminClient
-            .from("employee_stats")
-            .insert({
-              user_id: userId,
-              store_id: run.store_id,
-              current_balance: clampedDelta,
-            });
+          if (existing) {
+            await adminClient
+              .from("employee_stats")
+              .update({ current_balance: Number(existing.current_balance) + clampedDelta, updated_at: new Date().toISOString() })
+              .eq("id", existing.id);
+          } else {
+            await adminClient
+              .from("employee_stats")
+              .insert({ user_id: userId, store_id, current_balance: clampedDelta });
+          }
         }
       }
     }
 
-    // Send email notifications to employees
+    // Send email notifications
     if (resendKey && publicAppUrl && updatedShifts && updatedShifts.length > 0) {
-      // Group shifts by user
       const shiftsByUser = new Map<string, typeof updatedShifts>();
       for (const s of updatedShifts) {
         const arr = shiftsByUser.get(s.user_id) ?? [];
@@ -122,42 +127,30 @@ Deno.serve(async (req) => {
         shiftsByUser.set(s.user_id, arr);
       }
 
-      // Get employee profiles
       const userIds = [...shiftsByUser.keys()];
-      const { data: profiles } = await adminClient
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", userIds);
-
-      const { data: store } = await adminClient
-        .from("stores")
-        .select("name")
-        .eq("id", run.store_id)
-        .single();
+      const { data: profiles } = await adminClient.from("profiles").select("id, full_name, email").in("id", userIds);
+      const { data: store } = await adminClient.from("stores").select("name").eq("id", store_id).single();
 
       for (const [userId, userShifts] of shiftsByUser) {
         const profile = profiles?.find(p => p.id === userId);
         if (!profile?.email) continue;
 
-        const workShifts = userShifts
-          .filter(s => !s.is_day_off)
-          .sort((a, b) => a.date.localeCompare(b.date));
-
+        const workShifts = userShifts.filter(s => !s.is_day_off).sort((a, b) => a.date.localeCompare(b.date));
         const shiftLines = workShifts.map(s => {
           const d = new Date(s.date + "T00:00:00Z");
           const dayName = d.toLocaleDateString("it-IT", { weekday: "long", timeZone: "UTC" });
           const dateStr = d.toLocaleDateString("it-IT", { day: "numeric", month: "long", timeZone: "UTC" });
-          return `<tr><td style="padding:8px 16px;font-size:14px;color:#18181b;">${dayName} ${dateStr}</td><td style="padding:8px 16px;font-size:14px;font-weight:600;color:#18181b;text-align:right;">${s.start_time?.slice(0, 5)} – ${s.end_time?.slice(0, 5)}</td></tr>`;
+          return `<tr><td style="padding:8px 16px;font-size:14px;color:#18181b;">${dayName} ${dateStr}</td><td style="padding:8px 16px;font-size:14px;font-weight:600;color:#18181b;text-align:right;">${s.start_time?.slice(0, 5)} – ${s.end_time?.slice(0, 5)}</td><td style="padding:8px 8px;font-size:12px;color:#71717a;">${s.department === "sala" ? "Sala" : "Cucina"}</td></tr>`;
         }).join("");
 
         const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
-<table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
 <tr><td style="padding:40px 36px 16px;text-align:center;">
 <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Turni pubblicati</h1>
-<p style="margin:0;font-size:14px;color:#71717a;">${store?.name ?? "Store"} · ${run.department === "sala" ? "Sala" : "Cucina"}</p>
-<p style="margin:4px 0 0;font-size:13px;color:#a1a1aa;">Settimana ${run.week_start} → ${run.week_end}</p>
+<p style="margin:0;font-size:14px;color:#71717a;">${store?.name ?? "Store"}</p>
+<p style="margin:4px 0 0;font-size:13px;color:#a1a1aa;">Settimana ${week_start} → ${weekEnd}</p>
 </td></tr>
 <tr><td style="padding:16px 36px;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-radius:12px;">${shiftLines}</table>

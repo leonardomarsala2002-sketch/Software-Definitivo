@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import PageHeader from "@/components/PageHeader";
@@ -16,8 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
-import { useGenerateShifts, usePublishShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
-import { useEmployeeBalances, useAllStoreShortages, useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
+import { useGenerateShifts, usePublishWeek, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
+import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
@@ -55,18 +55,6 @@ const TeamCalendar = () => {
   const { data: openingHours = [] } = useOpeningHours(storeId);
   const { data: allowedTimes = [] } = useAllowedTimes(storeId);
   const { data: coverageReqs = [] } = useCoverageRequirements(storeId);
-  const { data: balances = [] } = useEmployeeBalances(storeId);
-  const { data: crossStoreShortages = [] } = useAllStoreShortages(storeId, department, year, month);
-
-  // Fetch all stores for name lookup
-  const { data: allStores = [] } = useQuery({
-    queryKey: ["all-stores"],
-    queryFn: async () => {
-      const { data } = await supabase.from("stores").select("id, name").eq("is_active", true);
-      return data ?? [];
-    },
-  });
-  const storeNamesMap = useMemo(() => new Map(allStores.map(s => [s.id, s.name])), [allStores]);
 
   const currentWeekStart = useMemo(() => {
     if (selectedWeek !== null) {
@@ -78,12 +66,13 @@ const TeamCalendar = () => {
 
   const { data: generationRuns = [] } = useWeekGenerationRuns(storeId, currentWeekStart);
 
-  // Fetch DB lending suggestions for current generation runs
+  // Fetch suggestions from generation_runs (server-side computed)
   const runIds = useMemo(() => generationRuns.map(r => r.id), [generationRuns]);
+  const { suggestions } = useOptimizationSuggestions(runIds);
   const { data: dbLendingSuggestions = [] } = useLendingSuggestions(runIds);
 
   const generateShifts = useGenerateShifts();
-  const publishShifts = usePublishShifts();
+  const publishWeek = usePublishWeek();
   const createShift = useCreateShift();
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
@@ -97,6 +86,11 @@ const TeamCalendar = () => {
   const hasDraftShifts = useMemo(() => {
     return shifts.some(s => s.status === "draft" && s.department === department);
   }, [shifts, department]);
+
+  // Check if ANY department has draft shifts (for week-level publish)
+  const hasAnyDraftShifts = useMemo(() => {
+    return shifts.some(s => s.status === "draft");
+  }, [shifts]);
 
   const employees = useMemo(() => {
     return allEmployees
@@ -112,21 +106,6 @@ const TeamCalendar = () => {
   const allowedExits = useMemo(
     () => allowedTimes.filter((t) => t.department === department && t.kind === "exit" && t.is_active).map((t) => t.hour).sort((a, b) => a - b),
     [allowedTimes, department]
-  );
-
-  // Optimization suggestions with cross-store lending priority
-  const suggestions = useOptimizationSuggestions(
-    shifts,
-    department,
-    coverageReqs,
-    employees.map(e => ({ user_id: e.user_id, full_name: e.full_name, weekly_contract_hours: e.weekly_contract_hours })),
-    balances,
-    year,
-    month,
-    hasDraftShifts,
-    crossStoreShortages,
-    dbLendingSuggestions,
-    storeNamesMap,
   );
 
   // Build uncovered slots map for visual highlighting
@@ -204,31 +183,30 @@ const TeamCalendar = () => {
     if (!storeId) return;
     generateShifts.mutate({
       store_id: storeId,
-      department,
       week_start: currentWeekStart,
     });
     setShowGenerateConfirm(false);
   };
 
-  const handlePublish = () => {
-    if (!activeDraftRun) return;
-    publishShifts.mutate(activeDraftRun.id);
+  const handlePublishWeek = () => {
+    if (!storeId) return;
+    publishWeek.mutate({ store_id: storeId, week_start: currentWeekStart });
     setShowPublishConfirm(false);
   };
 
   const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion) => {
-    if (suggestion.type === "surplus" && suggestion.shiftId) {
+    if (suggestion.type === "uncovered" && suggestion.date) {
+      setSelectedDate(suggestion.date);
+    } else if (suggestion.type === "surplus" && suggestion.shiftId) {
       deleteShift.mutate(suggestion.shiftId);
       toast.success(`Turno di ${suggestion.userName} rimosso`);
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
       const isDbLending = suggestion.id.startsWith("db-lending-");
       
       if (isDbLending) {
-        // DB lending suggestion: find the actual shift from source store and create a new shift at target
-        const lendingId = suggestion.shiftId; // This is the lending_suggestion ID
+        const lendingId = suggestion.shiftId;
         const dbSuggestion = dbLendingSuggestions.find(ls => ls.id === lendingId);
         if (dbSuggestion) {
-          // Create shift at target store for the lent employee
           const { error: createErr } = await supabase.from("shifts").insert({
             store_id: suggestion.targetStoreId,
             user_id: dbSuggestion.user_id,
@@ -245,7 +223,6 @@ const TeamCalendar = () => {
             return;
           }
 
-          // Update lending_suggestion status to accepted
           await supabase.from("lending_suggestions")
             .update({ status: "accepted" } as any)
             .eq("id", lendingId);
@@ -255,7 +232,6 @@ const TeamCalendar = () => {
           toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
         }
       } else {
-        // Client-side lending: update existing shift's store_id
         const { error } = await supabase
           .from("shifts")
           .update({ store_id: suggestion.targetStoreId } as any)
@@ -370,7 +346,7 @@ const TeamCalendar = () => {
           ))}
         </div>
 
-        {/* Generation buttons - only for admin/super_admin */}
+        {/* Action buttons */}
         {canEdit && (
           <div className="flex items-center gap-2 ml-auto">
             {hasDraftShifts && (
@@ -380,21 +356,22 @@ const TeamCalendar = () => {
               </Badge>
             )}
 
-            {activeDraftRun && activeDraftRun.status === "completed" && (
+            {/* Pubblica Settimana */}
+            {hasAnyDraftShifts && (
               <Button
                 size="sm"
                 variant="default"
                 onClick={() => setShowPublishConfirm(true)}
-                disabled={publishShifts.isPending || hasCriticalConflicts}
+                disabled={publishWeek.isPending || hasCriticalConflicts}
                 className="gap-1.5"
                 title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
-                {publishShifts.isPending ? (
+                {publishWeek.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <Send className="h-3.5 w-3.5" />
                 )}
-                Approva e Pubblica
+                Pubblica Settimana
               </Button>
             )}
 
@@ -430,7 +407,7 @@ const TeamCalendar = () => {
         </div>
       )}
 
-      {/* Optimization Panel - replaces static warning */}
+      {/* Optimization Panel - reads suggestions from server */}
       {canEdit && hasDraftShifts && suggestions.length > 0 && (
         <OptimizationPanel
           suggestions={suggestions}
@@ -474,7 +451,7 @@ const TeamCalendar = () => {
             selectedWeek={selectedWeek}
             onDayClick={(date) => setSelectedDate(date)}
             uncoveredDates={uncoveredSlotsMap}
-            balances={balances}
+            balances={[]}
             currentStoreId={storeId}
           />
 
@@ -507,7 +484,7 @@ const TeamCalendar = () => {
             <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
             <AlertDialogDescription>
               Verranno eseguite <strong>40 iterazioni</strong> dell'algoritmo per trovare la combinazione ottimale
-              dei turni per <strong className="capitalize">{department}</strong> a partire
+              dei turni per <strong>Sala e Cucina</strong> a partire
               da <strong>{currentWeekStart}</strong>. Il sistema terrà conto del monte ore accumulato (Hour Bank)
               per bilanciare automaticamente le ore tra le settimane. I turni draft esistenti verranno sostituiti.
             </AlertDialogDescription>
@@ -523,10 +500,11 @@ const TeamCalendar = () => {
       <AlertDialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Approva e pubblica turni</AlertDialogTitle>
+            <AlertDialogTitle>Pubblica Settimana</AlertDialogTitle>
             <AlertDialogDescription>
-              I turni draft verranno pubblicati e tutti i dipendenti coinvolti riceveranno una notifica email.
-              Il monte ore (Hour Bank) verrà aggiornato permanentemente per ogni dipendente.
+              Tutti i turni draft della settimana <strong>{currentWeekStart}</strong> verranno pubblicati
+              e ogni dipendente coinvolto riceverà una notifica email con i propri turni.
+              Il monte ore (Hour Bank) verrà aggiornato permanentemente.
               {hasCriticalConflicts && (
                 <span className="block mt-2 text-destructive font-medium">
                   ⚠️ Non puoi pubblicare: ci sono ancora conflitti critici da risolvere nel Pannello Ottimizzazione.
@@ -541,7 +519,7 @@ const TeamCalendar = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePublish} disabled={hasCriticalConflicts}>
+            <AlertDialogAction onClick={handlePublishWeek} disabled={hasCriticalConflicts}>
               Pubblica
             </AlertDialogAction>
           </AlertDialogFooter>
