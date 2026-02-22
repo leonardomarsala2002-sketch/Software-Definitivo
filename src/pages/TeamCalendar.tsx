@@ -15,10 +15,13 @@ import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
+import { useEmployeeBalances, useOptimizationSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
+import { OptimizationPanel } from "@/components/team-calendar/OptimizationPanel";
 import EmptyState from "@/components/EmptyState";
+import { toast } from "sonner";
 
 function getWeekStartForWeek(year: number, month: number, weekIdx: number): string {
   const firstDay = new Date(year, month - 1, 1);
@@ -26,7 +29,6 @@ function getWeekStartForWeek(year: number, month: number, weekIdx: number): stri
   if (startDow < 0) startDow = 6;
   const dayOfMonth = weekIdx * 7 - startDow + 1;
   const d = new Date(year, month - 1, dayOfMonth);
-  // Find Monday of that week
   const mon = startOfWeek(d, { weekStartsOn: 1 });
   return format(mon, "yyyy-MM-dd");
 }
@@ -50,13 +52,12 @@ const TeamCalendar = () => {
   const { data: openingHours = [] } = useOpeningHours(storeId);
   const { data: allowedTimes = [] } = useAllowedTimes(storeId);
   const { data: coverageReqs = [] } = useCoverageRequirements(storeId);
+  const { data: balances = [] } = useEmployeeBalances(storeId);
 
-  // Determine the week start for generation
   const currentWeekStart = useMemo(() => {
     if (selectedWeek !== null) {
       return getWeekStartForWeek(year, month, selectedWeek);
     }
-    // Default: next Monday from today
     const nextMon = startOfWeek(addDays(now, 7), { weekStartsOn: 1 });
     return format(nextMon, "yyyy-MM-dd");
   }, [selectedWeek, year, month]);
@@ -69,19 +70,16 @@ const TeamCalendar = () => {
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
 
-  // Find active draft run for current week/department
   const activeDraftRun = useMemo(() => {
     return generationRuns.find(
       r => r.department === department && (r.status === "completed" || r.status === "running")
     );
   }, [generationRuns, department]);
 
-  // Check if there are draft shifts in current view
   const hasDraftShifts = useMemo(() => {
-    return shifts.some(s => (s as any).status === "draft" && s.department === department);
+    return shifts.some(s => s.status === "draft" && s.department === department);
   }, [shifts, department]);
 
-  // Filter employees by department and active store
   const employees = useMemo(() => {
     return allEmployees
       .filter((e) => e.department === department && e.is_active && e.primary_store_id === storeId)
@@ -98,16 +96,26 @@ const TeamCalendar = () => {
     [allowedTimes, department]
   );
 
+  // Optimization suggestions
+  const suggestions = useOptimizationSuggestions(
+    shifts,
+    department,
+    coverageReqs,
+    employees.map(e => ({ user_id: e.user_id, full_name: e.full_name, weekly_contract_hours: e.weekly_contract_hours })),
+    balances,
+    year,
+    month,
+    hasDraftShifts,
+  );
+
   // Build uncovered slots map for visual highlighting
   const uncoveredSlotsMap = useMemo(() => {
-    const map = new Map<string, Set<number>>(); // date -> set of uncovered hours
+    const map = new Map<string, Set<number>>();
     if (coverageReqs.length === 0) return map;
 
-    // For each day with coverage requirements, check if shifts cover them
     const deptCoverage = coverageReqs.filter(c => c.department === department);
     const deptShifts = shifts.filter(s => s.department === department && !s.is_day_off && s.start_time && s.end_time);
 
-    // Group by date
     const shiftsByDate = new Map<string, typeof deptShifts>();
     deptShifts.forEach(s => {
       const arr = shiftsByDate.get(s.date) ?? [];
@@ -115,7 +123,6 @@ const TeamCalendar = () => {
       shiftsByDate.set(s.date, arr);
     });
 
-    // Check each day in the month
     const daysInMonth = new Date(year, month, 0).getDate();
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -128,7 +135,6 @@ const TeamCalendar = () => {
 
       for (const cov of dayCoverage) {
         const h = parseInt(cov.hour_slot.split(":")[0], 10);
-        // Count how many employees cover this hour
         let staffCount = 0;
         for (const s of dayShifts) {
           const sh = parseInt(s.start_time!.split(":")[0], 10);
@@ -148,7 +154,10 @@ const TeamCalendar = () => {
     return map;
   }, [coverageReqs, shifts, department, year, month]);
 
-  // Month navigation
+  const hasCriticalConflicts = useMemo(() => {
+    return suggestions.some(s => s.severity === "critical");
+  }, [suggestions]);
+
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(year - 1); }
     else setMonth(month - 1);
@@ -162,7 +171,6 @@ const TeamCalendar = () => {
 
   const monthLabel = format(new Date(year, month - 1), "MMMM yyyy", { locale: it });
 
-  // Week count
   const firstDay = new Date(year, month - 1, 1);
   let startDow = firstDay.getDay() - 1;
   if (startDow < 0) startDow = 6;
@@ -185,6 +193,17 @@ const TeamCalendar = () => {
     if (!activeDraftRun) return;
     publishShifts.mutate(activeDraftRun.id);
     setShowPublishConfirm(false);
+  };
+
+  const handleAcceptSuggestion = (suggestion: OptimizationSuggestion) => {
+    if (suggestion.type === "surplus" && suggestion.shiftId) {
+      deleteShift.mutate(suggestion.shiftId);
+      toast.success(`Turno di ${suggestion.userName} rimosso`);
+    } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
+      toast.info(`Riduzione ore per ${suggestion.userName} da applicare manualmente nel dettaglio giornaliero`);
+    } else if (suggestion.type === "lending") {
+      toast.info("Richiesta di prestito inviata");
+    }
   };
 
   if (!storeId) {
@@ -279,8 +298,9 @@ const TeamCalendar = () => {
                 size="sm"
                 variant="default"
                 onClick={() => setShowPublishConfirm(true)}
-                disabled={publishShifts.isPending}
+                disabled={publishShifts.isPending || hasCriticalConflicts}
                 className="gap-1.5"
+                title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
                 {publishShifts.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -315,22 +335,32 @@ const TeamCalendar = () => {
           <Wand2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800 dark:text-amber-300">
             <p className="font-semibold mb-1">
-              Draft generato — Fitness: {(activeDraftRun as any).fitness_score?.toFixed(1) ?? "N/A"} 
-              {(activeDraftRun as any).iterations_run && ` (${(activeDraftRun as any).iterations_run} iterazioni)`}
+              Draft generato — Fitness: {activeDraftRun.fitness_score?.toFixed(1) ?? "N/A"}
+              {activeDraftRun.iterations_run && ` (${activeDraftRun.iterations_run} iterazioni)`}
             </p>
             {activeDraftRun.notes && <p className="text-amber-700/80 dark:text-amber-400/80">{activeDraftRun.notes}</p>}
           </div>
         </div>
       )}
 
-      {/* Uncovered slots warning */}
-      {uncoveredSlotsMap.size > 0 && (
+      {/* Optimization Panel - replaces static warning */}
+      {canEdit && hasDraftShifts && suggestions.length > 0 && (
+        <OptimizationPanel
+          suggestions={suggestions}
+          onAccept={handleAcceptSuggestion}
+          onDecline={() => {}}
+          onNavigateToDay={(date) => setSelectedDate(date)}
+        />
+      )}
+
+      {/* Uncovered slots warning (only if no draft / optimization panel not shown) */}
+      {(!hasDraftShifts || !canEdit) && uncoveredSlotsMap.size > 0 && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
           <div className="text-xs text-destructive">
             <p className="font-semibold mb-1">Copertura insufficiente in {uncoveredSlotsMap.size} giorni</p>
             <p className="text-destructive/80">
-              Alcuni slot orari non raggiungono il minimo di personale richiesto. I giorni con problemi sono evidenziati in rosso nel calendario.
+              Alcuni slot orari non raggiungono il minimo di personale richiesto.
             </p>
           </div>
         </div>
@@ -356,6 +386,7 @@ const TeamCalendar = () => {
             selectedWeek={selectedWeek}
             onDayClick={(date) => setSelectedDate(date)}
             uncoveredDates={uncoveredSlotsMap}
+            balances={balances}
           />
 
           {selectedDate && (
@@ -405,17 +436,25 @@ const TeamCalendar = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Approva e pubblica turni</AlertDialogTitle>
             <AlertDialogDescription>
-              I turni draft verranno pubblicati e tutti i dipendenti coinvolti riceveranno una notifica email con i propri turni.
-              {uncoveredSlotsMap.size > 0 && (
+              I turni draft verranno pubblicati e tutti i dipendenti coinvolti riceveranno una notifica email.
+              Il monte ore (Hour Bank) verrà aggiornato permanentemente per ogni dipendente.
+              {hasCriticalConflicts && (
                 <span className="block mt-2 text-destructive font-medium">
-                  ⚠️ Attenzione: ci sono ancora {uncoveredSlotsMap.size} giorni con copertura insufficiente.
+                  ⚠️ Non puoi pubblicare: ci sono ancora conflitti critici da risolvere nel Pannello Ottimizzazione.
+                </span>
+              )}
+              {!hasCriticalConflicts && uncoveredSlotsMap.size > 0 && (
+                <span className="block mt-2 text-amber-600 font-medium">
+                  ⚠ Ci sono {uncoveredSlotsMap.size} giorni con avvisi di copertura (non critici).
                 </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePublish}>Pubblica</AlertDialogAction>
+            <AlertDialogAction onClick={handlePublish} disabled={hasCriticalConflicts}>
+              Pubblica
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

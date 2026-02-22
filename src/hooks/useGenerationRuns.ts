@@ -14,6 +14,9 @@ export interface GenerationRun {
   completed_at: string | null;
   notes: string | null;
   error_message: string | null;
+  fitness_score: number | null;
+  iterations_run: number | null;
+  hour_adjustments: Record<string, number> | null;
 }
 
 export function useWeekGenerationRuns(storeId: string | undefined, weekStart: string | undefined) {
