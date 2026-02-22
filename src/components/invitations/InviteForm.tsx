@@ -41,7 +41,7 @@ export default function InviteForm() {
   const [selectedDepartment, setSelectedDepartment] = useState<Department | "">("");
 
   const assignableRoles: AppRole[] =
-    role === "super_admin" ? ["admin", "employee"] : ["employee"];
+    role === "super_admin" ? ["super_admin", "admin", "employee"] : ["employee"];
 
   const { data: allStores = [] } = useQuery({
     queryKey: ["all-stores"],
@@ -63,17 +63,20 @@ export default function InviteForm() {
     mutationFn: async () => {
       if (!email.trim()) throw new Error("Inserisci un'email");
       if (!selectedRole) throw new Error("Seleziona un ruolo");
-      if (!selectedStoreId) throw new Error("Seleziona uno store");
-      if (!selectedDepartment) throw new Error("Seleziona un reparto");
+      // Super admin non richiede store e reparto
+      const isSuperAdminInvite = selectedRole === "super_admin";
+      if (!isSuperAdminInvite && !selectedStoreId) throw new Error("Seleziona uno store");
+      if (!isSuperAdminInvite && !selectedDepartment) throw new Error("Seleziona un reparto");
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) throw new Error("Email non valida");
 
+      const _isSuperAdmin = selectedRole === "super_admin";
       const { data, error } = await supabase.from("invitations").insert({
         email: email.trim().toLowerCase(),
         role: selectedRole as AppRole,
-        store_id: selectedStoreId,
-        department: selectedDepartment as Department,
+        store_id: _isSuperAdmin ? null : selectedStoreId,
+        department: _isSuperAdmin ? null : (selectedDepartment as Department),
         invited_by: user?.id ?? null,
       }).select("id").single();
 
@@ -160,43 +163,47 @@ export default function InviteForm() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Reparto</Label>
-            <Select
-              value={selectedDepartment}
-              onValueChange={(v) => setSelectedDepartment(v as Department)}
-            >
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Seleziona reparto" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(departmentLabels) as Department[]).map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {departmentLabels[d]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {selectedRole !== "super_admin" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Reparto</Label>
+              <Select
+                value={selectedDepartment}
+                onValueChange={(v) => setSelectedDepartment(v as Department)}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Seleziona reparto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(departmentLabels) as Department[]).map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {departmentLabels[d]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Store</Label>
-            <Select
-              value={selectedStoreId}
-              onValueChange={setSelectedStoreId}
-            >
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Seleziona store" />
-              </SelectTrigger>
-              <SelectContent>
-                {storeOptions.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {selectedRole !== "super_admin" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Store</Label>
+              <Select
+                value={selectedStoreId}
+                onValueChange={setSelectedStoreId}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Seleziona store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {storeOptions.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="flex items-end">
             <Button
