@@ -341,106 +341,224 @@ ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_off_requests ENABLE ROW LEVEL SECURITY;
 
 -- profiles policies
+DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
 CREATE POLICY "Users read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
 CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Super admin reads all profiles" ON public.profiles;
 CREATE POLICY "Super admin reads all profiles" ON public.profiles FOR SELECT USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin reads store colleagues" ON public.profiles;
 CREATE POLICY "Admin reads store colleagues" ON public.profiles FOR SELECT
   USING (EXISTS (SELECT 1 FROM user_store_assignments usa1 JOIN user_store_assignments usa2 ON usa1.store_id = usa2.store_id WHERE usa1.user_id = auth.uid() AND usa2.user_id = profiles.id));
 
 -- stores policies
+DROP POLICY IF EXISTS "Super admin full access stores" ON public.stores;
 CREATE POLICY "Super admin full access stores" ON public.stores FOR ALL USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Members read own stores" ON public.stores;
 CREATE POLICY "Members read own stores" ON public.stores FOR SELECT USING (is_store_member(auth.uid(), id));
 
 -- user_roles policies
+DROP POLICY IF EXISTS "Users read own role" ON public.user_roles;
 CREATE POLICY "Users read own role" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Super admin reads all roles" ON public.user_roles;
 CREATE POLICY "Super admin reads all roles" ON public.user_roles FOR SELECT USING (has_role(auth.uid(), 'super_admin'));
 
 -- user_store_assignments policies
+DROP POLICY IF EXISTS "Users read own assignments" ON public.user_store_assignments;
 CREATE POLICY "Users read own assignments" ON public.user_store_assignments FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admin reads store assignments" ON public.user_store_assignments;
 CREATE POLICY "Admin reads store assignments" ON public.user_store_assignments FOR SELECT USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Super admin full access assignments" ON public.user_store_assignments;
 CREATE POLICY "Super admin full access assignments" ON public.user_store_assignments FOR ALL USING (has_role(auth.uid(), 'super_admin'));
 
 -- invitations policies
+DROP POLICY IF EXISTS "Super admin full access invitations" ON public.invitations;
 CREATE POLICY "Super admin full access invitations" ON public.invitations FOR ALL USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store invitations" ON public.invitations;
 CREATE POLICY "Admin manages own store invitations" ON public.invitations FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Users read own invitations" ON public.invitations;
 CREATE POLICY "Users read own invitations" ON public.invitations FOR SELECT USING (lower(email) = lower(auth.email()));
 
 -- employee_details policies
+DROP POLICY IF EXISTS "Super admin reads all employee_details" ON public.employee_details;
 CREATE POLICY "Super admin reads all employee_details" ON public.employee_details FOR SELECT USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin inserts employee_details" ON public.employee_details;
 CREATE POLICY "Super admin inserts employee_details" ON public.employee_details FOR INSERT WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin updates employee_details" ON public.employee_details;
 CREATE POLICY "Super admin updates employee_details" ON public.employee_details FOR UPDATE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin deletes employee_details" ON public.employee_details;
 CREATE POLICY "Super admin deletes employee_details" ON public.employee_details FOR DELETE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Employee reads own employee_details" ON public.employee_details;
 CREATE POLICY "Employee reads own employee_details" ON public.employee_details FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Admin reads store employee_details" ON public.employee_details;
 CREATE POLICY "Admin reads store employee_details" ON public.employee_details FOR SELECT
   USING (has_role(auth.uid(), 'admin') AND EXISTS (SELECT 1 FROM user_store_assignments usa1 JOIN user_store_assignments usa2 ON usa1.store_id = usa2.store_id WHERE usa1.user_id = auth.uid() AND usa2.user_id = employee_details.user_id));
+
+DROP POLICY IF EXISTS "Admin inserts store employee_details" ON public.employee_details;
 CREATE POLICY "Admin inserts store employee_details" ON public.employee_details FOR INSERT
   WITH CHECK (has_role(auth.uid(), 'admin') AND EXISTS (SELECT 1 FROM user_store_assignments usa1 JOIN user_store_assignments usa2 ON usa1.store_id = usa2.store_id WHERE usa1.user_id = auth.uid() AND usa2.user_id = employee_details.user_id));
+
+DROP POLICY IF EXISTS "Admin updates store employee_details" ON public.employee_details;
 CREATE POLICY "Admin updates store employee_details" ON public.employee_details FOR UPDATE
   USING (has_role(auth.uid(), 'admin') AND EXISTS (SELECT 1 FROM user_store_assignments usa1 JOIN user_store_assignments usa2 ON usa1.store_id = usa2.store_id WHERE usa1.user_id = auth.uid() AND usa2.user_id = employee_details.user_id));
 
 -- employee_availability policies
+DROP POLICY IF EXISTS "Super admin reads all availability" ON public.employee_availability;
 CREATE POLICY "Super admin reads all availability" ON public.employee_availability FOR SELECT USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin inserts availability" ON public.employee_availability;
 CREATE POLICY "Super admin inserts availability" ON public.employee_availability FOR INSERT WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin updates availability" ON public.employee_availability;
 CREATE POLICY "Super admin updates availability" ON public.employee_availability FOR UPDATE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin deletes availability" ON public.employee_availability;
 CREATE POLICY "Super admin deletes availability" ON public.employee_availability FOR DELETE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Employee reads own availability" ON public.employee_availability;
 CREATE POLICY "Employee reads own availability" ON public.employee_availability FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Admin reads store availability" ON public.employee_availability;
 CREATE POLICY "Admin reads store availability" ON public.employee_availability FOR SELECT USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin inserts store availability" ON public.employee_availability;
 CREATE POLICY "Admin inserts store availability" ON public.employee_availability FOR INSERT WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin updates store availability" ON public.employee_availability;
 CREATE POLICY "Admin updates store availability" ON public.employee_availability FOR UPDATE USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin deletes store availability" ON public.employee_availability;
 CREATE POLICY "Admin deletes store availability" ON public.employee_availability FOR DELETE USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
 
 -- employee_exceptions policies
+DROP POLICY IF EXISTS "Super admin reads all exceptions" ON public.employee_exceptions;
 CREATE POLICY "Super admin reads all exceptions" ON public.employee_exceptions FOR SELECT USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin inserts exceptions" ON public.employee_exceptions;
 CREATE POLICY "Super admin inserts exceptions" ON public.employee_exceptions FOR INSERT WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin updates exceptions" ON public.employee_exceptions;
 CREATE POLICY "Super admin updates exceptions" ON public.employee_exceptions FOR UPDATE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Super admin deletes exceptions" ON public.employee_exceptions;
 CREATE POLICY "Super admin deletes exceptions" ON public.employee_exceptions FOR DELETE USING (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Employee reads own exceptions" ON public.employee_exceptions;
 CREATE POLICY "Employee reads own exceptions" ON public.employee_exceptions FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Employee inserts own exceptions" ON public.employee_exceptions;
 CREATE POLICY "Employee inserts own exceptions" ON public.employee_exceptions FOR INSERT WITH CHECK (user_id = auth.uid() AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin reads store exceptions" ON public.employee_exceptions;
 CREATE POLICY "Admin reads store exceptions" ON public.employee_exceptions FOR SELECT USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin inserts store exceptions" ON public.employee_exceptions;
 CREATE POLICY "Admin inserts store exceptions" ON public.employee_exceptions FOR INSERT WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin updates store exceptions" ON public.employee_exceptions;
 CREATE POLICY "Admin updates store exceptions" ON public.employee_exceptions FOR UPDATE USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Admin deletes store exceptions" ON public.employee_exceptions;
 CREATE POLICY "Admin deletes store exceptions" ON public.employee_exceptions FOR DELETE USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
 
 -- employee_constraints policies
+DROP POLICY IF EXISTS "Super admin full access employee_constraints" ON public.employee_constraints;
 CREATE POLICY "Super admin full access employee_constraints" ON public.employee_constraints FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages store employee_constraints" ON public.employee_constraints;
 CREATE POLICY "Admin manages store employee_constraints" ON public.employee_constraints FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own constraints" ON public.employee_constraints;
 CREATE POLICY "Employee reads own constraints" ON public.employee_constraints FOR SELECT USING (user_id = auth.uid());
 
 -- store_rules policies
+DROP POLICY IF EXISTS "Super admin full access store_rules" ON public.store_rules;
 CREATE POLICY "Super admin full access store_rules" ON public.store_rules FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store_rules" ON public.store_rules;
 CREATE POLICY "Admin manages own store_rules" ON public.store_rules FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store_rules" ON public.store_rules;
 CREATE POLICY "Employee reads own store_rules" ON public.store_rules FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- store_opening_hours policies
+DROP POLICY IF EXISTS "Super admin full access store_opening_hours" ON public.store_opening_hours;
 CREATE POLICY "Super admin full access store_opening_hours" ON public.store_opening_hours FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store_opening_hours" ON public.store_opening_hours;
 CREATE POLICY "Admin manages own store_opening_hours" ON public.store_opening_hours FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store_opening_hours" ON public.store_opening_hours;
 CREATE POLICY "Employee reads own store_opening_hours" ON public.store_opening_hours FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- store_coverage_requirements policies
+DROP POLICY IF EXISTS "Super admin full access store_coverage" ON public.store_coverage_requirements;
 CREATE POLICY "Super admin full access store_coverage" ON public.store_coverage_requirements FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store_coverage" ON public.store_coverage_requirements;
 CREATE POLICY "Admin manages own store_coverage" ON public.store_coverage_requirements FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store_coverage" ON public.store_coverage_requirements;
 CREATE POLICY "Employee reads own store_coverage" ON public.store_coverage_requirements FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- store_shift_allowed_times policies
+DROP POLICY IF EXISTS "Super admin full access shift_allowed_times" ON public.store_shift_allowed_times;
 CREATE POLICY "Super admin full access shift_allowed_times" ON public.store_shift_allowed_times FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store shift_allowed_times" ON public.store_shift_allowed_times;
 CREATE POLICY "Admin manages own store shift_allowed_times" ON public.store_shift_allowed_times FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store shift_allowed_times" ON public.store_shift_allowed_times;
 CREATE POLICY "Employee reads own store shift_allowed_times" ON public.store_shift_allowed_times FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- store_shift_templates policies
+DROP POLICY IF EXISTS "Super admin full access shift_templates" ON public.store_shift_templates;
 CREATE POLICY "Super admin full access shift_templates" ON public.store_shift_templates FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store shift_templates" ON public.store_shift_templates;
 CREATE POLICY "Admin manages own store shift_templates" ON public.store_shift_templates FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store shift_templates" ON public.store_shift_templates;
 CREATE POLICY "Employee reads own store shift_templates" ON public.store_shift_templates FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- shifts policies
+DROP POLICY IF EXISTS "Super admin full access shifts" ON public.shifts;
 CREATE POLICY "Super admin full access shifts" ON public.shifts FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages own store shifts" ON public.shifts;
 CREATE POLICY "Admin manages own store shifts" ON public.shifts FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own store shifts" ON public.shifts;
 CREATE POLICY "Employee reads own store shifts" ON public.shifts FOR SELECT USING (is_store_member(auth.uid(), store_id));
 
 -- time_off_requests policies
+DROP POLICY IF EXISTS "Super admin full access requests" ON public.time_off_requests;
 CREATE POLICY "Super admin full access requests" ON public.time_off_requests FOR ALL USING (has_role(auth.uid(), 'super_admin')) WITH CHECK (has_role(auth.uid(), 'super_admin'));
+
+DROP POLICY IF EXISTS "Admin manages store requests" ON public.time_off_requests;
 CREATE POLICY "Admin manages store requests" ON public.time_off_requests FOR ALL USING (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id)) WITH CHECK (has_role(auth.uid(), 'admin') AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee reads own requests" ON public.time_off_requests;
 CREATE POLICY "Employee reads own requests" ON public.time_off_requests FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Employee inserts own requests" ON public.time_off_requests;
 CREATE POLICY "Employee inserts own requests" ON public.time_off_requests FOR INSERT WITH CHECK (user_id = auth.uid() AND is_store_member(auth.uid(), store_id));
+
+DROP POLICY IF EXISTS "Employee deletes own pending requests" ON public.time_off_requests;
 CREATE POLICY "Employee deletes own pending requests" ON public.time_off_requests FOR DELETE USING (user_id = auth.uid() AND status = 'pending');
 
 -- ===================== PART 6: AUTH TRIGGER =====================
@@ -509,6 +627,7 @@ DECLARE
   v_today date := CURRENT_DATE;
   v_monday date;
   v_shift_date date;
+  v_email text;
 
 BEGIN
   -- Calculate current week Monday
@@ -524,11 +643,23 @@ BEGIN
   ON CONFLICT DO NOTHING;
 
   -- 2. Super admin
+  INSERT INTO auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data) 
+  VALUES (sa, 'authenticated', 'authenticated', 'mario.bianchi@demo.com', now(), jsonb_build_object('full_name', 'Mario Bianchi')) 
+  ON CONFLICT (id) DO NOTHING;
+  
   INSERT INTO profiles (id, full_name, email) VALUES (sa, 'Mario Bianchi', 'mario.bianchi@demo.com') ON CONFLICT DO NOTHING;
   INSERT INTO user_roles (user_id, role) VALUES (sa, 'super_admin') ON CONFLICT (user_id) DO NOTHING;
   INSERT INTO user_store_assignments (user_id, store_id, is_primary) VALUES (sa, s1, true) ON CONFLICT (user_id, store_id) DO NOTHING;
 
   -- 3. Admins
+  INSERT INTO auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data) VALUES
+    (v_admin_ids[1], 'authenticated', 'authenticated', 'laura.verdi@demo.com', now(), jsonb_build_object('full_name', 'Laura Verdi')),
+    (v_admin_ids[2], 'authenticated', 'authenticated', 'giuseppe.russo@demo.com', now(), jsonb_build_object('full_name', 'Giuseppe Russo')),
+    (v_admin_ids[3], 'authenticated', 'authenticated', 'francesca.esposito@demo.com', now(), jsonb_build_object('full_name', 'Francesca Esposito')),
+    (v_admin_ids[4], 'authenticated', 'authenticated', 'antonio.romano@demo.com', now(), jsonb_build_object('full_name', 'Antonio Romano')),
+    (v_admin_ids[5], 'authenticated', 'authenticated', 'chiara.ferrari@demo.com', now(), jsonb_build_object('full_name', 'Chiara Ferrari'))
+  ON CONFLICT (id) DO NOTHING;
+
   INSERT INTO profiles (id, full_name, email) VALUES
     (v_admin_ids[1], 'Laura Verdi', 'laura.verdi@demo.com'),
     (v_admin_ids[2], 'Giuseppe Russo', 'giuseppe.russo@demo.com'),
@@ -542,42 +673,39 @@ BEGIN
     INSERT INTO user_store_assignments (user_id, store_id, is_primary) VALUES (v_admin_ids[v_si], v_store_ids[v_si], true) ON CONFLICT (user_id, store_id) DO NOTHING;
   END LOOP;
 
-  -- 4. Employees (18 per store = 90 total)
+  -- 4. Employees
   FOR v_si IN 1..5 LOOP
     v_store := v_store_ids[v_si];
-    v_emps_per_store := 15 + (v_si * 2); -- 17,19,21,23,25 = varied per store
+    v_emps_per_store := 15 + (v_si * 2);
 
     FOR i IN 1..v_emps_per_store LOOP
       v_emp_idx := v_emp_idx + 1;
       v_emp_uuid := ('c0000001-0000-0000-0000-' || lpad(v_emp_idx::text, 12, '0'))::uuid;
       v_first := v_first_names[1 + ((v_emp_idx - 1) % array_length(v_first_names, 1))];
       v_last := v_last_names[1 + ((v_emp_idx - 1) % array_length(v_last_names, 1))];
+      v_email := lower(replace(v_first,' ','')) || '.' || lower(replace(v_last,' ','')) || v_emp_idx || '@demo.com';
       v_dept := CASE WHEN (v_emp_idx % 3) = 0 THEN 'cucina'::department ELSE 'sala'::department END;
       v_hours := (ARRAY[20, 24, 30, 36, 40])[1 + (v_emp_idx % 5)];
       v_phone := '+39 ' || (330 + (v_emp_idx % 20))::text || ' ' || lpad((1000000 + v_emp_idx * 137)::text, 7, '0');
 
-      -- Profile
+      INSERT INTO auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data) 
+      VALUES (v_emp_uuid, 'authenticated', 'authenticated', v_email, now(), jsonb_build_object('full_name', v_first || ' ' || v_last))
+      ON CONFLICT (id) DO NOTHING;
+
       INSERT INTO profiles (id, full_name, email) VALUES
-        (v_emp_uuid, v_first || ' ' || v_last, lower(replace(v_first,' ','')) || '.' || lower(replace(v_last,' ','')) || v_emp_idx || '@demo.com')
+        (v_emp_uuid, v_first || ' ' || v_last, v_email)
       ON CONFLICT DO NOTHING;
 
-      -- Role
       INSERT INTO user_roles (user_id, role) VALUES (v_emp_uuid, 'employee') ON CONFLICT (user_id) DO NOTHING;
-
-      -- Store assignment
       INSERT INTO user_store_assignments (user_id, store_id, is_primary) VALUES (v_emp_uuid, v_store, true) ON CONFLICT (user_id, store_id) DO NOTHING;
-
-      -- Employee details
       INSERT INTO employee_details (user_id, department, weekly_contract_hours, phone) VALUES
         (v_emp_uuid, v_dept, v_hours, v_phone)
       ON CONFLICT (user_id) DO NOTHING;
 
-      -- Availability: Mon-Sat (day 0-5), varied hours
       v_start_h := CASE WHEN v_dept = 'sala' THEN 10 ELSE 8 END;
       v_end_h := CASE WHEN v_dept = 'sala' THEN 23 ELSE 22 END;
 
       FOR v_day IN 0..5 LOOP
-        -- Skip one random day for variety
         IF v_day <> (v_emp_idx % 6) THEN
           INSERT INTO employee_availability (user_id, store_id, day_of_week, start_time, end_time, availability_type) VALUES
             (v_emp_uuid, v_store, v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, (lpad(v_end_h::text, 2, '0') || ':00')::time, 'available')
@@ -585,7 +713,6 @@ BEGIN
         END IF;
       END LOOP;
 
-      -- Some exceptions (ferie/malattia) for ~30% of employees
       IF (v_emp_idx % 3) = 1 THEN
         INSERT INTO employee_exceptions (user_id, store_id, exception_type, start_date, end_date, notes, created_by) VALUES
           (v_emp_uuid, v_store,
@@ -600,15 +727,12 @@ BEGIN
            v_admin_ids[v_si]);
       END IF;
 
-      -- Shifts for current week (Mon-Sat) for every employee
       FOR v_day IN 0..5 LOOP
         v_shift_date := v_monday + v_day;
-        -- Skip day off (1 per employee per week)
         IF v_day = (v_emp_idx % 6) THEN
           INSERT INTO shifts (store_id, user_id, date, department, is_day_off) VALUES
             (v_store, v_emp_uuid, v_shift_date, v_dept, true);
         ELSE
-          -- Create a shift: morning or afternoon
           IF (v_emp_idx + v_day) % 2 = 0 THEN
             INSERT INTO shifts (store_id, user_id, date, start_time, end_time, department, is_day_off) VALUES
               (v_store, v_emp_uuid, v_shift_date, '10:00', '15:00', v_dept, false);
@@ -622,7 +746,7 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- 5. Store rules for each store
+  -- 5. Store rules
   FOR v_si IN 1..5 LOOP
     INSERT INTO store_rules (store_id, max_daily_hours_per_employee, max_weekly_hours_per_employee,
       max_daily_team_hours, max_split_shifts_per_employee, mandatory_days_off_per_week,
@@ -633,20 +757,19 @@ BEGIN
     ON CONFLICT (store_id) DO NOTHING;
   END LOOP;
 
-  -- 6. Store opening hours (Mon-Sun, 10:00-00:00 for all stores)
+  -- 6. Store opening hours
   FOR v_si IN 1..5 LOOP
     FOR v_day IN 0..6 LOOP
       INSERT INTO store_opening_hours (store_id, day_of_week, opening_time, closing_time) VALUES
         (v_store_ids[v_si], v_day,
          CASE WHEN v_day = 6 THEN '11:00'::time ELSE '10:00'::time END,
-         '00:00'::time);
+         '23:59'::time);
     END LOOP;
   END LOOP;
 
-  -- 7. Store coverage requirements (Mon-Sat, key hours, sala + cucina)
+  -- 7. Store coverage requirements
   FOR v_si IN 1..5 LOOP
     FOR v_day IN 0..5 LOOP
-      -- Sala: 12-15, 19-23 (lunch + dinner)
       FOR v_start_h IN 12..14 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
           (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 3 + (v_si % 3));
@@ -655,7 +778,6 @@ BEGIN
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
           (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 4 + (v_si % 3));
       END LOOP;
-      -- Cucina: 11-15, 18-23
       FOR v_start_h IN 11..14 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
           (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'cucina', 2 + (v_si % 2));
@@ -667,32 +789,29 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- 8. Allowed entry/exit times for each store
+  -- 8. Allowed entry/exit times
   FOR v_si IN 1..5 LOOP
-    -- Entry hours: 8,9,10,11,12,17,18,19
     FOREACH v_start_h IN ARRAY ARRAY[8,9,10,11,12,17,18,19] LOOP
       INSERT INTO store_shift_allowed_times (store_id, department, hour, kind, is_active) VALUES
         (v_store_ids[v_si], 'sala', v_start_h, 'entry', true),
         (v_store_ids[v_si], 'cucina', v_start_h, 'entry', true);
     END LOOP;
-    -- Exit hours: 14,15,16,22,23,0
-    FOREACH v_end_h IN ARRAY ARRAY[14,15,16,22,23,0] LOOP
+    FOREACH v_end_h IN ARRAY ARRAY[14,15,16,22,23] LOOP
       INSERT INTO store_shift_allowed_times (store_id, department, hour, kind, is_active) VALUES
         (v_store_ids[v_si], 'sala', v_end_h, 'exit', true),
         (v_store_ids[v_si], 'cucina', v_end_h, 'exit', true);
     END LOOP;
   END LOOP;
 
-  -- 9. Some time_off_requests (pending, approved, rejected)
+  -- 9. Time off requests (Corretto 'cambio_turno' in 'malattia')
   FOR v_si IN 1..5 LOOP
     v_store := v_store_ids[v_si];
-    -- 3 requests per store
     FOR i IN 1..3 LOOP
       v_emp_idx := ((v_si - 1) * 20) + i;
       v_emp_uuid := ('c0000001-0000-0000-0000-' || lpad(v_emp_idx::text, 12, '0'))::uuid;
       INSERT INTO time_off_requests (user_id, store_id, request_date, request_type, department, status, notes) VALUES
         (v_emp_uuid, v_store, v_today + (i * 7), 
-         CASE WHEN i = 1 THEN 'ferie' WHEN i = 2 THEN 'permesso' ELSE 'cambio_turno' END,
+         CASE WHEN i = 1 THEN 'ferie' WHEN i = 2 THEN 'permesso' ELSE 'malattia' END,
          CASE WHEN (v_emp_idx % 3) = 0 THEN 'cucina' ELSE 'sala' END,
          CASE WHEN i = 1 THEN 'pending' WHEN i = 2 THEN 'approved' ELSE 'rejected' END,
          CASE WHEN i = 1 THEN 'Vorrei prendere ferie' WHEN i = 2 THEN 'Visita medica' ELSE 'Impegno personale' END);
