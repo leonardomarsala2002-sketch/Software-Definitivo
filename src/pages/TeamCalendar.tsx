@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
@@ -17,7 +17,7 @@ import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
-import { useEmployeeBalances, useAllStoreShortages, useOptimizationSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
+import { useEmployeeBalances, useAllStoreShortages, useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
@@ -58,6 +58,16 @@ const TeamCalendar = () => {
   const { data: balances = [] } = useEmployeeBalances(storeId);
   const { data: crossStoreShortages = [] } = useAllStoreShortages(storeId, department, year, month);
 
+  // Fetch all stores for name lookup
+  const { data: allStores = [] } = useQuery({
+    queryKey: ["all-stores"],
+    queryFn: async () => {
+      const { data } = await supabase.from("stores").select("id, name").eq("is_active", true);
+      return data ?? [];
+    },
+  });
+  const storeNamesMap = useMemo(() => new Map(allStores.map(s => [s.id, s.name])), [allStores]);
+
   const currentWeekStart = useMemo(() => {
     if (selectedWeek !== null) {
       return getWeekStartForWeek(year, month, selectedWeek);
@@ -67,6 +77,10 @@ const TeamCalendar = () => {
   }, [selectedWeek, year, month]);
 
   const { data: generationRuns = [] } = useWeekGenerationRuns(storeId, currentWeekStart);
+
+  // Fetch DB lending suggestions for current generation runs
+  const runIds = useMemo(() => generationRuns.map(r => r.id), [generationRuns]);
+  const { data: dbLendingSuggestions = [] } = useLendingSuggestions(runIds);
 
   const generateShifts = useGenerateShifts();
   const publishShifts = usePublishShifts();
@@ -111,6 +125,8 @@ const TeamCalendar = () => {
     month,
     hasDraftShifts,
     crossStoreShortages,
+    dbLendingSuggestions,
+    storeNamesMap,
   );
 
   // Build uncovered slots map for visual highlighting
@@ -205,20 +221,53 @@ const TeamCalendar = () => {
       deleteShift.mutate(suggestion.shiftId);
       toast.success(`Turno di ${suggestion.userName} rimosso`);
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
-      // Update shift store_id to target store (lending)
-      const { error } = await supabase
-        .from("shifts")
-        .update({ store_id: suggestion.targetStoreId } as any)
-        .eq("id", suggestion.shiftId);
-      if (error) {
-        toast.error("Errore nel prestito: " + error.message);
+      const isDbLending = suggestion.id.startsWith("db-lending-");
+      
+      if (isDbLending) {
+        // DB lending suggestion: find the actual shift from source store and create a new shift at target
+        const lendingId = suggestion.shiftId; // This is the lending_suggestion ID
+        const dbSuggestion = dbLendingSuggestions.find(ls => ls.id === lendingId);
+        if (dbSuggestion) {
+          // Create shift at target store for the lent employee
+          const { error: createErr } = await supabase.from("shifts").insert({
+            store_id: suggestion.targetStoreId,
+            user_id: dbSuggestion.user_id,
+            date: dbSuggestion.suggested_date,
+            start_time: dbSuggestion.suggested_start_time,
+            end_time: dbSuggestion.suggested_end_time,
+            department: dbSuggestion.department as "sala" | "cucina",
+            is_day_off: false,
+            status: "draft",
+          } as any);
+
+          if (createErr) {
+            toast.error("Errore nel prestito: " + createErr.message);
+            return;
+          }
+
+          // Update lending_suggestion status to accepted
+          await supabase.from("lending_suggestions")
+            .update({ status: "accepted" } as any)
+            .eq("id", lendingId);
+
+          queryClient.invalidateQueries({ queryKey: ["shifts"] });
+          queryClient.invalidateQueries({ queryKey: ["lending-suggestions"] });
+          toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
+        }
       } else {
-        toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
-        // Refresh shifts
-        queryClient.invalidateQueries({ queryKey: ["shifts"] });
+        // Client-side lending: update existing shift's store_id
+        const { error } = await supabase
+          .from("shifts")
+          .update({ store_id: suggestion.targetStoreId } as any)
+          .eq("id", suggestion.shiftId);
+        if (error) {
+          toast.error("Errore nel prestito: " + error.message);
+        } else {
+          toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
+          queryClient.invalidateQueries({ queryKey: ["shifts"] });
+        }
       }
     } else if (suggestion.type === "hour_reduction" && suggestion.shiftId && suggestion.suggestedHours) {
-      // Reduce shift end_time by suggestedHours
       const shift = shifts.find(s => s.id === suggestion.shiftId);
       if (shift?.end_time) {
         const endH = parseInt(shift.end_time.split(":")[0], 10);

@@ -124,19 +124,34 @@ export function useAllStoreShortages(storeId: string | undefined, department: "s
   });
 }
 
-export function useLendingSuggestions(runId: string | undefined) {
+export interface LendingSuggestionRow {
+  id: string;
+  generation_run_id: string;
+  user_id: string;
+  source_store_id: string;
+  target_store_id: string;
+  department: string;
+  suggested_date: string;
+  suggested_start_time: string;
+  suggested_end_time: string;
+  reason: string | null;
+  status: string;
+}
+
+export function useLendingSuggestions(runIds: string[]) {
   return useQuery({
-    queryKey: ["lending-suggestions", runId],
-    queryFn: async () => {
+    queryKey: ["lending-suggestions", ...runIds],
+    queryFn: async (): Promise<LendingSuggestionRow[]> => {
+      if (runIds.length === 0) return [];
       const { data, error } = await supabase
         .from("lending_suggestions")
         .select("*")
-        .eq("generation_run_id", runId!)
+        .in("generation_run_id", runIds)
         .eq("status", "pending");
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as LendingSuggestionRow[];
     },
-    enabled: !!runId,
+    enabled: runIds.length > 0,
   });
 }
 
@@ -158,6 +173,8 @@ export function useOptimizationSuggestions(
   month: number,
   hasDraft: boolean,
   crossStoreShortages?: StoreShortage[],
+  dbLendingSuggestions?: LendingSuggestionRow[],
+  storeNames?: Map<string, string>,
 ): OptimizationSuggestion[] {
   return useMemo(() => {
     if (!hasDraft) return [];
@@ -323,10 +340,46 @@ export function useOptimizationSuggestions(
       }
     }
 
+    // Merge DB lending suggestions (from generate-optimized-schedule)
+    if (dbLendingSuggestions && dbLendingSuggestions.length > 0) {
+      for (const ls of dbLendingSuggestions) {
+        if (ls.department !== department) continue;
+        const emp = empMap.get(ls.user_id);
+        const empName = emp?.full_name ?? "Dipendente";
+        const sourceName = storeNames?.get(ls.source_store_id) ?? "Store origine";
+        const targetName = storeNames?.get(ls.target_store_id) ?? "Store destinazione";
+        const startH = parseInt(ls.suggested_start_time.split(":")[0], 10);
+        const endH = parseInt(ls.suggested_end_time.split(":")[0], 10);
+
+        // Avoid duplicates with client-side lending suggestions
+        const existingId = `lending-${ls.suggested_date}-${startH}`;
+        if (suggestions.some(s => s.id.startsWith(existingId))) continue;
+
+        suggestions.push({
+          id: `db-lending-${ls.id}`,
+          type: "lending",
+          severity: "warning",
+          title: `Prestito ${empName} (${startH}:00-${endH}:00)`,
+          description: `${ls.reason ?? `Spostare ${empName} da ${sourceName} a ${targetName}`}`,
+          actionLabel: "Applica Prestito",
+          declineLabel: "Ignora",
+          userId: ls.user_id,
+          userName: empName,
+          date: ls.suggested_date,
+          sourceStoreId: ls.source_store_id,
+          sourceStoreName: sourceName,
+          targetStoreId: ls.target_store_id,
+          targetStoreName: targetName,
+          slot: `${startH}:00`,
+          shiftId: ls.id, // We'll use this as lending_suggestion ID for accept/decline
+        });
+      }
+    }
+
     // Sort: critical first, then warning, then info
     const severityOrder = { critical: 0, warning: 1, info: 2 };
     suggestions.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
     return suggestions;
-  }, [shifts, department, coverageReqs, employees, balances, year, month, hasDraft, crossStoreShortages]);
+  }, [shifts, department, coverageReqs, employees, balances, year, month, hasDraft, crossStoreShortages, dbLendingSuggestions, storeNames]);
 }
