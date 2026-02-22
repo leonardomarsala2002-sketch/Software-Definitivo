@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.cron-generate-shifts]
 verify_jwt = false
+
+[functions.archive-shifts]
+verify_jwt = false

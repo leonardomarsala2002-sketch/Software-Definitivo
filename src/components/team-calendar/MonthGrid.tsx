@@ -64,6 +64,9 @@ export function MonthGrid({
   uncoveredDates,
   balances,
 }: MonthGridProps) {
+  const today = new Date();
+  const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
   const cells = useMemo(() => getMonthDays(year, month), [year, month]);
 
   const shiftsByDate = useMemo(() => {
@@ -78,8 +81,7 @@ export function MonthGrid({
     return map;
   }, [shifts, department]);
 
-  const today = new Date();
-  const todayStr =
+  const todayStrForHighlight =
     today.getFullYear() === year && today.getMonth() + 1 === month
       ? String(today.getDate())
       : null;
@@ -109,9 +111,11 @@ export function MonthGrid({
           const dimmed = selectedWeek !== null && weekIdx !== selectedWeek;
           const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const dayShifts = shiftsByDate.get(dateStr) ?? [];
-          const isToday = todayStr === String(day);
+          const isToday = todayStrForHighlight === String(day);
           const isUncovered = uncoveredDates?.has(dateStr);
           const hasDraft = dayShifts.some((s: any) => s.status === "draft");
+          const isPast = dateStr < todayDateStr;
+          const isArchived = dayShifts.length > 0 && dayShifts.every((s: any) => s.status === "archived");
 
           return (
             <div
@@ -120,10 +124,12 @@ export function MonthGrid({
                 "bg-card min-h-[80px] p-1.5 cursor-pointer transition-all hover:bg-accent/40",
                 dimmed && "opacity-40",
                 isToday && "ring-1 ring-primary/40",
-                isUncovered && "bg-destructive/5 ring-1 ring-destructive/30",
-                hasDraft && !isUncovered && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
+                isUncovered && !isArchived && "bg-destructive/5 ring-1 ring-destructive/30",
+                hasDraft && !isUncovered && !isArchived && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
+                (isArchived || isPast) && "opacity-60 grayscale-[50%]",
               )}
               onClick={() => onDayClick(dateStr)}
+              title={isArchived ? "Questa settimana è archiviata e non può essere modificata." : undefined}
             >
               <div
                 className={cn(
@@ -150,9 +156,11 @@ export function MonthGrid({
                         "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
                         s.is_day_off
                           ? "bg-destructive/10 text-destructive"
-                          : s.status === "draft"
-                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                            : "bg-primary/10 text-primary"
+                          : s.status === "archived"
+                            ? "bg-muted text-muted-foreground"
+                            : s.status === "draft"
+                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                              : "bg-primary/10 text-primary"
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>

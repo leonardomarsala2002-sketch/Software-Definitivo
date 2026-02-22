@@ -54,6 +54,11 @@ export function DayDetailDialog({
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [addingForUser, setAddingForUser] = useState<string | null>(null);
 
+  // Disable editing if all shifts for this date are archived
+  const deptShiftsForDate = shifts.filter(s => s.department === department && s.date === date);
+  const isArchived = deptShiftsForDate.length > 0 && deptShiftsForDate.every(s => s.status === "archived");
+  const effectiveCanEdit = canEdit && !isArchived;
+
   const dayOfWeek = date ? (parseISO(date).getDay() + 6) % 7 : 0;
   const dayHours = openingHours.find((h) => h.day_of_week === dayOfWeek);
   const openH = dayHours ? parseInt(dayHours.opening_time.split(":")[0]) : 9;
@@ -87,7 +92,14 @@ export function DayDetailDialog({
       <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0">
         <DialogHeader className="px-6 pt-5 pb-3 border-b">
           <DialogTitle className="capitalize text-base">{dateLabel}</DialogTitle>
-          <Badge variant="outline" className="w-fit text-xs mt-1 capitalize">{department}</Badge>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge variant="outline" className="w-fit text-xs capitalize">{department}</Badge>
+            {isArchived && (
+              <Badge variant="secondary" className="w-fit text-xs">
+                Archiviato — sola lettura
+              </Badge>
+            )}
+          </div>
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(85vh-80px)]">
@@ -106,7 +118,7 @@ export function DayDetailDialog({
                   </div>
                 ))}
               </div>
-              {canEdit && <div className="w-20 shrink-0" />}
+              {effectiveCanEdit && <div className="w-20 shrink-0" />}
             </div>
 
             {/* Grid lines */}
@@ -176,7 +188,7 @@ export function DayDetailDialog({
                     </div>
 
                     {/* Actions */}
-                    {canEdit && (
+                    {effectiveCanEdit && (
                       <div className="w-20 shrink-0 flex items-center gap-0.5 pl-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {empShifts.length === 0 ? (
                           <ShiftEditPopover

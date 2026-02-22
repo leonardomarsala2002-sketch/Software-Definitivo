@@ -923,7 +923,7 @@ export type Database = {
         | "malattia"
         | "modifica_orario"
         | "altro"
-      shift_status: "draft" | "published"
+      shift_status: "draft" | "published" | "archived"
       shift_time_kind: "entry" | "exit"
     }
     CompositeTypes: {
@@ -1062,7 +1062,7 @@ export const Constants = {
         "modifica_orario",
         "altro",
       ],
-      shift_status: ["draft", "published"],
+      shift_status: ["draft", "published", "archived"],
       shift_time_kind: ["entry", "exit"],
     },
   },
