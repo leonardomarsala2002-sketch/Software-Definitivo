@@ -107,7 +107,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    const inviteUrl = `${publicAppUrl}invite?token=${inv.token}`;
+    // Generate the Supabase invite link (creates user in auth.users if not exists)
+    // The user will be redirected to /set-password to set their password
+    const redirectTo = `${publicAppUrl}set-password`;
+    const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.generateLink({
+      type: "invite",
+      email: inv.email,
+      options: {
+        redirectTo,
+      },
+    });
+
+    // If user already exists, generateLink may fail - that's ok, they can use login
+    let inviteActionLink = "";
+    if (inviteData?.properties?.action_link) {
+      inviteActionLink = inviteData.properties.action_link;
+      // Replace the default redirect with our custom one
+      const url = new URL(inviteActionLink);
+      url.searchParams.set("redirect_to", redirectTo);
+      inviteActionLink = url.toString();
+    }
+
+    const inviteUrl = inviteActionLink || `${publicAppUrl}invite?token=${inv.token}`;
     const storeName = (inv as any).stores?.name ?? "—";
     const roleName = roleLabels[inv.role] ?? inv.role;
     const deptName = inv.department ? (deptLabels[inv.department] ?? inv.department) : "—";
@@ -138,7 +159,7 @@ Deno.serve(async (req) => {
     </table>
   </td></tr>
   <tr><td style="padding:32px 36px;text-align:center;">
-    <a href="${inviteUrl}" style="display:inline-block;background:#18181b;color:#ffffff;font-size:16px;font-weight:600;padding:16px 48px;border-radius:12px;text-decoration:none;">Accetta invito</a>
+    <a href="${inviteUrl}" style="display:inline-block;background:#18181b;color:#ffffff;font-size:16px;font-weight:600;padding:16px 48px;border-radius:12px;text-decoration:none;">Accetta e imposta password</a>
   </td></tr>
   <tr><td style="padding:0 36px 32px;text-align:center;">
     <p style="margin:0;font-size:12px;color:#a1a1aa;">Oppure copia questo link:</p>

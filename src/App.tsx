@@ -16,6 +16,7 @@ import Invitations from "@/pages/Invitations";
 import Info from "@/pages/Info";
 import Login from "@/pages/Login";
 import AcceptInvite from "@/pages/AcceptInvite";
+import SetPassword from "@/pages/SetPassword";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/invite" element={<AcceptInvite />} />
+            <Route path="/set-password" element={<SetPassword />} />
             <Route
               element={
                 <ProtectedRoute>

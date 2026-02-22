@@ -53,12 +53,16 @@ export function isEmployeeReady(emp: EmployeeRow): boolean {
   );
 }
 
-export function useEmployeeList() {
+/**
+ * @param filterStoreIds - optional array of store IDs to filter employees by store assignment.
+ *   When provided, only employees assigned to at least one of these stores are returned.
+ */
+export function useEmployeeList(filterStoreIds?: string[]) {
   const { role, stores } = useAuth();
   const storeIds = stores.map((s) => s.id);
 
   return useQuery({
-    queryKey: ["employees", role, storeIds],
+    queryKey: ["employees", role, storeIds, filterStoreIds],
     queryFn: async (): Promise<EmployeeRow[]> => {
       const { data: details, error: detailsErr } = await supabase
         .from("employee_details")
@@ -69,8 +73,16 @@ export function useEmployeeList() {
 
       const userIds = details.map((d) => d.user_id);
 
-      const [profilesRes, assignmentsRes, availRes] = await Promise.all([
+      // Fetch ALL assignments (not just primary) so we can filter by store
+      const [profilesRes, allAssignmentsRes, primaryAssignmentsRes, availRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds),
+        filterStoreIds && filterStoreIds.length > 0
+          ? supabase
+              .from("user_store_assignments")
+              .select("user_id, store_id")
+              .in("user_id", userIds)
+              .in("store_id", filterStoreIds)
+          : Promise.resolve({ data: null, error: null }),
         supabase
           .from("user_store_assignments")
           .select("user_id, store_id, is_primary, stores(name)")
@@ -83,11 +95,18 @@ export function useEmployeeList() {
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
-      if (assignmentsRes.error) throw assignmentsRes.error;
+      if (allAssignmentsRes.error) throw allAssignmentsRes.error;
+      if (primaryAssignmentsRes.error) throw primaryAssignmentsRes.error;
+
+      // Build set of user IDs that match the store filter
+      let allowedUserIds: Set<string> | null = null;
+      if (filterStoreIds && filterStoreIds.length > 0 && allAssignmentsRes.data) {
+        allowedUserIds = new Set(allAssignmentsRes.data.map((a) => a.user_id));
+      }
 
       const profileMap = new Map(profilesRes.data?.map((p) => [p.id, p]) ?? []);
       const storeMap = new Map(
-        assignmentsRes.data?.map((a: any) => [a.user_id, { name: a.stores?.name, id: a.store_id }]) ?? []
+        primaryAssignmentsRes.data?.map((a: any) => [a.user_id, { name: a.stores?.name, id: a.store_id }]) ?? []
       );
 
       // Count availability records per user
@@ -96,23 +115,25 @@ export function useEmployeeList() {
         availCountMap.set(a.user_id, (availCountMap.get(a.user_id) ?? 0) + 1);
       });
 
-      return details.map((d) => {
-        const profile = profileMap.get(d.user_id);
-        const store = storeMap.get(d.user_id);
-        return {
-          user_id: d.user_id,
-          full_name: profile?.full_name ?? null,
-          email: profile?.email ?? null,
-          avatar_url: profile?.avatar_url ?? null,
-          department: d.department as "sala" | "cucina",
-          weekly_contract_hours: d.weekly_contract_hours,
-          phone: d.phone,
-          is_active: d.is_active,
-          primary_store_name: store?.name ?? null,
-          primary_store_id: store?.id ?? null,
-          availability_count: availCountMap.get(d.user_id) ?? 0,
-        };
-      });
+      return details
+        .filter((d) => !allowedUserIds || allowedUserIds.has(d.user_id))
+        .map((d) => {
+          const profile = profileMap.get(d.user_id);
+          const store = storeMap.get(d.user_id);
+          return {
+            user_id: d.user_id,
+            full_name: profile?.full_name ?? null,
+            email: profile?.email ?? null,
+            avatar_url: profile?.avatar_url ?? null,
+            department: d.department as "sala" | "cucina",
+            weekly_contract_hours: d.weekly_contract_hours,
+            phone: d.phone,
+            is_active: d.is_active,
+            primary_store_name: store?.name ?? null,
+            primary_store_id: store?.id ?? null,
+            availability_count: availCountMap.get(d.user_id) ?? 0,
+          };
+        });
     },
     enabled: !!role,
   });

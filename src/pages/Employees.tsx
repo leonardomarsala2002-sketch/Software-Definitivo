@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Users, CheckCircle2, AlertTriangle } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { StoreMultiSelect } from "@/components/StoreMultiSelect";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 function getInitials(name: string | null) {
   if (!name) return "?";
@@ -20,8 +23,33 @@ function getInitials(name: string | null) {
 }
 
 const Employees = () => {
-  const { role, user } = useAuth();
-  const { data: employees, isLoading, error } = useEmployeeList();
+  const { role, user, stores: authStores, activeStore } = useAuth();
+
+  // For super_admin: multi-store select, default to active store
+  const { data: allStores = [] } = useQuery({
+    queryKey: ["all-stores"],
+    enabled: role === "super_admin",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stores")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[] | null>(null);
+
+  // Initialize with active store once available
+  const storeIds = useMemo(() => {
+    if (role !== "super_admin") return null; // non-super_admin uses default hook behavior
+    if (selectedStoreIds !== null) return selectedStoreIds;
+    return activeStore ? [activeStore.id] : allStores.map((s) => s.id);
+  }, [role, selectedStoreIds, activeStore, allStores]);
+
+  const { data: employees, isLoading, error } = useEmployeeList(role === "super_admin" ? storeIds ?? undefined : undefined);
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -74,8 +102,8 @@ const Employees = () => {
       ) : (
         <>
           {/* Filters + summary */}
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Cerca per nome o email…"
@@ -94,6 +122,13 @@ const Employees = () => {
                 <SelectItem value="cucina">Cucina</SelectItem>
               </SelectContent>
             </Select>
+            {role === "super_admin" && allStores.length > 0 && (
+              <StoreMultiSelect
+                stores={allStores}
+                selectedIds={storeIds ?? []}
+                onChange={setSelectedStoreIds}
+              />
+            )}
             <Badge variant="secondary" className="text-xs whitespace-nowrap hidden sm:inline-flex">
               {readyCount}/{filtered.length} pronti
             </Badge>

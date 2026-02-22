@@ -1,9 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { UtensilsCrossed, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -17,6 +25,27 @@ export default function Login() {
     });
     if (error) {
       toast.error("Errore durante il login: " + error.message);
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      toast.error("Inserisci email e password");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(
+        error.message === "Invalid login credentials"
+          ? "Credenziali non valide"
+          : error.message
+      );
     }
   };
 
@@ -39,12 +68,69 @@ export default function Login() {
         </div>
 
         {/* Login card */}
-        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
-          <p className="mb-6 text-[13px] text-muted-foreground">
-            Accedi con il tuo account Google aziendale per continuare.
-          </p>
+        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm space-y-6">
+          {/* Email + password form */}
+          <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
+            <div className="space-y-2">
+              <Label htmlFor="login-email" className="text-xs font-medium">
+                Email
+              </Label>
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="nome@azienda.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password" className="text-xs font-medium">
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="rounded-xl pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={loading}
+              className="w-full rounded-xl text-[14px] font-semibold"
+            >
+              {loading ? "Accesso…" : "Accedi"}
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border/60" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-card px-3 text-muted-foreground">oppure</span>
+            </div>
+          </div>
+
+          {/* Google */}
           <Button
             onClick={handleGoogleLogin}
+            variant="outline"
             size="lg"
             className="w-full gap-3 rounded-xl text-[14px] font-semibold"
           >
