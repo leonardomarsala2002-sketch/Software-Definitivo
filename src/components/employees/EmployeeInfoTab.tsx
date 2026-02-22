@@ -5,10 +5,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, AlertTriangle } from "lucide-react";
+import { Loader2, Save, AlertTriangle, KeyRound, Eye, EyeOff } from "lucide-react";
 import type { EmployeeRow } from "@/hooks/useEmployees";
 import { isEmployeeReady } from "@/hooks/useEmployees";
 import { useUpdateEmployeeDetails } from "@/hooks/useEmployees";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface Props {
   employee: EmployeeRow;
@@ -143,6 +154,82 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
           Salva modifiche
         </Button>
       )}
+
+      {canEdit && <AdminResetPasswordButton targetUserId={employee.user_id} />}
     </div>
+  );
+}
+
+function AdminResetPasswordButton({ targetUserId }: { targetUserId: string }) {
+  const { role } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [newPw, setNewPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  if (role !== "super_admin" && role !== "admin") return null;
+
+  const handleReset = async () => {
+    if (newPw.length < 6) {
+      toast.error("La password deve avere almeno 6 caratteri");
+      return;
+    }
+    setLoading(true);
+    const res = await supabase.functions.invoke("admin-reset-password", {
+      body: { target_user_id: targetUserId, new_password: newPw },
+    });
+    setLoading(false);
+    if (res.error) {
+      toast.error("Errore: " + (res.error.message || "Errore sconosciuto"));
+    } else {
+      toast.success("Password aggiornata con successo");
+      setOpen(false);
+      setNewPw("");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setNewPw(""); setShowPw(false); } }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="w-full gap-2 mt-2">
+          <KeyRound className="h-4 w-4" />
+          Cambia password
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Cambia password utente</DialogTitle>
+          <DialogDescription>
+            Imposta una nuova password per questo utente.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="admin-pw" className="text-xs font-medium">Nuova password</Label>
+            <div className="relative">
+              <Input
+                id="admin-pw"
+                type={showPw ? "text" : "password"}
+                placeholder="Almeno 6 caratteri"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                className="rounded-xl pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <Button onClick={handleReset} disabled={loading || newPw.length < 6} className="w-full rounded-xl">
+            {loading ? "Salvataggio…" : "Imposta password"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
