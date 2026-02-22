@@ -73,11 +73,44 @@ Deno.serve(async (req) => {
 
     if (updateErr) throw new Error(updateErr.message);
 
-    // Update run status
+    // Update run status and lock it
     await adminClient
       .from("generation_runs")
       .update({ status: "published", completed_at: new Date().toISOString() })
       .eq("id", generation_run_id);
+
+    // Commit hour bank balances from hour_adjustments
+    if (run.hour_adjustments && typeof run.hour_adjustments === "object") {
+      for (const [userId, delta] of Object.entries(run.hour_adjustments as Record<string, number>)) {
+        if (delta === 0) continue;
+        const clampedDelta = Math.max(-5, Math.min(5, delta));
+        
+        const { data: existing } = await adminClient
+          .from("employee_stats")
+          .select("id, current_balance")
+          .eq("user_id", userId)
+          .eq("store_id", run.store_id)
+          .maybeSingle();
+
+        if (existing) {
+          await adminClient
+            .from("employee_stats")
+            .update({
+              current_balance: Number(existing.current_balance) + clampedDelta,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+        } else {
+          await adminClient
+            .from("employee_stats")
+            .insert({
+              user_id: userId,
+              store_id: run.store_id,
+              current_balance: clampedDelta,
+            });
+        }
+      }
+    }
 
     // Send email notifications to employees
     if (resendKey && publicAppUrl && updatedShifts && updatedShifts.length > 0) {

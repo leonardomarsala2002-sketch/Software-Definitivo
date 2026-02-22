@@ -11,7 +11,7 @@ export interface ShiftRow {
   end_time: string | null;
   department: "sala" | "cucina";
   is_day_off: boolean;
-  status: "draft" | "published";
+  status: "draft" | "published" | "archived";
   generation_run_id: string | null;
   created_at: string;
   updated_at: string;

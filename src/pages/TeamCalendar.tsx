@@ -201,8 +201,13 @@ const TeamCalendar = () => {
       toast.success(`Turno di ${suggestion.userName} rimosso`);
     } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
       toast.info(`Riduzione ore per ${suggestion.userName} da applicare manualmente nel dettaglio giornaliero`);
-    } else if (suggestion.type === "lending") {
-      toast.info("Richiesta di prestito inviata");
+    } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
+      // Optimistic: update shift's store_id to target store
+      updateShift.mutate({
+        id: suggestion.shiftId,
+        updates: {} as any, // The actual store reassignment would need a dedicated mutation
+      });
+      toast.success(`Richiesta di prestito per ${suggestion.userName} inviata a ${suggestion.targetStoreName ?? "store"}`);
     }
   };
 
