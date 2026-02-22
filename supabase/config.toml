@@ -8,3 +8,12 @@ verify_jwt = false
 
 [functions.send-invite-email]
 verify_jwt = false
+
+[functions.generate-shifts]
+verify_jwt = false
+
+[functions.publish-shifts]
+verify_jwt = false
+
+[functions.cron-generate-shifts]
+verify_jwt = false

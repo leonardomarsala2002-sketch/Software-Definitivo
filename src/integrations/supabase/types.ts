@@ -212,6 +212,66 @@ export type Database = {
           },
         ]
       }
+      generation_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          department: Database["public"]["Enums"]["department"]
+          error_message: string | null
+          id: string
+          notes: string | null
+          status: string
+          store_id: string
+          updated_at: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          department: Database["public"]["Enums"]["department"]
+          error_message?: string | null
+          id?: string
+          notes?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          department?: Database["public"]["Enums"]["department"]
+          error_message?: string | null
+          id?: string
+          notes?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_runs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generation_runs_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           accepted_at: string | null
@@ -301,9 +361,11 @@ export type Database = {
           date: string
           department: Database["public"]["Enums"]["department"]
           end_time: string | null
+          generation_run_id: string | null
           id: string
           is_day_off: boolean
           start_time: string | null
+          status: Database["public"]["Enums"]["shift_status"]
           store_id: string
           updated_at: string
           user_id: string
@@ -313,9 +375,11 @@ export type Database = {
           date: string
           department: Database["public"]["Enums"]["department"]
           end_time?: string | null
+          generation_run_id?: string | null
           id?: string
           is_day_off?: boolean
           start_time?: string | null
+          status?: Database["public"]["Enums"]["shift_status"]
           store_id: string
           updated_at?: string
           user_id: string
@@ -325,14 +389,23 @@ export type Database = {
           date?: string
           department?: Database["public"]["Enums"]["department"]
           end_time?: string | null
+          generation_run_id?: string | null
           id?: string
           is_day_off?: boolean
           start_time?: string | null
+          status?: Database["public"]["Enums"]["shift_status"]
           store_id?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "shifts_generation_run_id_fkey"
+            columns: ["generation_run_id"]
+            isOneToOne: false
+            referencedRelation: "generation_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "shifts_store_id_fkey"
             columns: ["store_id"]
@@ -725,6 +798,7 @@ export type Database = {
         | "malattia"
         | "modifica_orario"
         | "altro"
+      shift_status: "draft" | "published"
       shift_time_kind: "entry" | "exit"
     }
     CompositeTypes: {
@@ -863,6 +937,7 @@ export const Constants = {
         "modifica_orario",
         "altro",
       ],
+      shift_status: ["draft", "published"],
       shift_time_kind: ["entry", "exit"],
     },
   },
