@@ -198,7 +198,7 @@ const TeamCalendar = () => {
     if (suggestion.type === "uncovered" && suggestion.date) {
       setSelectedDate(suggestion.date);
     } else if (suggestion.type === "surplus" && suggestion.shiftId) {
-      deleteShift.mutate(suggestion.shiftId);
+      deleteShift.mutate({ id: suggestion.shiftId, storeId });
       toast.success(`Turno di ${suggestion.userName} rimosso`);
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
       const isDbLending = suggestion.id.startsWith("db-lending-");
@@ -471,7 +471,7 @@ const TeamCalendar = () => {
                 createShift.mutate({ store_id: storeId!, department, ...s })
               }
               onUpdateShift={(id, updates) => updateShift.mutate({ id, updates })}
-              onDeleteShift={(id) => deleteShift.mutate(id)}
+              onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
             />
           )}
         </>
