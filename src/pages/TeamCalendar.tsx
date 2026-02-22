@@ -309,6 +309,20 @@ const TeamCalendar = () => {
         )}
       </div>
 
+      {/* Generation run info banner */}
+      {activeDraftRun && activeDraftRun.status === "completed" && (
+        <div className="mb-4 rounded-lg border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+          <Wand2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800 dark:text-amber-300">
+            <p className="font-semibold mb-1">
+              Draft generato — Fitness: {(activeDraftRun as any).fitness_score?.toFixed(1) ?? "N/A"} 
+              {(activeDraftRun as any).iterations_run && ` (${(activeDraftRun as any).iterations_run} iterazioni)`}
+            </p>
+            {activeDraftRun.notes && <p className="text-amber-700/80 dark:text-amber-400/80">{activeDraftRun.notes}</p>}
+          </div>
+        </div>
+      )}
+
       {/* Uncovered slots warning */}
       {uncoveredSlotsMap.size > 0 && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
@@ -372,8 +386,10 @@ const TeamCalendar = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
             <AlertDialogDescription>
-              Verrà generato un draft dei turni per <strong className="capitalize">{department}</strong> a partire
-              da <strong>{currentWeekStart}</strong>. I turni draft esistenti per questa settimana verranno sostituiti.
+              Verranno eseguite <strong>40 iterazioni</strong> dell'algoritmo per trovare la combinazione ottimale
+              dei turni per <strong className="capitalize">{department}</strong> a partire
+              da <strong>{currentWeekStart}</strong>. Il sistema terrà conto del monte ore accumulato (Hour Bank)
+              per bilanciare automaticamente le ore tra le settimane. I turni draft esistenti verranno sostituiti.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
