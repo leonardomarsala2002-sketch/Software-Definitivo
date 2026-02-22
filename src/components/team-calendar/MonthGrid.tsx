@@ -105,10 +105,10 @@ export function MonthGrid({
       </div>
 
       {/* Days */}
-      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-2xl overflow-hidden">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`e-${i}`} className="bg-background min-h-[80px]" />;
+            return <div key={`e-${i}`} className="bg-background min-h-[90px]" />;
           }
 
           const weekIdx = Math.floor(i / 7);
@@ -125,7 +125,7 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "bg-card min-h-[80px] p-1.5 cursor-pointer transition-all hover:bg-accent/40",
+                "bg-card min-h-[90px] p-2 cursor-pointer transition-all hover:bg-accent/40",
                 dimmed && "opacity-40",
                 isToday && "ring-1 ring-primary/40",
                 isUncovered && !isArchived && "bg-destructive/5 ring-1 ring-destructive/30",
@@ -137,7 +137,7 @@ export function MonthGrid({
             >
               <div
                 className={cn(
-                  "text-xs font-medium mb-1",
+                  "text-xs font-medium mb-1.5",
                   isToday
                     ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
                     : "text-foreground"
@@ -159,14 +159,14 @@ export function MonthGrid({
                     <div
                       key={s.id}
                       className={cn(
-                        "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
+                        "text-[9px] leading-tight truncate rounded-md px-1 py-0.5 flex items-center gap-0.5 border-l-2",
                         s.is_day_off
-                          ? "bg-destructive/10 text-destructive"
+                          ? "bg-destructive/10 text-destructive border-l-destructive/60"
                           : s.status === "archived"
-                            ? "bg-muted text-muted-foreground"
+                            ? "bg-muted text-muted-foreground border-l-muted-foreground/40"
                             : s.status === "draft"
-                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                              : "bg-primary/10 text-primary"
+                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-l-amber-500"
+                              : "bg-primary/10 text-primary border-l-primary"
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
