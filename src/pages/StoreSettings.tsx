@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,18 +33,12 @@ import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
 import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
-import { useOutletContext } from "react-router-dom";
-
-interface OutletContextType {
-  accentColor: string;
-  accentBorders: Record<string, string>;
-}
 
 function SettingsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2">
       {[1, 2, 3, 4].map((i) => (
-        <Skeleton key={i} className="h-28 w-full rounded-[24px]" />
+        <Skeleton key={i} className="h-28 w-full rounded-xl" />
       ))}
     </div>
   );
@@ -124,27 +119,21 @@ const StoreSettings = () => {
   ];
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 mb-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">⚙️</span>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Impostazioni Store</h1>
-            <p className="text-xs text-muted-foreground">{activeStore ? `Configurazione per ${activeStore.name}` : "Regole, orari e copertura"}</p>
-          </div>
-        </div>
-      </div>
+    <div>
+      <PageHeader
+        title="Impostazioni Store"
+        subtitle={activeStore ? `Configurazione per ${activeStore.name}` : "Regole, orari e copertura"}
+      />
 
       {/* Readiness badge */}
       {hasConfig && !isLoading && (
-        <div className="mb-4 shrink-0">
+        <div className="mb-4">
           {isReady ? (
-            <Badge variant="default" className="bg-success text-success-foreground gap-1.5 text-xs px-3 py-1 rounded-full">
+            <Badge variant="default" className="bg-success text-success-foreground gap-1.5 text-xs px-3 py-1">
               <CheckCircle2 className="h-3.5 w-3.5" /> Store pronto per generazione
             </Badge>
           ) : (
-            <Badge variant="secondary" className="gap-1.5 text-xs px-3 py-1 rounded-full">
+            <Badge variant="secondary" className="gap-1.5 text-xs px-3 py-1">
               <AlertCircle className="h-3.5 w-3.5" /> Configurazione incompleta
             </Badge>
           )}
@@ -152,11 +141,9 @@ const StoreSettings = () => {
       )}
 
       {isLoading ? (
-        <div className="flex-1 overflow-auto">
-          <SettingsSkeleton />
-        </div>
+        <SettingsSkeleton />
       ) : !hasConfig ? (
-        <div className="flex-1 flex flex-col items-center justify-center">
+        <div>
           <EmptyState
             icon={<Settings className="h-6 w-6" />}
             title="Nessuna configurazione"
@@ -164,44 +151,44 @@ const StoreSettings = () => {
           />
           {!readOnly && (
             <div className="mt-6 flex justify-center">
-              <Button onClick={() => storeId && initConfig.mutate(storeId)} disabled={initConfig.isPending} size="lg" className="rounded-2xl">
+              <Button onClick={() => storeId && initConfig.mutate(storeId)} disabled={initConfig.isPending} size="lg">
                 <Plus className="mr-2 h-4 w-4" /> Crea configurazione iniziale
               </Button>
             </div>
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-auto">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
             {cards.map((card) => (
               <Card
                 key={card.title}
-                className="rounded-[24px] border border-border/40 shadow-bento hover:shadow-lg transition-all duration-300 cursor-pointer group"
+                className="border border-border/60 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                 onClick={card.onEdit}
               >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-2xl bg-primary/10 p-2.5">
-                        <card.icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <h3 className="text-sm font-bold text-foreground">{card.title}</h3>
-                    </div>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-2 py-0.5 rounded-full">
+                      <div className="rounded-lg bg-primary/10 p-1.5">
+                        <card.icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
                         {card.configured ? "✓" : card.optional ? "Opzionale" : "Da fare"}
                       </Badge>
                       {!readOnly && (
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation();
                             card.onEdit();
                           }}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Pencil className="h-3 w-3" />
                         </Button>
                       )}
                     </div>
@@ -255,7 +242,7 @@ const StoreSettings = () => {
             isSaving={saveAllowed.isPending}
             readOnly={readOnly}
           />
-        </div>
+        </>
       )}
     </div>
   );

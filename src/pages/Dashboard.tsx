@@ -1,485 +1,165 @@
-import { useMemo, useState } from "react";
-import { Calendar, Clock, Sun, Bell, User, Store, Check, X, ChevronLeft, ChevronRight, Scissors } from "lucide-react";
-import { format, parseISO, startOfWeek, addDays, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay } from "date-fns";
-import { it } from "date-fns/locale";
+import { Users, Calendar, TrendingUp, Clock, CalendarDays, Inbox, FlaskConical } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useStoreRequests, useReviewRequest } from "@/hooks/useRequests";
-import { useEmployeeList } from "@/hooks/useEmployees";
 import { toast } from "sonner";
-import { useOutletContext } from "react-router-dom";
-
-interface PersonalShift {
-  id: string;
-  date: string;
-  start_time: string | null;
-  end_time: string | null;
-  department: "sala" | "cucina";
-  is_day_off: boolean;
-  status: "draft" | "published" | "archived";
-  store_id: string;
-}
-
-interface OutletContextType {
-  accentColor: string;
-  accentBorders: Record<string, string>;
-}
-
-// Bento card style with 32px border-radius and shadow
-const bentoBorderColors: Record<string, string> = {
-  blue: "border-blue-400/30 dark:border-blue-500/20",
-  green: "border-green-400/30 dark:border-green-500/20",
-  amber: "border-amber-400/30 dark:border-amber-500/20",
-  purple: "border-purple-400/30 dark:border-purple-500/20",
-  rose: "border-rose-400/30 dark:border-rose-500/20",
-};
-
-function usePersonalShifts(userId: string | undefined) {
-  const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(addMonths(now, 1));
-
-  return useQuery({
-    queryKey: ["personal-shifts-dashboard", userId],
-    queryFn: async (): Promise<PersonalShift[]> => {
-      const { data, error } = await supabase
-        .from("shifts")
-        .select("id, date, start_time, end_time, department, is_day_off, status, store_id")
-        .eq("user_id", userId!)
-        .gte("date", format(monthStart, "yyyy-MM-dd"))
-        .lte("date", format(monthEnd, "yyyy-MM-dd"))
-        .in("status", ["published", "draft"])
-        .order("date")
-        .order("start_time");
-      if (error) throw error;
-      return (data ?? []) as PersonalShift[];
-    },
-    enabled: !!userId,
-  });
-}
-
-// Hook for employee vacation balance
-function useVacationBalance(userId: string | undefined) {
-  return useQuery({
-    queryKey: ["vacation-balance", userId],
-    queryFn: async () => {
-      // These columns don't exist yet in employee_details — return defaults
-      return { vacation_days_total: 26, vacation_days_used: 0, permission_hours_total: 40, permission_hours_used: 0 };
-    },
-    enabled: !!userId,
-  });
-}
-
-// Circular progress component for vacation counter
-function CircularProgress({ value, max, label, unit }: { value: number; max: number; label: string; unit: string }) {
-  const percentage = max > 0 ? (value / max) * 100 : 0;
-  const remaining = max - value;
-  const circumference = 2 * Math.PI * 40;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  return (
-    <div className="flex flex-col items-center">
-      <div className="relative h-24 w-24">
-        <svg className="h-24 w-24 -rotate-90 transform">
-          <circle
-            cx="48"
-            cy="48"
-            r="40"
-            stroke="currentColor"
-            strokeWidth="8"
-            fill="transparent"
-            className="text-muted/30"
-          />
-          <circle
-            cx="48"
-            cy="48"
-            r="40"
-            stroke="currentColor"
-            strokeWidth="8"
-            fill="transparent"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className="text-teal-500 dark:text-teal-400 transition-all duration-500"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold text-foreground">{remaining}</span>
-          <span className="text-[10px] text-muted-foreground">{unit}</span>
-        </div>
-      </div>
-      <span className="mt-2 text-xs font-medium text-muted-foreground">{label}</span>
-    </div>
-  );
-}
+import { useState } from "react";
 
 const Dashboard = () => {
-  const { user, role, activeStore } = useAuth();
-  const isAdmin = role === "super_admin" || role === "admin";
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [seeding, setSeeding] = useState(false);
 
-  // Get accent color from context
-  const context = useOutletContext<OutletContextType | undefined>();
-  const accentColor = context?.accentColor || "blue";
-  const borderClass = bentoBorderColors[accentColor] || bentoBorderColors.blue;
-
-  const { data: shifts = [] } = usePersonalShifts(user?.id);
-  const { data: vacationData } = useVacationBalance(user?.id);
-  const { data: storeRequests = [] } = useStoreRequests(isAdmin ? activeStore?.id : undefined);
-  const { data: employees = [] } = useEmployeeList();
-  const reviewRequest = useReviewRequest();
-
-  // Build profile map for displaying requester names
-  const profileMap = useMemo(() => {
-    const m = new Map<string, string>();
-    employees.forEach((e) => m.set(e.user_id, e.full_name ?? e.email ?? ""));
-    return m;
-  }, [employees]);
-
-  const pendingRequests = storeRequests.filter(r => r.status === "pending");
-
-  // Handle request approval
-  const handleApprove = (requestId: string) => {
-    if (!user?.id) return;
-    reviewRequest.mutate({ id: requestId, status: "approved", reviewedBy: user.id });
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Devi essere loggato");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("seed-employee-test-data");
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(data?.message ?? "Dati test creati!");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Errore durante il seed";
+      toast.error(errorMessage);
+    } finally {
+      setSeeding(false);
+    }
   };
 
-  // Handle request rejection
-  const handleReject = (requestId: string) => {
-    if (!user?.id) return;
-    reviewRequest.mutate({ id: requestId, status: "rejected", reviewedBy: user.id });
-  };
-
-  // Group shifts by date
-  const shiftsByDate = useMemo(() => {
-    const map = new Map<string, PersonalShift[]>();
-    shifts.forEach(s => {
-      const arr = map.get(s.date) ?? [];
-      arr.push(s);
-      map.set(s.date, arr);
-    });
-    return map;
-  }, [shifts]);
-
-  // Get shifts for selected date
-  const selectedDateShifts = useMemo(() => {
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    return shiftsByDate.get(dateStr) ?? [];
-  }, [selectedDate, shiftsByDate]);
-
-  // Calendar days
-  const calendarDays = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const days = eachDayOfInterval({ start, end });
-    
-    // Pad start of month to align with Monday
-    const startDay = getDay(start);
-    const paddingStart = startDay === 0 ? 6 : startDay - 1;
-    const padding = Array(paddingStart).fill(null);
-    
-    return [...padding, ...days];
-  }, [currentMonth]);
-
-  // Get user display info
-  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Utente";
-  const initials = user?.user_metadata?.full_name
-    ? user.user_metadata.full_name
-        .split(" ")
-        .map((n: string) => n[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase()
-    : "??";
-
-  const roleLabelMap: Record<string, string> = {
-    super_admin: "Super Admin",
-    admin: "Manager",
-    employee: "Dipendente",
-  };
-
-  // Get today's shift info
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const todayShifts = shiftsByDate.get(todayStr) ?? [];
-  const todaySchedule = todayShifts.length > 0 && !todayShifts[0].is_day_off
-    ? `${todayShifts[0].start_time?.slice(0, 5) ?? "N/A"} - ${todayShifts[0].end_time?.slice(0, 5) ?? "N/A"}`
-    : todayShifts.length > 0 && todayShifts[0].is_day_off
-    ? "Riposo"
-    : "Nessun turno";
-
-  // Bento card base class
-  const bentoCardClass = `rounded-[32px] border-2 ${borderClass} bg-card/95 shadow-bento backdrop-blur-sm transition-all duration-300`;
-
+  // Card style classes - Bento style with rounded corners and soft shadows
+  const cardBaseClass = "rounded-[1.25rem] border border-border/60 bg-card shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.2)]";
+  
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Bento Grid - 100vh without scroll */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
-        {/* Left Column - Calendar Widget (2/3 width on desktop) */}
-        <div className={`${bentoCardClass} lg:col-span-2 flex flex-col overflow-hidden`}>
-          <CardHeader className="px-6 py-5 pb-3 flex flex-row items-center justify-between shrink-0">
-            <CardTitle className="flex items-center gap-3 text-lg font-bold text-foreground">
-              <span className="text-2xl">📅</span>
-              Calendario
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Panoramica generale di tutti gli store e del team"
+      />
+      
+      {/* Dense Bento Grid Layout - fills available space */}
+      <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr">
+        {/* Team Stats Card */}
+        <Card className={cardBaseClass}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/40">
+                <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              Team
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-full hover:bg-accent transition-all duration-300"
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-semibold min-w-[130px] text-center capitalize">
-                {format(currentMonth, "MMMM yyyy", { locale: it })}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-full hover:bg-accent transition-all duration-300"
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </CardHeader>
-          
-          <CardContent className="flex-1 flex flex-col px-6 py-3 min-h-0 overflow-auto">
-            {/* Week days header */}
-            <div className="grid grid-cols-7 gap-1 mb-3">
-              {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map(day => (
-                <div key={day} className="text-center text-[11px] font-semibold text-muted-foreground py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-1.5 flex-1">
-              {calendarDays.map((day, idx) => {
-                if (!day) {
-                  return <div key={`empty-${idx}`} className="aspect-square" />;
-                }
-
-                const dateStr = format(day, "yyyy-MM-dd");
-                const dayShifts = shiftsByDate.get(dateStr) ?? [];
-                const isToday = isSameDay(day, new Date());
-                const isSelected = isSameDay(day, selectedDate);
-                const hasShift = dayShifts.length > 0;
-                const isDayOff = dayShifts.some(s => s.is_day_off);
-                const isSplit = dayShifts.filter(s => !s.is_day_off).length > 1;
-
-                return (
-                  <button
-                    key={dateStr}
-                    onClick={() => setSelectedDate(day)}
-                    className={cn(
-                      "aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300 text-sm relative",
-                      isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-card",
-                      isToday && !isSelected && "bg-primary/10",
-                      !isSelected && !isToday && "hover:bg-accent/50"
-                    )}
-                  >
-                    <span className={cn(
-                      "font-medium",
-                      isToday && "text-primary font-bold",
-                      isDayOff && "text-destructive"
-                    )}>
-                      {format(day, "d")}
-                    </span>
-                    {hasShift && (
-                      <div className="flex gap-0.5 mt-1">
-                        {isDayOff ? (
-                          <div className="h-1.5 w-1.5 rounded-full bg-destructive/60" />
-                        ) : isSplit ? (
-                          <>
-                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          </>
-                        ) : (
-                          <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                        )}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Selected day details */}
-            <div className="mt-4 pt-4 border-t border-border/40 shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold capitalize">
-                  {format(selectedDate, "EEEE d MMMM", { locale: it })}
-                </span>
-                {isSameDay(selectedDate, new Date()) && (
-                  <Badge variant="default" className="text-[10px] px-2 py-0.5 h-5 rounded-full">Oggi</Badge>
-                )}
-              </div>
-              
-              {selectedDateShifts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nessun turno programmato</p>
-              ) : selectedDateShifts[0].is_day_off ? (
-                <div className="flex items-center gap-2 text-destructive">
-                  <Sun className="h-4 w-4" />
-                  <span className="text-sm font-medium">Giorno di riposo</span>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {selectedDateShifts.filter(s => !s.is_day_off).map(s => (
-                    <div key={s.id} className="flex items-center gap-2">
-                      <span className="text-lg font-bold tabular-nums">
-                        {s.start_time?.slice(0, 5) ?? "N/A"} – {s.end_time?.slice(0, 5) ?? "N/A"}
-                      </span>
-                      <Badge variant="secondary" className="text-[10px] px-2 py-0.5 h-5 capitalize rounded-full">
-                        {s.department}
-                      </Badge>
-                      {selectedDateShifts.filter(sh => !sh.is_day_off).length > 1 && (
-                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 ml-auto">
-                          <Scissors className="h-3 w-3" />
-                          <span className="text-[10px] font-medium">Spezzato</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <CardContent className="flex flex-col items-center justify-center p-4 pt-0">
+            <p className="text-xs text-muted-foreground">Dipendenti attivi</p>
+            <p className="text-3xl font-bold text-foreground">--</p>
           </CardContent>
-        </div>
+        </Card>
 
-        {/* Right Column - Stacked Cards */}
-        <div className="flex flex-col gap-6 min-h-0">
-          {/* User Profile Card - Static Widget */}
-          <div className={`${bentoCardClass} shrink-0`}>
-            <CardContent className="p-5 flex items-center gap-4">
-              <Avatar className="h-16 w-16 shadow-lg ring-3 ring-primary/20">
-                <AvatarFallback className="bg-primary/10 text-xl font-bold text-primary">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-foreground truncate">{displayName}</h3>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <Badge variant="secondary" className="text-[11px] px-2.5 py-0.5 h-5 rounded-full">
-                    {roleLabelMap[role ?? "employee"] || role}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 mt-2.5 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Oggi: {todaySchedule}</span>
-                </div>
-                {activeStore && (
-                  <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                    <Store className="h-3.5 w-3.5" />
-                    <span className="truncate">{activeStore.name}</span>
-                  </div>
-                )}
+        {/* Calendar Card */}
+        <Card className={cardBaseClass}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/40">
+                <CalendarDays className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
-            </CardContent>
-          </div>
+              Turni
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center p-4 pt-0">
+            <p className="text-xs text-muted-foreground">Questa settimana</p>
+            <p className="text-3xl font-bold text-foreground">--</p>
+          </CardContent>
+        </Card>
 
-          {/* Vacation/Ferie Widget */}
-          <div className={`${bentoCardClass} flex-1 min-h-0 flex flex-col`}>
-            <CardHeader className="px-5 py-4 pb-2">
-              <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-                <span className="text-xl">🏖️</span>
-                Ferie & Permessi
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 py-3 flex justify-around items-center flex-1">
-              <CircularProgress
-                value={vacationData?.vacation_days_used ?? 0}
-                max={vacationData?.vacation_days_total ?? 26}
-                label="Ferie residue"
-                unit="giorni"
-              />
-              <CircularProgress
-                value={vacationData?.permission_hours_used ?? 0}
-                max={vacationData?.permission_hours_total ?? 40}
-                label="Permessi residui"
-                unit="ore"
-              />
-            </CardContent>
-          </div>
+        {/* Hours Card */}
+        <Card className={cardBaseClass}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              Ore
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center p-4 pt-0">
+            <p className="text-xs text-muted-foreground">Ore totali</p>
+            <p className="text-3xl font-bold text-foreground">--</p>
+          </CardContent>
+        </Card>
 
-          {/* Admin Alerts Panel - Only visible for admins */}
-          {isAdmin && (
-            <div className={`${bentoCardClass} flex-1 min-h-0 flex flex-col`}>
-              <CardHeader className="px-5 py-4 pb-2 shrink-0">
-                <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-                  <span className="text-xl">🔔</span>
-                  Richieste Pendenti
-                  {pendingRequests.length > 0 && (
-                    <Badge variant="destructive" className="ml-auto text-[10px] px-2 py-0.5 h-5 rounded-full">
-                      {pendingRequests.length}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 py-3 flex-1 overflow-auto">
-                {pendingRequests.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <div className="text-3xl mb-3">✨</div>
-                    <p className="text-sm text-muted-foreground">Nessuna richiesta in attesa</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {pendingRequests.slice(0, 5).map(req => {
-                      const requesterName = profileMap.get(req.user_id) || "Dipendente";
-                      return (
-                        <div
-                          key={req.id}
-                          className="flex items-center justify-between p-3 rounded-2xl bg-accent/30 hover:bg-accent/50 transition-colors duration-300"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold truncate">
-                              {requesterName}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground capitalize">
-                              {req.request_type.replace(/_/g, " ")} · {format(parseISO(req.request_date), "d MMM", { locale: it })}
-                            </p>
-                          </div>
-                          <div className="flex gap-1.5 ml-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-all duration-300"
-                              onClick={() => handleApprove(req.id)}
-                              disabled={reviewRequest.isPending}
-                              title="Accetta richiesta"
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive transition-all duration-300"
-                              onClick={() => handleReject(req.id)}
-                              disabled={reviewRequest.isPending}
-                              title="Rifiuta richiesta"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
+        {/* Requests Card */}
+        <Card className={cardBaseClass}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                <Inbox className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              Richieste
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center p-4 pt-0">
+            <p className="text-xs text-muted-foreground">In attesa</p>
+            <p className="text-3xl font-bold text-foreground">--</p>
+          </CardContent>
+        </Card>
+
+        {/* Trends Card - spans 2 columns */}
+        <Card className={`${cardBaseClass} col-span-2 row-span-2`}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 dark:bg-rose-900/40">
+                <TrendingUp className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              </div>
+              Statistiche
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col items-center justify-center p-4 pt-0">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+              <TrendingUp className="h-8 w-8" />
             </div>
-          )}
-        </div>
+            <p className="mt-4 text-sm text-muted-foreground text-center">
+              Le statistiche saranno disponibili presto
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Personal Calendar Card */}
+        <Card className={`${cardBaseClass} col-span-2 row-span-2`}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40">
+                <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              </div>
+              Calendario Personale
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col items-center justify-center p-4 pt-0">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+              <Calendar className="h-8 w-8" />
+            </div>
+            <p className="mt-4 text-sm text-muted-foreground text-center">
+              Il tuo calendario personale apparirà qui
+            </p>
+          </CardContent>
+        </Card>
       </div>
+
+      {import.meta.env.DEV && (
+        <div className="mt-4 flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSeed}
+            disabled={seeding}
+            className="gap-2 text-muted-foreground"
+          >
+            <FlaskConical className="h-4 w-4" />
+            {seeding ? "Seeding…" : "Seed dati test dipendente"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

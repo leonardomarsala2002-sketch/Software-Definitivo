@@ -3,7 +3,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -17,40 +16,39 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Store, LogOut, User, Sun, Moon } from "lucide-react";
+import { UtensilsCrossed, Store, LogOut, User, Moon, Sun } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 
-// Glow classes for each accent color
-const glowClasses: Record<string, string> = {
-  blue: "emoji-glow-blue",
-  green: "emoji-glow-green",
-  amber: "emoji-glow-amber",
-  purple: "emoji-glow-purple",
-  rose: "emoji-glow-rose",
-};
-
-// Border colors for active state
-const borderColors: Record<string, string> = {
-  blue: "border-blue-500 dark:border-blue-400",
-  green: "border-green-500 dark:border-green-400",
-  amber: "border-amber-500 dark:border-amber-400",
-  purple: "border-purple-500 dark:border-purple-400",
-  rose: "border-rose-500 dark:border-rose-400",
-};
-
-// Get accent color for a given path
-const getAccentForPath = (url: string): string => {
-  const item = navItems.find(i => i.url === url);
-  return item?.accentColor || "blue";
-};
-
-interface AppSidebarProps {
-  accentColor?: string;
+// Type for section color configuration
+interface SectionColorConfig {
+  bg: string;
+  bgHover: string;
+  text: string;
+  darkBg: string;
+  darkBgHover: string;
+  darkText: string;
 }
 
-export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
+// Dynamic color themes for each navigation section
+const sectionColors: Record<string, SectionColorConfig> = {
+  "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400" },
+  "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400" },
+  "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400" },
+  "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400" },
+  "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400" },
+  "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400" },
+  "/invitations": { bg: "bg-indigo-100", bgHover: "hover:bg-indigo-50", text: "text-indigo-600", darkBg: "dark:bg-indigo-900/40", darkBgHover: "dark:hover:bg-indigo-900/30", darkText: "dark:text-indigo-400" },
+  "/audit-log": { bg: "bg-slate-100", bgHover: "hover:bg-slate-50", text: "text-slate-600", darkBg: "dark:bg-slate-800/40", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-400" },
+  "/info": { bg: "bg-cyan-100", bgHover: "hover:bg-cyan-50", text: "text-cyan-600", darkBg: "dark:bg-cyan-900/40", darkBgHover: "dark:hover:bg-cyan-900/30", darkText: "dark:text-cyan-400" },
+};
+
+const getColorForPath = (url: string): SectionColorConfig => {
+  return sectionColors[url] || sectionColors["/"];
+};
+
+export function AppSidebar() {
   const { role, user, stores, activeStore, setActiveStore, signOut } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
@@ -77,40 +75,42 @@ export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
     employee: "Dipendente",
   };
 
-  const isDarkMode = theme === "dark";
-
   return (
-    <aside 
-      className="hidden md:flex w-[72px] flex-col h-full bg-sidebar border-r border-sidebar-border select-none rounded-l-[40px]"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-      draggable={false}
-      onDragStart={(e) => e.preventDefault()}
-    >
+    <aside className="hidden md:flex w-20 flex-col h-screen bg-sidebar border-r border-sidebar-border">
+      {/* Top Section: Logo + Navigation */}
+      <div className="flex flex-col items-center pt-4 pb-2">
+        {/* Logo */}
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md mb-4">
+          <UtensilsCrossed className="h-5 w-5" />
+        </div>
+      </div>
+
+      <Separator className="mx-4 w-auto opacity-40" />
+
       {/* Main Navigation */}
-      <nav aria-label="Menu principale" className="flex-1 flex flex-col items-center py-6 gap-3 overflow-y-auto">
+      <nav className="flex-1 flex flex-col items-center py-4 space-y-2 overflow-y-auto">
         {mainItems.map((item) => {
           const active = isActive(item.url);
-          const itemAccent = getAccentForPath(item.url);
+          const colors = getColorForPath(item.url);
           return (
             <Tooltip key={item.url}>
               <TooltipTrigger asChild>
                 <Link
                   to={item.url}
-                  className="flex items-center justify-center"
-                  draggable={false}
+                  className="flex items-center justify-center p-1"
                 >
                   <div
-                    className={`flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 border-2 text-xl
+                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                       ${active 
-                        ? `bg-white dark:bg-white/10 ${borderColors[itemAccent]} ${glowClasses[itemAccent]}` 
-                        : `bg-sidebar-accent/50 border-transparent hover:bg-sidebar-accent hover:scale-105`
+                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
+                        : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                       }`}
                   >
-                    <span role="img" aria-label={item.title}>{item.emoji}</span>
+                    <item.icon className="h-5 w-5" />
                   </div>
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium rounded-xl">
+              <TooltipContent side="right" className="font-medium">
                 {item.title}
               </TooltipContent>
             </Tooltip>
@@ -119,30 +119,29 @@ export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
 
         {secondaryItems.length > 0 && (
           <>
-            <Separator className="mx-2 my-2 w-8 opacity-40" />
+            <Separator className="mx-2 my-2 w-10 opacity-40" />
             {secondaryItems.map((item) => {
               const active = isActive(item.url);
-              const itemAccent = getAccentForPath(item.url);
+              const colors = getColorForPath(item.url);
               return (
                 <Tooltip key={item.url}>
                   <TooltipTrigger asChild>
                     <Link
                       to={item.url}
-                      className="flex items-center justify-center"
-                      draggable={false}
+                      className="flex items-center justify-center p-1"
                     >
                       <div
-                        className={`flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 border-2 text-xl
+                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                           ${active 
-                            ? `bg-white dark:bg-white/10 ${borderColors[itemAccent]} ${glowClasses[itemAccent]}` 
-                            : `bg-sidebar-accent/50 border-transparent hover:bg-sidebar-accent hover:scale-105`
+                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
+                            : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                           }`}
                       >
-                        <span role="img" aria-label={item.title}>{item.emoji}</span>
+                        <item.icon className="h-5 w-5" />
                       </div>
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="font-medium rounded-xl">
+                  <TooltipContent side="right" className="font-medium">
                     {item.title}
                   </TooltipContent>
                 </Tooltip>
@@ -152,57 +151,45 @@ export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
         )}
       </nav>
 
-      {/* Bottom Section: Theme Toggle, Locale, Store, Profile - stacked vertically */}
-      <div className="mt-auto flex flex-col items-center pb-6 gap-3">
-        <Separator className="mx-4 w-8 opacity-40" />
-
-        {/* Theme Toggle - Miniaturized Switch */}
+      {/* Bottom Section: Theme Toggle, Store, Profile */}
+      <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
+        {/* Theme Toggle */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <button 
-              onClick={() => setTheme(isDarkMode ? "light" : "dark")}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 hover:bg-sidebar-accent transition-all duration-300 hover:scale-105"
+            <button
+              onClick={toggleTheme}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200"
             >
-              {isDarkMode ? (
-                <Moon className="h-4 w-4 text-blue-400" />
+              {theme === "dark" ? (
+                <Sun className="h-5 w-5" />
               ) : (
-                <Sun className="h-4 w-4 text-amber-500" />
+                <Moon className="h-5 w-5" />
               )}
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium rounded-xl">
-            {isDarkMode ? "Modalità chiara" : "Modalità scura"}
+          <TooltipContent side="right" className="font-medium">
+            {theme === "dark" ? "Modalità chiara" : "Modalità scura"}
           </TooltipContent>
         </Tooltip>
 
-        {/* Locale Selector - Store emoji 🏢 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 hover:bg-sidebar-accent transition-all duration-300 hover:scale-105">
-              <span className="text-base">🏢</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium rounded-xl">
-            Lingua: Italiano
-          </TooltipContent>
-        </Tooltip>
+        <Separator className="mx-4 w-10 opacity-40" />
 
-        {/* Store Selector (if multiple stores) */}
+        {/* Store Selector */}
         {stores.length > 1 ? (
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-300 hover:scale-105">
-                    <Store className="h-4 w-4" />
+                  <button className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200">
+                    <Store className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium rounded-xl">
+              <TooltipContent side="right" className="font-medium">
                 {activeStore?.name ?? "Seleziona store"}
               </TooltipContent>
             </Tooltip>
-            <DropdownMenuContent side="right" align="end" className="w-56 rounded-2xl p-1.5 shadow-lg">
+            <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
               <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
                 Seleziona Store
               </DropdownMenuLabel>
@@ -210,7 +197,7 @@ export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
                 <DropdownMenuItem
                   key={s.id}
                   onClick={() => setActiveStore(s)}
-                  className={`rounded-xl px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
+                  className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
                 >
                   <Store className="mr-2.5 h-4 w-4" />
                   {s.name}
@@ -218,40 +205,51 @@ export function AppSidebar({ accentColor = "blue" }: AppSidebarProps) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : activeStore ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground">
+                <Store className="h-5 w-5" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="font-medium">
+              {activeStore.name}
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
-        {/* User Profile Avatar */}
+        {/* User Profile */}
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <button className="flex h-11 w-11 items-center justify-center rounded-full hover:ring-2 hover:ring-primary/20 transition-all duration-300">
-                  <Avatar className="h-10 w-10 shadow-md">
-                    <AvatarFallback className="bg-primary/10 text-[12px] font-semibold text-primary">
+                <button className="flex h-11 w-11 items-center justify-center rounded-full hover:ring-2 hover:ring-primary/20 transition-all duration-200">
+                  <Avatar className="h-10 w-10 shadow-sm">
+                    <AvatarFallback className="bg-primary/10 text-[13px] font-semibold text-primary">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-medium rounded-xl">
+            <TooltipContent side="right" className="font-medium">
               {displayName}
             </TooltipContent>
           </Tooltip>
-          <DropdownMenuContent side="right" align="end" className="w-52 rounded-2xl p-1.5 shadow-lg">
-            <DropdownMenuLabel className="rounded-xl px-3 py-2.5 font-normal">
+          <DropdownMenuContent side="right" align="end" className="w-52 rounded-xl p-1.5 shadow-lg">
+            <DropdownMenuLabel className="rounded-lg px-3 py-2.5 font-normal">
               <p className="text-sm font-semibold">{displayName}</p>
               <p className="text-xs text-muted-foreground">{role ? roleLabelMap[role] || role : ""}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-xl px-3 py-2 text-[13px]">
+            <DropdownMenuItem className="rounded-lg px-3 py-2 text-[13px]">
               <User className="mr-2.5 h-4 w-4" />
               Profilo
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={signOut}
-              className="rounded-xl px-3 py-2 text-[13px] text-destructive focus:text-destructive"
+              className="rounded-lg px-3 py-2 text-[13px] text-destructive focus:text-destructive"
             >
               <LogOut className="mr-2.5 h-4 w-4" />
               Esci

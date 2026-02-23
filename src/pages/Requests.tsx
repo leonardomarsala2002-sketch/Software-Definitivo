@@ -3,6 +3,7 @@ import { Inbox, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import RequestForm from "@/components/requests/RequestForm";
 import RequestsList from "@/components/requests/RequestsList";
@@ -11,12 +12,6 @@ import { useStoreRequests, useMyRequests } from "@/hooks/useRequests";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { useOutletContext } from "react-router-dom";
-
-interface OutletContextType {
-  accentColor: string;
-  accentBorders: Record<string, string>;
-}
 
 const Requests = () => {
   const { user, role, activeStore } = useAuth();
@@ -61,30 +56,23 @@ const Requests = () => {
   const otherRequests = requests?.filter((r) => r.status !== "pending") ?? [];
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 mb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🔄</span>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Richieste</h1>
-              <p className="text-xs text-muted-foreground">Ferie, permessi, cambi turno e malattie</p>
-            </div>
-          </div>
-          {!showForm && (
-            <Button size="sm" className="gap-2 rounded-2xl transition-all duration-300" onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" />
-              Nuova richiesta
-            </Button>
-          )}
-        </div>
-      </div>
+    <div>
+      <PageHeader
+        title="Richieste"
+        subtitle="Ferie, permessi, cambi turno e malattie"
+      >
+        {!showForm && (
+          <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" />
+            Nuova richiesta
+          </Button>
+        )}
+      </PageHeader>
 
       {showForm && storeId && (
-        <Card className="mb-4 rounded-[24px] border border-border/40 shadow-bento shrink-0">
+        <Card className="mb-6 border border-border/60 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold">Nuova richiesta</CardTitle>
+            <CardTitle className="text-sm font-semibold">Nuova richiesta</CardTitle>
           </CardHeader>
           <CardContent>
             <RequestForm
@@ -97,25 +85,23 @@ const Requests = () => {
       )}
 
       {(!requests || requests.length === 0) && !isLoading && !showForm ? (
-        <div className="flex-1 flex items-center justify-center">
-          <EmptyState
-            icon={<Inbox className="h-6 w-6" />}
-            title="Nessuna richiesta"
-            description="Le richieste di ferie, permessi e cambi turno appariranno qui."
-          />
-        </div>
+        <EmptyState
+          icon={<Inbox className="h-6 w-6" />}
+          title="Nessuna richiesta"
+          description="Le richieste di ferie, permessi e cambi turno appariranno qui."
+        />
       ) : (
-        <Tabs defaultValue="pending" className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <TabsList className="shrink-0 rounded-2xl">
-            <TabsTrigger value="pending" className="text-xs rounded-xl">
+        <Tabs defaultValue="pending" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="pending" className="text-xs">
               In attesa ({pendingRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="history" className="text-xs rounded-xl">
+            <TabsTrigger value="history" className="text-xs">
               Storico ({otherRequests.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending" className="flex-1 overflow-auto mt-4">
+          <TabsContent value="pending">
             {pendingRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 Nessuna richiesta in attesa
@@ -130,7 +116,7 @@ const Requests = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="history" className="flex-1 overflow-auto mt-4">
+          <TabsContent value="history">
             {otherRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 Nessuna richiesta nello storico
