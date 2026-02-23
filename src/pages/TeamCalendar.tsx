@@ -200,6 +200,17 @@ const TeamCalendar = () => {
     generateShifts.mutate({
       store_id: storeId,
       week_start: currentWeekStart,
+    }, {
+      onSuccess: () => {
+        // Auto-navigate to the month containing the generated week
+        const genDate = new Date(currentWeekStart + "T00:00:00");
+        const targetMonth = genDate.getMonth() + 1;
+        const targetYear = genDate.getFullYear();
+        if (targetMonth !== month || targetYear !== year) {
+          setMonth(targetMonth);
+          setYear(targetYear);
+        }
+      }
     });
     setShowGenerateConfirm(false);
   };
@@ -452,13 +463,23 @@ const TeamCalendar = () => {
       )}
 
       {/* Optimization Panel - reads suggestions from server */}
-      {canEdit && hasDraftShifts && suggestions.length > 0 && (
+      {canEdit && suggestions.length > 0 && (
         <OptimizationPanel
           suggestions={suggestions}
           onAccept={handleAcceptSuggestion}
           onDecline={() => {}}
           onApplyAll={handleApplyAll}
-          onNavigateToDay={(date) => setSelectedDate(date)}
+          onNavigateToDay={(date) => {
+            // Navigate to the correct month if needed
+            const d = new Date(date + "T00:00:00");
+            const targetMonth = d.getMonth() + 1;
+            const targetYear = d.getFullYear();
+            if (targetMonth !== month || targetYear !== year) {
+              setMonth(targetMonth);
+              setYear(targetYear);
+            }
+            setSelectedDate(date);
+          }}
         />
       )}
 
