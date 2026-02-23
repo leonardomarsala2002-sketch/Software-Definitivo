@@ -1,15 +1,17 @@
 import { useState, useMemo } from "react";
-import { Users, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Users, CheckCircle2, AlertTriangle, Plus } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList, isEmployeeReady, type EmployeeRow } from "@/hooks/useEmployees";
 import EmployeeDetailDrawer from "@/components/employees/EmployeeDetailDrawer";
+import InviteEmployeeDialog from "@/components/employees/InviteEmployeeDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +26,7 @@ function getInitials(name: string | null) {
 
 const Employees = () => {
   const { role, user, stores: authStores, activeStore } = useAuth();
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   // For super_admin: multi-store select, default to active store
   const { data: allStores = [] } = useQuery({
@@ -56,6 +59,7 @@ const Employees = () => {
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
   const canEdit = role === "super_admin" || role === "admin";
+  const canInvite = role === "super_admin" || role === "admin";
 
   const filtered = (employees ?? []).filter((e) => {
     const matchesSearch =
@@ -76,10 +80,21 @@ const Employees = () => {
 
   return (
     <div>
-      <PageHeader
-        title="Dipendenti"
-        subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
-      />
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <PageHeader
+          title="Dipendenti"
+          subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
+        />
+        {canInvite && (
+          <Button
+            onClick={() => setInviteDialogOpen(true)}
+            className="gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Invita</span>
+          </Button>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
@@ -227,6 +242,11 @@ const Employees = () => {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         canEdit={canEdit && (selected?.user_id !== user?.id || role === "super_admin")}
+      />
+
+      <InviteEmployeeDialog
+        open={inviteDialogOpen}
+        onOpenChange={setInviteDialogOpen}
       />
     </div>
   );
