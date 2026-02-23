@@ -572,35 +572,43 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 
 DO $$
 DECLARE
-  -- Store IDs (3 store)
+  -- Store IDs
   s1 uuid := 'a0000001-0000-0000-0000-000000000001';
   s2 uuid := 'a0000001-0000-0000-0000-000000000002';
   s3 uuid := 'a0000001-0000-0000-0000-000000000003';
+  s4 uuid := 'a0000001-0000-0000-0000-000000000004';
+  s5 uuid := 'a0000001-0000-0000-0000-000000000005';
   v_store_ids uuid[] := ARRAY[
     'a0000001-0000-0000-0000-000000000001',
     'a0000001-0000-0000-0000-000000000002',
-    'a0000001-0000-0000-0000-000000000003'
+    'a0000001-0000-0000-0000-000000000003',
+    'a0000001-0000-0000-0000-000000000004',
+    'a0000001-0000-0000-0000-000000000005'
   ];
 
   -- Super admin
   sa uuid := 'b0000001-0000-0000-0000-000000000000';
 
-  -- Admin IDs (one per store)
+  -- Admin IDs
   v_admin_ids uuid[] := ARRAY[
     'b0000001-0000-0000-0000-000000000001',
     'b0000001-0000-0000-0000-000000000002',
-    'b0000001-0000-0000-0000-000000000003'
+    'b0000001-0000-0000-0000-000000000003',
+    'b0000001-0000-0000-0000-000000000004',
+    'b0000001-0000-0000-0000-000000000005'
   ];
 
   v_first_names text[] := ARRAY[
     'Marco','Giulia','Luca','Sara','Andrea','Valentina','Davide','Elisa',
     'Matteo','Chiara','Alessandro','Federica','Simone','Martina','Lorenzo',
-    'Alessia','Nicola','Giorgia','Tommaso','Elena'
+    'Alessia','Nicola','Giorgia','Tommaso','Elena','Roberto','Ilaria',
+    'Stefano','Beatrice','Gabriele','Paola','Riccardo','Silvia','Fabio','Monica'
   ];
   v_last_names text[] := ARRAY[
     'Rossi','Bianchi','Colombo','Ricci','Marino','Greco','Fontana','Conti',
     'De Luca','Costa','Giordano','Mancini','Barbieri','Lombardi','Moretti',
-    'Galli','Ferrara','Santoro','Marchetti','Leone'
+    'Galli','Ferrara','Santoro','Marchetti','Leone','Rinaldi','Caruso',
+    'Gatto','Serra','Vitale','Farina','Gentile','Pellegrini','Testa','Bruno'
   ];
 
   v_emp_idx int := 0;
@@ -612,6 +620,7 @@ DECLARE
   v_day int;
   v_si int;
   v_store uuid;
+  v_emps_per_store int;
   v_phone text;
   v_start_h int;
   v_end_h int;
@@ -620,18 +629,17 @@ DECLARE
   v_shift_date date;
   v_email text;
 
-  -- Employees per store: 7, 7, 6 = 20 total
-  v_emps_counts int[] := ARRAY[7, 7, 6];
-
 BEGIN
   -- Calculate current week Monday
   v_monday := v_today - ((extract(isodow from v_today)::int - 1) || ' days')::interval;
 
-  -- 1. Insert stores (2 in Milano for lending test, 1 in Roma)
-  INSERT INTO stores (id, name, address, city) VALUES
-    (s1, 'Store Milano Duomo', 'Piazza del Duomo 1, 20121 Milano', 'Milano'),
-    (s2, 'Store Milano Navigli', 'Ripa di Porta Ticinese 7, 20143 Milano', 'Milano'),
-    (s3, 'Store Roma Trastevere', 'Via della Lungaretta 15, 00153 Roma', 'Roma')
+  -- 1. Insert stores
+  INSERT INTO stores (id, name, address) VALUES
+    (s1, 'Store Milano Duomo', 'Piazza del Duomo 1, 20121 Milano'),
+    (s2, 'Store Roma Trastevere', 'Via della Lungaretta 15, 00153 Roma'),
+    (s3, 'Store Firenze Centro', 'Piazza della Repubblica 3, 50123 Firenze'),
+    (s4, 'Store Napoli Vomero', 'Via Scarlatti 42, 80129 Napoli'),
+    (s5, 'Store Torino Lingotto', 'Via Nizza 230, 10126 Torino')
   ON CONFLICT DO NOTHING;
 
   -- 2. Super admin
@@ -643,29 +651,34 @@ BEGIN
   INSERT INTO user_roles (user_id, role) VALUES (sa, 'super_admin') ON CONFLICT (user_id) DO NOTHING;
   INSERT INTO user_store_assignments (user_id, store_id, is_primary) VALUES (sa, s1, true) ON CONFLICT (user_id, store_id) DO NOTHING;
 
-  -- 3. Admins (one per store)
+  -- 3. Admins
   INSERT INTO auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data) VALUES
     (v_admin_ids[1], 'authenticated', 'authenticated', 'laura.verdi@demo.com', now(), jsonb_build_object('full_name', 'Laura Verdi')),
     (v_admin_ids[2], 'authenticated', 'authenticated', 'giuseppe.russo@demo.com', now(), jsonb_build_object('full_name', 'Giuseppe Russo')),
-    (v_admin_ids[3], 'authenticated', 'authenticated', 'francesca.esposito@demo.com', now(), jsonb_build_object('full_name', 'Francesca Esposito'))
+    (v_admin_ids[3], 'authenticated', 'authenticated', 'francesca.esposito@demo.com', now(), jsonb_build_object('full_name', 'Francesca Esposito')),
+    (v_admin_ids[4], 'authenticated', 'authenticated', 'antonio.romano@demo.com', now(), jsonb_build_object('full_name', 'Antonio Romano')),
+    (v_admin_ids[5], 'authenticated', 'authenticated', 'chiara.ferrari@demo.com', now(), jsonb_build_object('full_name', 'Chiara Ferrari'))
   ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO profiles (id, full_name, email) VALUES
     (v_admin_ids[1], 'Laura Verdi', 'laura.verdi@demo.com'),
     (v_admin_ids[2], 'Giuseppe Russo', 'giuseppe.russo@demo.com'),
-    (v_admin_ids[3], 'Francesca Esposito', 'francesca.esposito@demo.com')
+    (v_admin_ids[3], 'Francesca Esposito', 'francesca.esposito@demo.com'),
+    (v_admin_ids[4], 'Antonio Romano', 'antonio.romano@demo.com'),
+    (v_admin_ids[5], 'Chiara Ferrari', 'chiara.ferrari@demo.com')
   ON CONFLICT DO NOTHING;
 
-  FOR v_si IN 1..3 LOOP
+  FOR v_si IN 1..5 LOOP
     INSERT INTO user_roles (user_id, role) VALUES (v_admin_ids[v_si], 'admin') ON CONFLICT (user_id) DO NOTHING;
     INSERT INTO user_store_assignments (user_id, store_id, is_primary) VALUES (v_admin_ids[v_si], v_store_ids[v_si], true) ON CONFLICT (user_id, store_id) DO NOTHING;
   END LOOP;
 
-  -- 4. Employees (20 total: 7 + 7 + 6)
-  FOR v_si IN 1..3 LOOP
+  -- 4. Employees
+  FOR v_si IN 1..5 LOOP
     v_store := v_store_ids[v_si];
+    v_emps_per_store := 15 + (v_si * 2);
 
-    FOR i IN 1..v_emps_counts[v_si] LOOP
+    FOR i IN 1..v_emps_per_store LOOP
       v_emp_idx := v_emp_idx + 1;
       v_emp_uuid := ('c0000001-0000-0000-0000-' || lpad(v_emp_idx::text, 12, '0'))::uuid;
       v_first := v_first_names[1 + ((v_emp_idx - 1) % array_length(v_first_names, 1))];
@@ -689,7 +702,6 @@ BEGIN
         (v_emp_uuid, v_dept, v_hours, v_phone)
       ON CONFLICT (user_id) DO NOTHING;
 
-      -- Availability: 5 days available, 1 day off
       v_start_h := CASE WHEN v_dept = 'sala' THEN 10 ELSE 8 END;
       v_end_h := CASE WHEN v_dept = 'sala' THEN 23 ELSE 22 END;
 
@@ -701,8 +713,7 @@ BEGIN
         END IF;
       END LOOP;
 
-      -- Exceptions for some employees
-      IF (v_emp_idx % 4) = 1 THEN
+      IF (v_emp_idx % 3) = 1 THEN
         INSERT INTO employee_exceptions (user_id, store_id, exception_type, start_date, end_date, notes, created_by) VALUES
           (v_emp_uuid, v_store,
            CASE WHEN (v_emp_idx % 5) = 0 THEN 'malattia'::exception_type
@@ -716,7 +727,6 @@ BEGIN
            v_admin_ids[v_si]);
       END IF;
 
-      -- Shifts for current week
       FOR v_day IN 0..5 LOOP
         v_shift_date := v_monday + v_day;
         IF v_day = (v_emp_idx % 6) THEN
@@ -737,7 +747,7 @@ BEGIN
   END LOOP;
 
   -- 5. Store rules
-  FOR v_si IN 1..3 LOOP
+  FOR v_si IN 1..5 LOOP
     INSERT INTO store_rules (store_id, max_daily_hours_per_employee, max_weekly_hours_per_employee,
       max_daily_team_hours, max_split_shifts_per_employee, mandatory_days_off_per_week,
       generation_enabled, max_split_shifts_per_employee_per_week,
@@ -748,7 +758,7 @@ BEGIN
   END LOOP;
 
   -- 6. Store opening hours
-  FOR v_si IN 1..3 LOOP
+  FOR v_si IN 1..5 LOOP
     FOR v_day IN 0..6 LOOP
       INSERT INTO store_opening_hours (store_id, day_of_week, opening_time, closing_time) VALUES
         (v_store_ids[v_si], v_day,
@@ -758,29 +768,29 @@ BEGIN
   END LOOP;
 
   -- 7. Store coverage requirements
-  FOR v_si IN 1..3 LOOP
+  FOR v_si IN 1..5 LOOP
     FOR v_day IN 0..5 LOOP
       FOR v_start_h IN 12..14 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
-          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 2 + (v_si % 2));
+          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 3 + (v_si % 3));
       END LOOP;
       FOR v_start_h IN 19..22 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
-          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 3 + (v_si % 2));
+          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'sala', 4 + (v_si % 3));
       END LOOP;
       FOR v_start_h IN 11..14 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
-          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'cucina', 1 + (v_si % 2));
+          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'cucina', 2 + (v_si % 2));
       END LOOP;
       FOR v_start_h IN 18..22 LOOP
         INSERT INTO store_coverage_requirements (store_id, day_of_week, hour_slot, department, min_staff_required) VALUES
-          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'cucina', 2 + (v_si % 2));
+          (v_store_ids[v_si], v_day, (lpad(v_start_h::text, 2, '0') || ':00')::time, 'cucina', 3 + (v_si % 2));
       END LOOP;
     END LOOP;
   END LOOP;
 
   -- 8. Allowed entry/exit times
-  FOR v_si IN 1..3 LOOP
+  FOR v_si IN 1..5 LOOP
     FOREACH v_start_h IN ARRAY ARRAY[8,9,10,11,12,17,18,19] LOOP
       INSERT INTO store_shift_allowed_times (store_id, department, hour, kind, is_active) VALUES
         (v_store_ids[v_si], 'sala', v_start_h, 'entry', true),
@@ -793,11 +803,11 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- 9. Time off requests
-  FOR v_si IN 1..3 LOOP
+  -- 9. Time off requests (Corretto 'cambio_turno' in 'malattia')
+  FOR v_si IN 1..5 LOOP
     v_store := v_store_ids[v_si];
     FOR i IN 1..3 LOOP
-      v_emp_idx := ((v_si - 1) * 7) + i;
+      v_emp_idx := ((v_si - 1) * 20) + i;
       v_emp_uuid := ('c0000001-0000-0000-0000-' || lpad(v_emp_idx::text, 12, '0'))::uuid;
       INSERT INTO time_off_requests (user_id, store_id, request_date, request_type, department, status, notes) VALUES
         (v_emp_uuid, v_store, v_today + (i * 7), 
@@ -808,5 +818,5 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  RAISE NOTICE 'Seed completato: 3 store, 20 dipendenti, turni settimana corrente';
+  RAISE NOTICE 'Seed completato: 5 store, % dipendenti, turni settimana corrente', v_emp_idx;
 END $$;
