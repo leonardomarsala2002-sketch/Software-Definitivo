@@ -1,4 +1,3 @@
-import { NavLink } from "@/components/NavLink";
 import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -6,90 +5,133 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { UtensilsCrossed } from "lucide-react";
+import { useLocation, Link } from "react-router-dom";
 
 export function AppSidebar() {
   const { role } = useAuth();
+  const { state } = useSidebar();
+  const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
   const secondaryItems = filtered.filter((i) => i.section === "secondary");
 
+  const isCollapsed = state === "collapsed";
+
+  const isActive = (url: string) => {
+    if (url === "/") return location.pathname === "/";
+    return location.pathname.startsWith(url);
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
-      <SidebarHeader className="px-5 py-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+      <SidebarHeader className="px-3 py-4">
+        <div className="flex items-center justify-center">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
             <UtensilsCrossed className="h-5 w-5" />
           </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-[15px] font-bold tracking-tight text-foreground">Shift Scheduler</span>
-            <span className="text-[11px] font-medium text-muted-foreground">Restaurant Manager</span>
-          </div>
+          {!isCollapsed && (
+            <div className="ml-3 flex flex-col">
+              <span className="text-[15px] font-bold tracking-tight text-foreground">Shift Scheduler</span>
+              <span className="text-[11px] font-medium text-muted-foreground">Restaurant Manager</span>
+            </div>
+          )}
         </div>
       </SidebarHeader>
 
-      <Separator className="mx-4 w-auto opacity-60" />
+      <Separator className="mx-3 w-auto opacity-60" />
 
-      <SidebarContent className="px-3 py-4">
+      <SidebarContent className="px-2 py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-            Menu principale
-          </SidebarGroupLabel>
+          {!isCollapsed && (
+            <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+              Menu principale
+            </div>
+          )}
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {mainItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild tooltip={item.title} className="h-10 rounded-xl px-3">
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      className="text-[13px] font-medium text-sidebar-foreground transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      activeClassName="bg-accent text-accent-foreground font-semibold shadow-sm"
-                    >
-                      <item.icon className="h-[18px] w-[18px]" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+            <SidebarMenu className="space-y-1.5">
+              {mainItems.map((item) => {
+                const active = isActive(item.url);
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild tooltip={item.title} className="h-auto p-0">
+                      <Link
+                        to={item.url}
+                        className={`flex items-center transition-all ${isCollapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}
+                      >
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all
+                            ${active 
+                              ? "bg-primary text-primary-foreground shadow-md" 
+                              : "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+                            }`}
+                        >
+                          <item.icon className="h-[18px] w-[18px]" />
+                        </div>
+                        {!isCollapsed && (
+                          <span className={`text-[13px] font-medium ${active ? "text-foreground font-semibold" : "text-sidebar-foreground"}`}>
+                            {item.title}
+                          </span>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-            Configurazione
-          </SidebarGroupLabel>
+          {!isCollapsed && (
+            <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+              Configurazione
+            </div>
+          )}
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {secondaryItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild tooltip={item.title} className="h-10 rounded-xl px-3">
-                    <NavLink
-                      to={item.url}
-                      className="text-[13px] font-medium text-sidebar-foreground transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      activeClassName="bg-accent text-accent-foreground font-semibold shadow-sm"
-                    >
-                      <item.icon className="h-[18px] w-[18px]" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+            <SidebarMenu className="space-y-1.5">
+              {secondaryItems.map((item) => {
+                const active = isActive(item.url);
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild tooltip={item.title} className="h-auto p-0">
+                      <Link
+                        to={item.url}
+                        className={`flex items-center transition-all ${isCollapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}
+                      >
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all
+                            ${active 
+                              ? "bg-primary text-primary-foreground shadow-md" 
+                              : "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+                            }`}
+                        >
+                          <item.icon className="h-[18px] w-[18px]" />
+                        </div>
+                        {!isCollapsed && (
+                          <span className={`text-[13px] font-medium ${active ? "text-foreground font-semibold" : "text-sidebar-foreground"}`}>
+                            {item.title}
+                          </span>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-5 py-4 group-data-[collapsible=icon]:hidden">
+      <SidebarFooter className={`px-3 py-4 ${isCollapsed ? "hidden" : ""}`}>
         <p className="text-[10px] text-muted-foreground/50">© 2026 Shift Scheduler</p>
       </SidebarFooter>
     </Sidebar>
