@@ -162,7 +162,7 @@ export function AppSidebar() {
             >
               <span
                 className={`absolute flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300 dark:bg-slate-700
-                  ${theme === "dark" ? "left-[1.375rem]" : "left-[0.25rem]"}`}
+                  ${theme === "dark" ? "left-6" : "left-1"}`}
               >
                 {theme === "dark" ? (
                   <Moon className="h-3 w-3 text-blue-300" />

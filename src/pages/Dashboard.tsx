@@ -194,10 +194,10 @@ const Dashboard = () => {
                     <span className="ml-1 text-muted-foreground">· {r.type} · {r.dates}</span>
                   </div>
                   <div className="flex gap-1 ml-2">
-                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" aria-label="Approva richiesta">
                       <Check className="h-3 w-3" />
                     </button>
-                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400">
+                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400" aria-label="Rifiuta richiesta">
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -213,10 +213,10 @@ const Dashboard = () => {
             <CardTitle className="flex items-center justify-between text-sm font-semibold text-foreground">
               <span>{MONTHS_IT[calMonth]} {calYear}</span>
               <div className="flex gap-1">
-                <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors">
+                <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={nextMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors">
+                <button onClick={nextMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
