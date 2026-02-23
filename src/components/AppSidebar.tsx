@@ -1,7 +1,9 @@
-import { navItems, filterNavByRole } from "@/config/navigation";
+import { navItems, filterNavByRole, getAccentColorForPath } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -15,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut, User } from "lucide-react";
+import { Store, LogOut, User, Sun, Moon, Globe } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 
 // Type for section color configuration
@@ -34,11 +36,9 @@ interface SectionColorConfig {
 const sectionColors: Record<string, SectionColorConfig> = {
   "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400", border: "border-blue-500", darkBorder: "dark:border-blue-400" },
   "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400", border: "border-green-500", darkBorder: "dark:border-green-400" },
-  "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400", border: "border-teal-500", darkBorder: "dark:border-teal-400" },
   "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400", border: "border-amber-500", darkBorder: "dark:border-amber-400" },
   "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400", border: "border-purple-500", darkBorder: "dark:border-purple-400" },
   "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400", border: "border-rose-500", darkBorder: "dark:border-rose-400" },
-  "/audit-log": { bg: "bg-slate-100", bgHover: "hover:bg-slate-50", text: "text-slate-600", darkBg: "dark:bg-slate-800/40", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-400", border: "border-slate-500", darkBorder: "dark:border-slate-400" },
 };
 
 const getColorForPath = (url: string): SectionColorConfig => {
@@ -47,6 +47,7 @@ const getColorForPath = (url: string): SectionColorConfig => {
 
 export function AppSidebar() {
   const { role, user, stores, activeStore, setActiveStore, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
@@ -73,25 +74,17 @@ export function AppSidebar() {
     employee: "Dipendente",
   };
 
+  const isDarkMode = theme === "dark";
+
   return (
     <aside 
-      className="hidden md:flex w-20 flex-col h-screen bg-sidebar border-r border-sidebar-border select-none"
+      className="hidden md:flex w-16 flex-col h-screen bg-sidebar border-r border-sidebar-border select-none"
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       draggable={false}
       onDragStart={(e) => e.preventDefault()}
     >
-      {/* Top Section: Logo + Navigation */}
-      <div className="flex flex-col items-center pt-4 pb-2">
-        {/* Logo */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md mb-4">
-          <UtensilsCrossed className="h-5 w-5" />
-        </div>
-      </div>
-
-      <Separator className="mx-4 w-auto opacity-40" />
-
       {/* Main Navigation */}
-      <nav aria-label="Menu principale" className="flex-1 flex flex-col items-center py-4 gap-3 overflow-y-auto">
+      <nav aria-label="Menu principale" className="flex-1 flex flex-col items-center py-4 gap-2 overflow-y-auto">
         {mainItems.map((item) => {
           const active = isActive(item.url);
           const colors = getColorForPath(item.url);
@@ -104,13 +97,13 @@ export function AppSidebar() {
                   draggable={false}
                 >
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2
+                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2 text-lg
                       ${active 
-                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder} shadow-md` 
-                        : `bg-sidebar-accent/50 text-sidebar-foreground border-transparent ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                        ? `${colors.bg} ${colors.darkBg} ${colors.border} ${colors.darkBorder} shadow-md` 
+                        : `bg-sidebar-accent/50 border-transparent ${colors.bgHover} ${colors.darkBgHover}`
                       }`}
                   >
-                    <item.icon className="h-5 w-5" />
+                    <span role="img" aria-label={item.title}>{item.emoji}</span>
                   </div>
                 </Link>
               </TooltipTrigger>
@@ -123,7 +116,7 @@ export function AppSidebar() {
 
         {secondaryItems.length > 0 && (
           <>
-            <Separator className="mx-2 my-2 w-10 opacity-40" />
+            <Separator className="mx-2 my-2 w-8 opacity-40" />
             {secondaryItems.map((item) => {
               const active = isActive(item.url);
               const colors = getColorForPath(item.url);
@@ -136,13 +129,13 @@ export function AppSidebar() {
                       draggable={false}
                     >
                       <div
-                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2
+                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2 text-lg
                           ${active 
-                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder} shadow-md` 
-                            : `bg-sidebar-accent/50 text-sidebar-foreground border-transparent ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                            ? `${colors.bg} ${colors.darkBg} ${colors.border} ${colors.darkBorder} shadow-md` 
+                            : `bg-sidebar-accent/50 border-transparent ${colors.bgHover} ${colors.darkBgHover}`
                           }`}
                       >
-                        <item.icon className="h-5 w-5" />
+                        <span role="img" aria-label={item.title}>{item.emoji}</span>
                       </div>
                     </Link>
                   </TooltipTrigger>
@@ -156,9 +149,40 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Bottom Section: Store, Profile */}
+      {/* Bottom Section: Theme Toggle, Locale, Store, Profile */}
       <div className="mt-auto flex flex-col items-center pb-4 gap-3">
-        <Separator className="mx-4 w-10 opacity-40" />
+        <Separator className="mx-4 w-8 opacity-40" />
+
+        {/* Theme Toggle - Miniaturized */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button 
+              onClick={() => setTheme(isDarkMode ? "light" : "dark")}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 hover:bg-sidebar-accent transition-all duration-200"
+            >
+              {isDarkMode ? (
+                <Moon className="h-4 w-4 text-blue-400" />
+              ) : (
+                <Sun className="h-4 w-4 text-amber-500" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="font-medium">
+            {isDarkMode ? "Modalità chiara" : "Modalità scura"}
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Locale Selector */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 hover:bg-sidebar-accent transition-all duration-200">
+              <span className="text-base">🇮🇹</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="font-medium">
+            Lingua: Italiano
+          </TooltipContent>
+        </Tooltip>
 
         {/* Store Selector */}
         {stores.length > 1 ? (
@@ -166,8 +190,8 @@ export function AppSidebar() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200">
-                    <Store className="h-5 w-5" />
+                  <button className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200">
+                    <Store className="h-4 w-4" />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -194,8 +218,8 @@ export function AppSidebar() {
         ) : activeStore ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground">
-                <Store className="h-5 w-5" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground">
+                <Store className="h-4 w-4" />
               </div>
             </TooltipTrigger>
             <TooltipContent side="right" className="font-medium">
@@ -209,9 +233,9 @@ export function AppSidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <button className="flex h-11 w-11 items-center justify-center rounded-full hover:ring-2 hover:ring-primary/20 transition-all duration-200">
-                  <Avatar className="h-10 w-10 shadow-sm">
-                    <AvatarFallback className="bg-primary/10 text-[13px] font-semibold text-primary">
+                <button className="flex h-10 w-10 items-center justify-center rounded-full hover:ring-2 hover:ring-primary/20 transition-all duration-200">
+                  <Avatar className="h-9 w-9 shadow-sm">
+                    <AvatarFallback className="bg-primary/10 text-[12px] font-semibold text-primary">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
