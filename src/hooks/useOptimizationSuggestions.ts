@@ -2,6 +2,23 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 
+export interface CorrectionAction {
+  id: string;
+  label: string;
+  description: string;
+  actionType: "shift_earlier" | "shift_later" | "add_split" | "extend_shift" | "lending" | "remove_surplus" | "reduce_hours" | "generic";
+  userId?: string;
+  userName?: string;
+  shiftId?: string;
+  newStartTime?: string;
+  newEndTime?: string;
+  sourceStoreId?: string;
+  sourceStoreName?: string;
+  targetStoreId?: string;
+  targetStoreName?: string;
+  suggestedHours?: number;
+}
+
 export interface OptimizationSuggestion {
   id: string;
   type: "surplus" | "lending" | "overtime_balance" | "uncovered" | "hour_reduction";
@@ -20,6 +37,11 @@ export interface OptimizationSuggestion {
   targetStoreId?: string;
   targetStoreName?: string;
   slot?: string;
+  /** Multiple corrective actions for this problem - user cycles through on decline */
+  alternatives?: CorrectionAction[];
+  /** How many people are surplus, and context */
+  surplusCount?: number;
+  surplusReason?: string;
 }
 
 /**
