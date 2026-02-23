@@ -1,6 +1,5 @@
 import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -16,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut, User, Moon, Sun } from "lucide-react";
+import { UtensilsCrossed, Store, LogOut, User } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 
 // Type for section color configuration
@@ -27,19 +26,19 @@ interface SectionColorConfig {
   darkBg: string;
   darkBgHover: string;
   darkText: string;
+  border: string;
+  darkBorder: string;
 }
 
-// Dynamic color themes for each navigation section
+// Dynamic color themes for each navigation section with bright borders
 const sectionColors: Record<string, SectionColorConfig> = {
-  "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400" },
-  "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400" },
-  "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400" },
-  "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400" },
-  "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400" },
-  "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400" },
-  "/invitations": { bg: "bg-indigo-100", bgHover: "hover:bg-indigo-50", text: "text-indigo-600", darkBg: "dark:bg-indigo-900/40", darkBgHover: "dark:hover:bg-indigo-900/30", darkText: "dark:text-indigo-400" },
-  "/audit-log": { bg: "bg-slate-100", bgHover: "hover:bg-slate-50", text: "text-slate-600", darkBg: "dark:bg-slate-800/40", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-400" },
-  "/info": { bg: "bg-cyan-100", bgHover: "hover:bg-cyan-50", text: "text-cyan-600", darkBg: "dark:bg-cyan-900/40", darkBgHover: "dark:hover:bg-cyan-900/30", darkText: "dark:text-cyan-400" },
+  "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400", border: "border-blue-500", darkBorder: "dark:border-blue-400" },
+  "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400", border: "border-green-500", darkBorder: "dark:border-green-400" },
+  "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400", border: "border-teal-500", darkBorder: "dark:border-teal-400" },
+  "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400", border: "border-amber-500", darkBorder: "dark:border-amber-400" },
+  "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400", border: "border-purple-500", darkBorder: "dark:border-purple-400" },
+  "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400", border: "border-rose-500", darkBorder: "dark:border-rose-400" },
+  "/audit-log": { bg: "bg-slate-100", bgHover: "hover:bg-slate-50", text: "text-slate-600", darkBg: "dark:bg-slate-800/40", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-400", border: "border-slate-500", darkBorder: "dark:border-slate-400" },
 };
 
 const getColorForPath = (url: string): SectionColorConfig => {
@@ -48,7 +47,6 @@ const getColorForPath = (url: string): SectionColorConfig => {
 
 export function AppSidebar() {
   const { role, user, stores, activeStore, setActiveStore, signOut } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
@@ -76,7 +74,12 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen bg-sidebar border-r border-sidebar-border">
+    <aside 
+      className="hidden md:flex w-20 flex-col h-screen bg-sidebar border-r border-sidebar-border select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      draggable={false}
+      onDragStart={(e) => e.preventDefault()}
+    >
       {/* Top Section: Logo + Navigation */}
       <div className="flex flex-col items-center pt-4 pb-2">
         {/* Logo */}
@@ -88,7 +91,7 @@ export function AppSidebar() {
       <Separator className="mx-4 w-auto opacity-40" />
 
       {/* Main Navigation */}
-      <nav className="flex-1 flex flex-col items-center py-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 flex flex-col items-center py-4 gap-3 overflow-y-auto">
         {mainItems.map((item) => {
           const active = isActive(item.url);
           const colors = getColorForPath(item.url);
@@ -97,13 +100,14 @@ export function AppSidebar() {
               <TooltipTrigger asChild>
                 <Link
                   to={item.url}
-                  className="flex items-center justify-center p-1"
+                  className="flex items-center justify-center"
+                  draggable={false}
                 >
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
+                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2
                       ${active 
-                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
-                        : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder} shadow-md` 
+                        : `bg-sidebar-accent/50 text-sidebar-foreground border-transparent ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                       }`}
                   >
                     <item.icon className="h-5 w-5" />
@@ -128,13 +132,14 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <Link
                       to={item.url}
-                      className="flex items-center justify-center p-1"
+                      className="flex items-center justify-center"
+                      draggable={false}
                     >
                       <div
-                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
+                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 border-2
                           ${active 
-                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
-                            : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder} shadow-md` 
+                            : `bg-sidebar-accent/50 text-sidebar-foreground border-transparent ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                           }`}
                       >
                         <item.icon className="h-5 w-5" />
@@ -151,27 +156,8 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Bottom Section: Theme Toggle, Store, Profile */}
-      <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-        {/* Theme Toggle */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleTheme}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">
-            {theme === "dark" ? "Modalità chiara" : "Modalità scura"}
-          </TooltipContent>
-        </Tooltip>
-
+      {/* Bottom Section: Store, Profile */}
+      <div className="mt-auto flex flex-col items-center pb-4 gap-3">
         <Separator className="mx-4 w-10 opacity-40" />
 
         {/* Store Selector */}

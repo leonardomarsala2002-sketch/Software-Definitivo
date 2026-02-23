@@ -1,5 +1,7 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,11 +11,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronDown, LogOut, Store, User } from "lucide-react";
+import { ChevronDown, LogOut, Store, User, Sun, Moon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export function AppHeader() {
   const { user, role, stores, activeStore, setActiveStore, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name
@@ -30,6 +34,8 @@ export function AppHeader() {
     admin: "Admin",
     employee: "Dipendente",
   };
+
+  const isDarkMode = theme === "dark";
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border/60 bg-card/80 px-5 backdrop-blur-sm md:px-8">
@@ -75,6 +81,21 @@ export function AppHeader() {
       ) : null}
 
       <div className="flex-1" />
+
+      {/* Theme Switch */}
+      <div className="flex items-center gap-2">
+        <Sun className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-muted-foreground' : 'text-amber-500'}`} />
+        <Switch
+          id="theme-switch"
+          checked={isDarkMode}
+          onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+          className="data-[state=checked]:bg-slate-700 data-[state=unchecked]:bg-amber-400"
+        />
+        <Moon className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-blue-400' : 'text-muted-foreground'}`} />
+        <Label htmlFor="theme-switch" className="sr-only">
+          {isDarkMode ? "Modalità scura attiva" : "Modalità chiara attiva"}
+        </Label>
+      </div>
 
       {/* User menu */}
       <DropdownMenu>

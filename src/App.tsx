@@ -13,8 +13,6 @@ import Requests from "@/pages/Requests";
 import Employees from "@/pages/Employees";
 import StoreSettings from "@/pages/StoreSettings";
 import AuditLog from "@/pages/AuditLog";
-import Invitations from "@/pages/Invitations";
-import Info from "@/pages/Info";
 import Login from "@/pages/Login";
 import AcceptInvite from "@/pages/AcceptInvite";
 import SetPassword from "@/pages/SetPassword";
@@ -49,8 +47,6 @@ const App = () => (
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/store-settings" element={<StoreSettings />} />
                 <Route path="/audit-log" element={<AuditLog />} />
-                <Route path="/invitations" element={<Invitations />} />
-                <Route path="/info" element={<Info />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
