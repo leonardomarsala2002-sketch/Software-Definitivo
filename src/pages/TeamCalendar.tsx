@@ -508,7 +508,7 @@ const TeamCalendar = () => {
 
       {/* Blocking Optimization Errors Popup */}
       {canEdit && suggestions.length > 0 && showOptimizationErrors && (
-        <Dialog open={showOptimizationErrors} onOpenChange={() => {/* Non-closable: do nothing */}}>
+        <Dialog open={showOptimizationErrors} onOpenChange={(open) => { if (!open) return; }}>
           <DialogContent
             className="rounded-[32px] max-w-2xl max-h-[85vh] overflow-hidden [&>button.absolute]:hidden"
             onPointerDownOutside={(e) => e.preventDefault()}
