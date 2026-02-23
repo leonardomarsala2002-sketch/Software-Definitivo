@@ -53,29 +53,10 @@ const Employees = () => {
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [deptFilter, setDeptFilter] = useState<string>("all");
 
   const canEdit = role === "super_admin" || role === "admin";
 
-  const filtered = (employees ?? []).filter((e) => {
-    const matchesSearch =
-      !search ||
-      (e.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (e.email ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesDept = deptFilter === "all" || e.department === deptFilter;
-    return matchesSearch && matchesDept;
-  });
-
-  const handleRowClick = (emp: EmployeeRow) => {
-    if (role === "employee" && emp.user_id !== user?.id) return;
-    setSelected(emp);
-    setDrawerOpen(true);
-  };
-
-  const readyCount = filtered.filter(isEmployeeReady).length;
-
-  // Compute department lists from search-only filter (ignoring dept filter)
-  // so both columns always show their employees regardless of dept filter
+  // Compute department lists from search filter
   const searchFiltered = (employees ?? []).filter((e) => {
     return (
       !search ||
@@ -86,9 +67,13 @@ const Employees = () => {
   const salaEmployees = searchFiltered.filter((e) => e.department === "sala");
   const cucinaEmployees = searchFiltered.filter((e) => e.department === "cucina");
 
-  const toggleDeptFilter = (dept: string) => {
-    setDeptFilter((prev) => (prev === dept ? "all" : dept));
+  const handleRowClick = (emp: EmployeeRow) => {
+    if (role === "employee" && emp.user_id !== user?.id) return;
+    setSelected(emp);
+    setDrawerOpen(true);
   };
+
+  const readyCount = searchFiltered.filter(isEmployeeReady).length;
 
   const EmployeeCard = ({ emp }: { emp: EmployeeRow }) => {
     const ready = isEmployeeReady(emp);
@@ -96,18 +81,18 @@ const Employees = () => {
     return (
       <div
         onClick={() => handleRowClick(emp)}
-        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
+        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
           isSala
-            ? "border-orange-200 dark:border-orange-800/40 hover:bg-orange-50/50 dark:hover:bg-orange-900/10"
-            : "border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
+            ? "border-orange-300 dark:border-orange-700/50 bg-orange-50/40 dark:bg-orange-950/10 hover:bg-orange-100/60 dark:hover:bg-orange-900/20"
+            : "border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/40 dark:bg-emerald-950/10 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20"
         }`}
       >
         <Avatar className="h-9 w-9 flex-shrink-0">
           <AvatarImage src={emp.avatar_url ?? undefined} />
           <AvatarFallback className={`text-[11px] font-semibold ${
             isSala
-              ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
-              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+              ? "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
+              : "bg-emerald-200 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
           }`}>
             {getInitials(emp.full_name)}
           </AvatarFallback>
@@ -202,29 +187,6 @@ const Employees = () => {
                 className="pl-9"
               />
             </div>
-            {/* Department filter buttons – sidebar-style toggle */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => toggleDeptFilter("sala")}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                  deptFilter === "sala"
-                    ? "bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg ring-2 ring-orange-400 dark:ring-orange-500"
-                    : "bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/30"
-                }`}
-              >
-                Sala
-              </button>
-              <button
-                onClick={() => toggleDeptFilter("cucina")}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                  deptFilter === "cucina"
-                    ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-white shadow-lg ring-2 ring-emerald-400 dark:ring-emerald-500"
-                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
-                }`}
-              >
-                Cucina
-              </button>
-            </div>
             {role === "super_admin" && allStores.length > 0 && (
               <StoreMultiSelect
                 stores={allStores}
@@ -233,24 +195,24 @@ const Employees = () => {
               />
             )}
             <Badge variant="secondary" className="text-xs whitespace-nowrap hidden sm:inline-flex">
-              {readyCount}/{filtered.length} pronti
+              {readyCount}/{searchFiltered.length} pronti
             </Badge>
           </div>
 
           {/* Dual Card System: SALA | CUCINA */}
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0 overflow-hidden">
             {/* SALA Column */}
-            <div className="rounded-[32px] border-2 border-orange-200 dark:border-orange-800/40 bg-card shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+            <div className="rounded-[32px] border-2 border-orange-300 dark:border-orange-700/50 bg-orange-50/50 dark:bg-orange-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
-                  <Users className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-200 dark:bg-orange-900/50">
+                  <Users className="h-4 w-4 text-orange-700 dark:text-orange-400" />
                 </div>
-                <h2 className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wide">Sala</h2>
-                <Badge variant="secondary" className="ml-auto text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                <h2 className="text-sm font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wide">Sala</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px] bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
                   {salaEmployees.length}
                 </Badge>
               </div>
-              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "cucina" ? "opacity-40" : ""}`}>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {salaEmployees.length > 0 ? (
                   salaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (
@@ -262,17 +224,17 @@ const Employees = () => {
             </div>
 
             {/* CUCINA Column */}
-            <div className="rounded-[32px] border-2 border-emerald-200 dark:border-emerald-800/40 bg-card shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+            <div className="rounded-[32px] border-2 border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
-                  <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-200 dark:bg-emerald-900/50">
+                  <Users className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
                 </div>
-                <h2 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Cucina</h2>
-                <Badge variant="secondary" className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                <h2 className="text-sm font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Cucina</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px] bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
                   {cucinaEmployees.length}
                 </Badge>
               </div>
-              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "sala" ? "opacity-40" : ""}`}>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {cucinaEmployees.length > 0 ? (
                   cucinaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (

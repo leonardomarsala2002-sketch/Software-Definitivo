@@ -55,13 +55,13 @@ export function EmployeeWeekDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0">
+      <SheetContent side="bottom" className="w-full h-[70vh] rounded-t-[32px] p-0">
         <SheetHeader className="px-5 pt-5 pb-3 border-b">
           <SheetTitle className="text-base">{employeeName}</SheetTitle>
           <p className="text-xs text-muted-foreground">{weekLabel}</p>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-80px)]">
+        <ScrollArea className="h-[calc(70vh-80px)]">
           <div className="px-5 py-4 space-y-2">
             {weekDates.map(dateStr => {
               const dayShifts = shiftsByDate.get(dateStr) ?? [];

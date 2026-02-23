@@ -93,7 +93,7 @@ export function MonthGrid({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-px mb-1 flex-shrink-0">
+      <div className="grid grid-cols-7 gap-1 mb-1 flex-shrink-0">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
@@ -104,11 +104,11 @@ export function MonthGrid({
         ))}
       </div>
 
-      {/* Days - fills available space */}
-      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-[32px] overflow-hidden flex-1 auto-rows-fr">
+      {/* Days - card grid with small gaps */}
+      <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-fr">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`e-${i}`} className="bg-background min-h-[60px]" />;
+            return <div key={`e-${i}`} className="min-h-[60px]" />;
           }
 
           const weekIdx = Math.floor(i / 7);
@@ -125,11 +125,11 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "bg-card p-1.5 cursor-pointer transition-all hover:bg-accent/40 flex flex-col",
+                "rounded-2xl border border-green-200 dark:border-green-800/40 bg-green-50/50 dark:bg-green-950/20 p-1.5 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg flex flex-col",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-primary shadow-[0_0_12px_rgba(var(--primary),0.3)] bg-primary/5",
-                isUncovered && !isArchived && !isToday && "bg-destructive/5 ring-1 ring-destructive/30",
-                hasDraft && !isUncovered && !isArchived && !isToday && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
+                isToday && "ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)] bg-emerald-50/80 dark:bg-emerald-950/30",
+                isUncovered && !isArchived && !isToday && "bg-red-50/60 dark:bg-red-950/20 ring-1 ring-red-400/40 border-red-300 dark:border-red-800/40",
+                hasDraft && !isUncovered && !isArchived && !isToday && "bg-amber-50/60 dark:bg-amber-950/20 ring-1 ring-amber-400/40 border-amber-300 dark:border-amber-800/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
               )}
               onClick={() => onDayClick(dateStr)}
@@ -139,7 +139,7 @@ export function MonthGrid({
                 className={cn(
                   "text-xs font-medium mb-1",
                   isToday
-                    ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
+                    ? "bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
                     : "text-foreground"
                 )}
               >
@@ -161,17 +161,17 @@ export function MonthGrid({
                       className={cn(
                         "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
                         s.is_day_off
-                          ? "bg-destructive/10 text-destructive"
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                           : s.status === "archived"
                             ? "bg-muted text-muted-foreground"
                             : s.status === "draft"
-                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                              : "bg-primary/10 text-primary"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
                       {isLent && (
-                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                           Prestito{lentFromName ? ` da ${lentFromName}` : ""}
                         </span>
                       )}
@@ -179,8 +179,8 @@ export function MonthGrid({
                         <span className={cn(
                           "text-[7px] font-bold shrink-0 px-0.5 rounded",
                           bal!.current_balance > 0
-                            ? "text-amber-600 bg-amber-500/10"
-                            : "text-blue-600 bg-blue-500/10"
+                            ? "text-amber-700 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30"
+                            : "text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
                         )}>
                           {balLabel}
                         </span>
