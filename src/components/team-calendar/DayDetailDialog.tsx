@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
 import { ShiftEditPopover } from "./ShiftEditPopover";
+import { EmployeeWeekDrawer } from "./EmployeeWeekDrawer";
 
 interface Employee {
   user_id: string;
@@ -53,6 +54,7 @@ export function DayDetailDialog({
 }: DayDetailDialogProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [addingForUser, setAddingForUser] = useState<string | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
   // Disable editing if all shifts for this date are archived
   const deptShiftsForDate = shifts.filter(s => s.department === department && s.date === date);
@@ -132,9 +134,17 @@ export function DayDetailDialog({
                   <div key={emp.user_id} className="flex items-center group min-h-[36px]">
                     {/* Name */}
                     <div className="w-32 shrink-0 pr-2">
-                      <span className="text-xs font-medium text-foreground truncate block">
+                      <button
+                        type="button"
+                        className={cn(
+                          "text-xs font-medium text-foreground truncate block text-left w-full",
+                          canEdit && "hover:text-primary hover:underline cursor-pointer"
+                        )}
+                        onClick={() => canEdit && setSelectedEmployee(emp)}
+                        disabled={!canEdit}
+                      >
                         {name}
-                      </span>
+                      </button>
                     </div>
 
                     {/* Timeline bar area */}
@@ -200,6 +210,18 @@ export function DayDetailDialog({
             )}
           </div>
         </ScrollArea>
+
+        {/* Employee week drawer */}
+        {selectedEmployee && (
+          <EmployeeWeekDrawer
+            open={!!selectedEmployee}
+            onOpenChange={(v) => !v && setSelectedEmployee(null)}
+            employeeName={selectedEmployee.full_name ?? "—"}
+            employeeId={selectedEmployee.user_id}
+            referenceDate={date}
+            allShifts={shifts}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
