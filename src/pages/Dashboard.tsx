@@ -60,7 +60,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "rounded-[32px] border border-border/60 bg-card shadow-lg shadow-black/[0.04] dark:shadow-black/[0.12] p-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl";
+  "rounded-[32px] border border-blue-200 dark:border-blue-800/40 bg-blue-50/60 dark:bg-blue-950/30 shadow-lg shadow-black/[0.04] dark:shadow-black/[0.12] p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl";
 
 /* ── component ───────────────────────────────────────── */
 
@@ -150,17 +150,17 @@ const Dashboard = () => {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header – greeting */}
-      <div className="mb-3 flex-shrink-0">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
+      <div className="mb-2 flex-shrink-0">
+        <h1 className="text-lg font-bold tracking-tight text-foreground">
           Benvenuto {displayName} 👋
         </h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
           Panoramica generale di tutti gli store e del team
         </p>
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-3 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-2 min-h-0 overflow-hidden">
 
         {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
@@ -324,13 +324,13 @@ const Dashboard = () => {
           <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
             {/* Inverted axes: days as rows (vertical), hours as columns (horizontal) */}
             <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
-              style={{ gridTemplateColumns: `2.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
+              style={{ gridTemplateColumns: `3.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
               {/* Column headers: hours across the top */}
-              <div className="bg-card" />
+              <div className="bg-transparent" />
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="bg-card text-center pb-0.5 font-medium text-muted-foreground text-[9px]"
+                  className="bg-transparent text-center pb-0.5 font-medium text-muted-foreground text-[9px]"
                 >
                   {String(hour).padStart(2, "0")}
                 </div>
@@ -341,17 +341,17 @@ const Dashboard = () => {
                 return (
                   <div key={i} className="contents">
                     <div
-                      className={`flex flex-col items-center justify-center pr-1 border-t border-border/30 py-0.5
+                      className={`flex flex-row items-center justify-end gap-1 pr-1 border-t border-border/30 py-0.5
                         ${isToday ? "text-primary" : "text-muted-foreground"}`}
                     >
-                      <span className="block text-[9px] font-medium leading-tight">{DAYS_IT[i]}</span>
-                      <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px]
-                        ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
+                      <span className="text-[9px] font-medium leading-tight">{DAYS_IT[i]}</span>
+                      <span className={`inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[9px] px-0.5
+                        ${isToday ? "bg-primary text-primary-foreground font-bold" : ""}`}>
                         {d.getDate()}
                       </span>
                     </div>
                     {HOURS.map((hour) => (
-                      <div key={hour} className="border-t border-border/30 py-0.5 min-h-[1.2rem]" />
+                      <div key={hour} className="border-t border-border/30 py-0.5 min-h-[1rem]" />
                     ))}
                   </div>
                 );

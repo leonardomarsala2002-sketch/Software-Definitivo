@@ -2,7 +2,6 @@ import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Tooltip,
   TooltipContent,
@@ -13,10 +12,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut, User, Moon, Sun } from "lucide-react";
+import { UtensilsCrossed, Store, Moon, Sun } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 
 // Type for section color configuration
@@ -46,7 +44,7 @@ const getColorForPath = (url: string): SectionColorConfig => {
 };
 
 export function AppSidebar() {
-  const { role, user, stores, activeStore, setActiveStore, signOut } = useAuth();
+  const { role, stores, activeStore, setActiveStore, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
@@ -56,22 +54,6 @@ export function AppSidebar() {
   const isActive = (url: string) => {
     if (url === "/") return location.pathname === "/";
     return location.pathname.startsWith(url);
-  };
-
-  const initials = user?.user_metadata?.full_name
-    ? user.user_metadata.full_name
-        .split(" ")
-        .map((n: string) => n[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase()
-    : "??";
-
-  const displayName = user?.user_metadata?.full_name || user?.email || "Utente";
-  const roleLabelMap: Record<string, string> = {
-    super_admin: "Super Admin",
-    admin: "Admin",
-    employee: "Dipendente",
   };
 
   return (
@@ -102,7 +84,7 @@ export function AppSidebar() {
                     className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                       ${active 
                         ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
-                        : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                        : `bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110`
                       }`}
                   >
                     <item.icon className="h-5 w-5" />
@@ -133,7 +115,7 @@ export function AppSidebar() {
                         className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                           ${active 
                             ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
-                            : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
+                            : `bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110`
                           }`}
                       >
                         <item.icon className="h-5 w-5" />
@@ -223,44 +205,21 @@ export function AppSidebar() {
           </Tooltip>
         ) : null}
 
-        {/* User Profile */}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <button className="flex h-11 w-11 items-center justify-center rounded-full hover:ring-2 hover:ring-primary/20 transition-all duration-200">
-                  <Avatar className="h-10 w-10 shadow-sm">
-                    <AvatarFallback className="bg-primary/10 text-[13px] font-semibold text-primary">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="font-medium">
-              {displayName}
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent side="right" align="end" className="w-52 rounded-xl p-1.5 shadow-lg">
-            <DropdownMenuLabel className="rounded-lg px-3 py-2.5 font-normal">
-              <p className="text-sm font-semibold">{displayName}</p>
-              <p className="text-xs text-muted-foreground">{role ? roleLabelMap[role] || role : ""}</p>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-lg px-3 py-2 text-[13px]">
-              <User className="mr-2.5 h-4 w-4" />
-              Profilo
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
+        {/* Logout */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
               onClick={signOut}
-              className="rounded-lg px-3 py-2 text-[13px] text-destructive focus:text-destructive"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110 transition-all duration-200"
+              aria-label="Logout"
             >
-              <LogOut className="mr-2.5 h-4 w-4" />
-              Esci
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <span className="text-xl leading-none">🚪</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="font-medium">
+            Logout
+          </TooltipContent>
+        </Tooltip>
       </div>
     </aside>
   );
