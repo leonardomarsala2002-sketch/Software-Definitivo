@@ -29,11 +29,11 @@ export function MobileBottomNav() {
             >
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
+                  "flex h-8 w-8 items-center justify-center rounded-full transition-all text-base",
                   isActive && "bg-accent shadow-sm"
                 )}
               >
-                <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-accent-foreground")} />
+                <span role="img" aria-label={item.title}>{item.emoji}</span>
               </div>
               <span className={cn(
                 "text-[10px] leading-none",
