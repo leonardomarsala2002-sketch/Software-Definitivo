@@ -91,7 +91,7 @@ export function AppSidebar() {
       <Separator className="mx-4 w-auto opacity-40" />
 
       {/* Main Navigation */}
-      <nav className="flex-1 flex flex-col items-center py-4 gap-3 overflow-y-auto">
+      <nav aria-label="Menu principale" className="flex-1 flex flex-col items-center py-4 gap-3 overflow-y-auto">
         {mainItems.map((item) => {
           const active = isActive(item.url);
           const colors = getColorForPath(item.url);

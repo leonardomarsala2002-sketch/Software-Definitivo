@@ -89,12 +89,11 @@ export default function InviteEmployeeDialog({ open, onOpenChange }: InviteEmplo
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) throw new Error("Email non valida");
 
-      const _isSuperAdmin = selectedRole === "super_admin";
       const { data, error } = await supabase.from("invitations").insert({
         email: email.trim().toLowerCase(),
         role: selectedRole as AppRole,
-        store_id: _isSuperAdmin ? null : selectedStoreId,
-        department: _isSuperAdmin ? null : (selectedDepartment as Department),
+        store_id: isSuperAdminInvite ? null : selectedStoreId,
+        department: isSuperAdminInvite ? null : (selectedDepartment as Department),
         invited_by: user?.id ?? null,
       }).select("id").single();
 
@@ -124,7 +123,8 @@ export default function InviteEmployeeDialog({ open, onOpenChange }: InviteEmplo
           throw new Error(body.error || `HTTP ${res.status}`);
         }
         toast.success("Invito creato e email inviata!");
-      } catch {
+      } catch (err) {
+        console.error("Failed to send invite email:", err);
         toast.warning("Invito creato, ma invio email fallito.");
       }
       resetForm();

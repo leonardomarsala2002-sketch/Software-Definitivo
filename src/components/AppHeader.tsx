@@ -3,6 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -83,19 +88,26 @@ export function AppHeader() {
       <div className="flex-1" />
 
       {/* Theme Switch */}
-      <div className="flex items-center gap-2">
-        <Sun className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-muted-foreground' : 'text-amber-500'}`} />
-        <Switch
-          id="theme-switch"
-          checked={isDarkMode}
-          onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-          className="data-[state=checked]:bg-slate-700 data-[state=unchecked]:bg-amber-400"
-        />
-        <Moon className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-blue-400' : 'text-muted-foreground'}`} />
-        <Label htmlFor="theme-switch" className="sr-only">
-          {isDarkMode ? "Modalità scura attiva" : "Modalità chiara attiva"}
-        </Label>
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-2">
+            <Sun className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-muted-foreground' : 'text-amber-500'}`} />
+            <Switch
+              id="theme-switch"
+              checked={isDarkMode}
+              onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+              className="data-[state=checked]:bg-slate-700 data-[state=unchecked]:bg-amber-400"
+            />
+            <Moon className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-blue-400' : 'text-muted-foreground'}`} />
+            <Label htmlFor="theme-switch" className="sr-only">
+              {isDarkMode ? "Modalità scura attiva" : "Modalità chiara attiva"}
+            </Label>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="font-medium">
+          {isDarkMode ? "Passa a modalità chiara" : "Passa a modalità scura"}
+        </TooltipContent>
+      </Tooltip>
 
       {/* User menu */}
       <DropdownMenu>
