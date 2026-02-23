@@ -102,8 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
+          // Show loading spinner while we fetch role & stores
+          setIsLoading(true);
           // Defer data loading to avoid deadlocks
-          setTimeout(() => loadUserData(newSession.user.id), 0);
+          setTimeout(() => {
+            loadUserData(newSession.user.id).finally(() => setIsLoading(false));
+          }, 0);
         } else {
           setRole(null);
           setStores([]);
