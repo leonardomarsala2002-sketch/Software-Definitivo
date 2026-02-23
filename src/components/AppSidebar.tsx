@@ -33,7 +33,6 @@ interface SectionColorConfig {
 const sectionColors: Record<string, SectionColorConfig> = {
   "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400" },
   "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400" },
-  "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400" },
   "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400" },
   "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400" },
   "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400" },
@@ -153,18 +152,24 @@ export function AppSidebar() {
 
       {/* Bottom Section: Theme Toggle, Store, Profile */}
       <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-        {/* Theme Toggle */}
+        {/* Theme Toggle - Switch Style */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={toggleTheme}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200"
+              className="relative flex h-7 w-12 items-center rounded-full bg-sidebar-accent/60 transition-all duration-300"
+              aria-label={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
             >
-              {theme === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
+              <span
+                className={`absolute flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300 dark:bg-slate-700
+                  ${theme === "dark" ? "left-[1.375rem]" : "left-[0.25rem]"}`}
+              >
+                {theme === "dark" ? (
+                  <Moon className="h-3 w-3 text-blue-300" />
+                ) : (
+                  <Sun className="h-3 w-3 text-amber-500" />
+                )}
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="font-medium">

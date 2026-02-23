@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   CalendarDays,
-  Calendar,
   Inbox,
   Users,
   Settings,
@@ -25,7 +24,6 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, section: "main" },
   { title: "Calendario Team", url: "/team-calendar", icon: CalendarDays, section: "main" },
-  { title: "Calendario Personale", url: "/personal-calendar", icon: Calendar, section: "main" },
   { title: "Richieste", url: "/requests", icon: Inbox, section: "main" },
   { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin"] },
   { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin"] },
