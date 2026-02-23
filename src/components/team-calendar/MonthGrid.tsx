@@ -91,9 +91,9 @@ export function MonthGrid({
       : null;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-px mb-1">
+      <div className="grid grid-cols-7 gap-px mb-1 flex-shrink-0">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
@@ -104,11 +104,11 @@ export function MonthGrid({
         ))}
       </div>
 
-      {/* Days */}
-      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-lg overflow-hidden">
+      {/* Days - fills available space */}
+      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-[32px] overflow-hidden flex-1 auto-rows-fr">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`e-${i}`} className="bg-background min-h-[80px]" />;
+            return <div key={`e-${i}`} className="bg-background min-h-[60px]" />;
           }
 
           const weekIdx = Math.floor(i / 7);
@@ -125,12 +125,12 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "bg-card min-h-[80px] p-1.5 cursor-pointer transition-all hover:bg-accent/40",
+                "bg-card p-1.5 cursor-pointer transition-all hover:bg-accent/40 flex flex-col",
                 dimmed && "opacity-40",
-                isToday && "ring-1 ring-primary/40",
-                isUncovered && !isArchived && "bg-destructive/5 ring-1 ring-destructive/30",
-                hasDraft && !isUncovered && !isArchived && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
-                (isArchived || isPast) && "opacity-60 grayscale-[50%]",
+                isToday && "ring-2 ring-primary shadow-[0_0_12px_rgba(var(--primary),0.3)] bg-primary/5",
+                isUncovered && !isArchived && !isToday && "bg-destructive/5 ring-1 ring-destructive/30",
+                hasDraft && !isUncovered && !isArchived && !isToday && "bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-300/40",
+                (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
               )}
               onClick={() => onDayClick(dateStr)}
               title={isArchived ? "Questa settimana è archiviata e non può essere modificata." : undefined}
@@ -139,13 +139,13 @@ export function MonthGrid({
                 className={cn(
                   "text-xs font-medium mb-1",
                   isToday
-                    ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
+                    ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
                     : "text-foreground"
                 )}
               >
                 {day}
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 flex-1 overflow-hidden">
                 {dayShifts.slice(0, 4).map((s) => {
                   const emp = employees.find((e) => e.user_id === s.user_id);
                   const name = emp?.full_name?.split(" ")[0] ?? "?";

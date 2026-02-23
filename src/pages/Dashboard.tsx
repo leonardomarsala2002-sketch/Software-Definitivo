@@ -8,15 +8,21 @@ import {
   X,
   Palmtree,
   Bell,
+  Inbox,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import RequestForm from "@/components/requests/RequestForm";
+import { useQuery } from "@tanstack/react-query";
 
 /* ── helpers ─────────────────────────────────────────── */
 
@@ -59,9 +65,26 @@ const cardBase =
 /* ── component ───────────────────────────────────────── */
 
 const Dashboard = () => {
-  const { user, role } = useAuth();
+  const { user, role, activeStore } = useAuth();
   const navigate = useNavigate();
   const [seeding, setSeeding] = useState(false);
+  const [showRequestPopup, setShowRequestPopup] = useState(false);
+
+  /* employee department for request form */
+  const { data: myDetails } = useQuery({
+    queryKey: ["my-employee-details", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employee_details")
+        .select("department")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+  const department = (myDetails?.department as "sala" | "cucina") ?? "sala";
 
   /* calendar state */
   const today = useMemo(() => new Date(), []);
@@ -162,7 +185,7 @@ const Dashboard = () => {
               size="icon"
               variant="outline"
               className="h-7 w-7 rounded-full"
-              onClick={() => navigate("/requests")}
+              onClick={() => setShowRequestPopup(true)}
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -239,13 +262,17 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Avvisi Richieste Card (Pending requests alert) */}
+        {/* Richieste / Avvisi Card */}
         <Card className={`${cardBase} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-2 mb-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
-              <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${isAdmin ? "bg-violet-100 dark:bg-violet-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+              {isAdmin ? (
+                <Inbox className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              ) : (
+                <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              )}
             </div>
-            <p className="text-xs font-bold text-foreground">Avvisi</p>
+            <p className="text-xs font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
           </div>
           {isAdmin && pendingRequests.length > 0 ? (
             <div className="flex-1 space-y-1.5 overflow-hidden">
@@ -331,6 +358,29 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Request Popup Modal */}
+      <Dialog open={showRequestPopup} onOpenChange={setShowRequestPopup}>
+        <DialogContent className="rounded-[32px] max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Nuova Richiesta</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Compila il modulo per inviare una nuova richiesta
+            </DialogDescription>
+          </DialogHeader>
+          {activeStore?.id ? (
+            <RequestForm
+              department={department}
+              storeId={activeStore.id}
+              onClose={() => setShowRequestPopup(false)}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Seleziona uno store per inviare una richiesta.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {import.meta.env.DEV && (
         <div className="mt-2 flex justify-center flex-shrink-0">

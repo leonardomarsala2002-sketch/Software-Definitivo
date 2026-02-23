@@ -91,7 +91,7 @@ export function DayDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0">
+      <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0 rounded-[32px]">
         <DialogHeader className="px-6 pt-5 pb-3 border-b">
           <DialogTitle className="capitalize text-base">{dateLabel}</DialogTitle>
           <div className="flex items-center gap-2 mt-1">
