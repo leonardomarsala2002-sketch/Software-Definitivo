@@ -27,18 +27,18 @@ interface SectionColorConfig {
   darkBg: string;
   darkBgHover: string;
   darkText: string;
+  ring: string;
+  darkRing: string;
 }
 
 // Dynamic color themes for each navigation section
 const sectionColors: Record<string, SectionColorConfig> = {
-  "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400" },
-  "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400" },
-  "/requests": { bg: "bg-amber-100", bgHover: "hover:bg-amber-50", text: "text-amber-600", darkBg: "dark:bg-amber-900/40", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-400" },
-  "/employees": { bg: "bg-purple-100", bgHover: "hover:bg-purple-50", text: "text-purple-600", darkBg: "dark:bg-purple-900/40", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-400" },
-  "/store-settings": { bg: "bg-rose-100", bgHover: "hover:bg-rose-50", text: "text-rose-600", darkBg: "dark:bg-rose-900/40", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-400" },
-  "/invitations": { bg: "bg-indigo-100", bgHover: "hover:bg-indigo-50", text: "text-indigo-600", darkBg: "dark:bg-indigo-900/40", darkBgHover: "dark:hover:bg-indigo-900/30", darkText: "dark:text-indigo-400" },
-  "/audit-log": { bg: "bg-slate-100", bgHover: "hover:bg-slate-50", text: "text-slate-600", darkBg: "dark:bg-slate-800/40", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-400" },
-  "/info": { bg: "bg-cyan-100", bgHover: "hover:bg-cyan-50", text: "text-cyan-600", darkBg: "dark:bg-cyan-900/40", darkBgHover: "dark:hover:bg-cyan-900/30", darkText: "dark:text-cyan-400" },
+  "/": { bg: "bg-blue-200/80", bgHover: "hover:bg-blue-50", text: "text-blue-700", darkBg: "dark:bg-blue-800/50", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-300", ring: "ring-blue-500", darkRing: "dark:ring-blue-400" },
+  "/team-calendar": { bg: "bg-green-200/80", bgHover: "hover:bg-green-50", text: "text-green-700", darkBg: "dark:bg-green-800/50", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-300", ring: "ring-green-500", darkRing: "dark:ring-green-400" },
+  "/requests": { bg: "bg-amber-200/80", bgHover: "hover:bg-amber-50", text: "text-amber-700", darkBg: "dark:bg-amber-800/50", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-300", ring: "ring-amber-500", darkRing: "dark:ring-amber-400" },
+  "/employees": { bg: "bg-purple-200/80", bgHover: "hover:bg-purple-50", text: "text-purple-700", darkBg: "dark:bg-purple-800/50", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-300", ring: "ring-purple-500", darkRing: "dark:ring-purple-400" },
+  "/store-settings": { bg: "bg-rose-200/80", bgHover: "hover:bg-rose-50", text: "text-rose-700", darkBg: "dark:bg-rose-800/50", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-300", ring: "ring-rose-500", darkRing: "dark:ring-rose-400" },
+  "/audit-log": { bg: "bg-slate-200/80", bgHover: "hover:bg-slate-50", text: "text-slate-700", darkBg: "dark:bg-slate-700/50", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-300", ring: "ring-slate-500", darkRing: "dark:ring-slate-400" },
 };
 
 const getColorForPath = (url: string): SectionColorConfig => {
@@ -101,7 +101,7 @@ export function AppSidebar() {
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                       ${active 
-                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
+                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
                         : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                       }`}
                   >
@@ -132,7 +132,7 @@ export function AppSidebar() {
                       <div
                         className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                           ${active 
-                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-md` 
+                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
                             : `bg-sidebar-accent/50 text-sidebar-foreground ${colors.bgHover} ${colors.darkBgHover} hover:text-sidebar-accent-foreground`
                           }`}
                       >
