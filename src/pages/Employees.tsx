@@ -74,8 +74,21 @@ const Employees = () => {
 
   const readyCount = filtered.filter(isEmployeeReady).length;
 
-  const salaEmployees = filtered.filter((e) => e.department === "sala");
-  const cucinaEmployees = filtered.filter((e) => e.department === "cucina");
+  // Compute department lists from search-only filter (ignoring dept filter)
+  // so both columns always show their employees regardless of dept filter
+  const searchFiltered = (employees ?? []).filter((e) => {
+    return (
+      !search ||
+      (e.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (e.email ?? "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
+  const salaEmployees = searchFiltered.filter((e) => e.department === "sala");
+  const cucinaEmployees = searchFiltered.filter((e) => e.department === "cucina");
+
+  const toggleDeptFilter = (dept: string) => {
+    setDeptFilter((prev) => (prev === dept ? "all" : dept));
+  };
 
   const EmployeeCard = ({ emp }: { emp: EmployeeRow }) => {
     const ready = isEmployeeReady(emp);
@@ -192,7 +205,7 @@ const Employees = () => {
             {/* Department filter buttons – sidebar-style toggle */}
             <div className="flex gap-2">
               <button
-                onClick={() => setDeptFilter(deptFilter === "sala" ? "all" : "sala")}
+                onClick={() => toggleDeptFilter("sala")}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                   deptFilter === "sala"
                     ? "bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg ring-2 ring-orange-400 dark:ring-orange-500"
@@ -202,7 +215,7 @@ const Employees = () => {
                 Sala
               </button>
               <button
-                onClick={() => setDeptFilter(deptFilter === "cucina" ? "all" : "cucina")}
+                onClick={() => toggleDeptFilter("cucina")}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                   deptFilter === "cucina"
                     ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-white shadow-lg ring-2 ring-emerald-400 dark:ring-emerald-500"
@@ -234,11 +247,11 @@ const Employees = () => {
                 </div>
                 <h2 className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wide">Sala</h2>
                 <Badge variant="secondary" className="ml-auto text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
-                  {(deptFilter === "all" || deptFilter === "sala") ? salaEmployees.length : 0}
+                  {salaEmployees.length}
                 </Badge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                {(deptFilter === "all" || deptFilter === "sala") && salaEmployees.length > 0 ? (
+              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "cucina" ? "opacity-40" : ""}`}>
+                {salaEmployees.length > 0 ? (
                   salaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (
                   <div className="flex items-center justify-center h-full">
@@ -256,11 +269,11 @@ const Employees = () => {
                 </div>
                 <h2 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Cucina</h2>
                 <Badge variant="secondary" className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                  {(deptFilter === "all" || deptFilter === "cucina") ? cucinaEmployees.length : 0}
+                  {cucinaEmployees.length}
                 </Badge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                {(deptFilter === "all" || deptFilter === "cucina") && cucinaEmployees.length > 0 ? (
+              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "sala" ? "opacity-40" : ""}`}>
+                {cucinaEmployees.length > 0 ? (
                   cucinaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (
                   <div className="flex items-center justify-center h-full">
