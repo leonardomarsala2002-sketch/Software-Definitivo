@@ -198,15 +198,15 @@ const Dashboard = () => {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const todayShifts = shiftsByDate.get(todayStr) ?? [];
   const todaySchedule = todayShifts.length > 0 && !todayShifts[0].is_day_off
-    ? `${todayShifts[0].start_time?.slice(0, 5)} - ${todayShifts[0].end_time?.slice(0, 5)}`
+    ? `${todayShifts[0].start_time?.slice(0, 5) ?? "N/A"} - ${todayShifts[0].end_time?.slice(0, 5) ?? "N/A"}`
     : todayShifts.length > 0 && todayShifts[0].is_day_off
     ? "Riposo"
     : "Nessun turno";
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Bento Grid - 100vh without scroll */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0 p-4">
         {/* Left Column - Calendar Widget (2/3 width on desktop) */}
         <div className={`${cardBaseClass} lg:col-span-2 flex flex-col overflow-hidden`}>
           <CardHeader className="px-5 py-4 pb-2 flex flex-row items-center justify-between shrink-0">
@@ -322,7 +322,7 @@ const Dashboard = () => {
                   {selectedDateShifts.filter(s => !s.is_day_off).map(s => (
                     <div key={s.id} className="flex items-center gap-2">
                       <span className="text-base font-semibold tabular-nums">
-                        {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}
+                        {s.start_time?.slice(0, 5) ?? "N/A"} – {s.end_time?.slice(0, 5) ?? "N/A"}
                       </span>
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 capitalize">
                         {s.department}
