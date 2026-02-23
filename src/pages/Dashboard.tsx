@@ -22,7 +22,8 @@ const Dashboard = () => {
       if (data?.error) throw new Error(data.error);
       toast.success(data?.message ?? "Dati test creati!");
     } catch (err: unknown) {
-      toast.error((err as Error)?.message ?? "Errore durante il seed");
+      const errorMessage = err instanceof Error ? err.message : "Errore durante il seed";
+      toast.error(errorMessage);
     } finally {
       setSeeding(false);
     }

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { UtensilsCrossed } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 
 export function AppSidebar() {
   const { role } = useAuth();
@@ -63,8 +63,8 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild tooltip={item.title} className="h-auto p-0">
-                      <a
-                        href={item.url}
+                      <Link
+                        to={item.url}
                         className={`flex items-center transition-all ${isCollapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}
                       >
                         <div
@@ -81,7 +81,7 @@ export function AppSidebar() {
                             {item.title}
                           </span>
                         )}
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -103,8 +103,8 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild tooltip={item.title} className="h-auto p-0">
-                      <a
-                        href={item.url}
+                      <Link
+                        to={item.url}
                         className={`flex items-center transition-all ${isCollapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}
                       >
                         <div
@@ -121,7 +121,7 @@ export function AppSidebar() {
                             {item.title}
                           </span>
                         )}
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
