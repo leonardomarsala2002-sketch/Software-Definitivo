@@ -5,12 +5,10 @@ import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList, isEmployeeReady, type EmployeeRow } from "@/hooks/useEmployees";
 import EmployeeDetailDrawer from "@/components/employees/EmployeeDetailDrawer";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StoreMultiSelect } from "@/components/StoreMultiSelect";
@@ -76,9 +74,79 @@ const Employees = () => {
 
   const readyCount = filtered.filter(isEmployeeReady).length;
 
+  // Compute department lists from search-only filter (ignoring dept filter)
+  // so both columns always show their employees regardless of dept filter
+  const searchFiltered = (employees ?? []).filter((e) => {
+    return (
+      !search ||
+      (e.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (e.email ?? "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
+  const salaEmployees = searchFiltered.filter((e) => e.department === "sala");
+  const cucinaEmployees = searchFiltered.filter((e) => e.department === "cucina");
+
+  const toggleDeptFilter = (dept: string) => {
+    setDeptFilter((prev) => (prev === dept ? "all" : dept));
+  };
+
+  const EmployeeCard = ({ emp }: { emp: EmployeeRow }) => {
+    const ready = isEmployeeReady(emp);
+    const isSala = emp.department === "sala";
+    return (
+      <div
+        onClick={() => handleRowClick(emp)}
+        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
+          isSala
+            ? "border-orange-200 dark:border-orange-800/40 hover:bg-orange-50/50 dark:hover:bg-orange-900/10"
+            : "border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
+        }`}
+      >
+        <Avatar className="h-9 w-9 flex-shrink-0">
+          <AvatarImage src={emp.avatar_url ?? undefined} />
+          <AvatarFallback className={`text-[11px] font-semibold ${
+            isSala
+              ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          }`}>
+            {getInitials(emp.full_name)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{emp.full_name ?? "—"}</p>
+          <p className="text-xs text-muted-foreground truncate">{emp.weekly_contract_hours}h/sett · {emp.primary_store_name ?? "—"}</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  {ready ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  )}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs">
+                {ready ? "Pronto per generazione" : "Dati incompleti"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Badge
+            variant={emp.is_active ? "default" : "outline"}
+            className={`text-[10px] ${emp.is_active ? "" : "text-muted-foreground"}`}
+          >
+            {emp.is_active ? "Attivo" : "Inattivo"}
+          </Badge>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div>
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <PageHeader
           title="Dipendenti"
           subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
@@ -122,9 +190,9 @@ const Employees = () => {
           description="Aggiungi i dipendenti per iniziare a pianificare i turni."
         />
       ) : (
-        <>
-          {/* Filters + summary */}
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Filters */}
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap flex-shrink-0">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -134,16 +202,29 @@ const Employees = () => {
                 className="pl-9"
               />
             </div>
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Reparto" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i reparti</SelectItem>
-                <SelectItem value="sala">Sala</SelectItem>
-                <SelectItem value="cucina">Cucina</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Department filter buttons – sidebar-style toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => toggleDeptFilter("sala")}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
+                  deptFilter === "sala"
+                    ? "bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg ring-2 ring-orange-400 dark:ring-orange-500"
+                    : "bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/30"
+                }`}
+              >
+                Sala
+              </button>
+              <button
+                onClick={() => toggleDeptFilter("cucina")}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
+                  deptFilter === "cucina"
+                    ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-white shadow-lg ring-2 ring-emerald-400 dark:ring-emerald-500"
+                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+                }`}
+              >
+                Cucina
+              </button>
+            </div>
             {role === "super_admin" && allStores.length > 0 && (
               <StoreMultiSelect
                 stores={allStores}
@@ -156,92 +237,53 @@ const Employees = () => {
             </Badge>
           </div>
 
-          {/* Table */}
-          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-xs">Dipendente</TableHead>
-                  <TableHead className="text-xs hidden sm:table-cell">Reparto</TableHead>
-                  <TableHead className="text-xs hidden md:table-cell">Ore</TableHead>
-                  <TableHead className="text-xs hidden lg:table-cell">Store</TableHead>
-                  <TableHead className="text-xs text-right">Stato</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TooltipProvider delayDuration={200}>
-                  {filtered.map((emp) => {
-                    const ready = isEmployeeReady(emp);
-                    return (
-                      <TableRow
-                        key={emp.user_id}
-                        className="cursor-pointer"
-                        onClick={() => handleRowClick(emp)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={emp.avatar_url ?? undefined} />
-                              <AvatarFallback className="bg-accent text-accent-foreground text-[11px] font-semibold">
-                                {getInitials(emp.full_name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">{emp.full_name ?? "—"}</p>
-                              <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <Badge variant="secondary" className="text-[11px] capitalize">
-                            {emp.department}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <span className="text-sm text-foreground">{emp.weekly_contract_hours}h</span>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <span className="text-sm text-muted-foreground">{emp.primary_store_name ?? "—"}</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span>
-                                  {ready ? (
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                  ) : (
-                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                  )}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="text-xs">
-                                {ready ? "Pronto per generazione" : "Dati incompleti (contratto/disponibilità)"}
-                              </TooltipContent>
-                            </Tooltip>
-                            <Badge
-                              variant={emp.is_active ? "default" : "outline"}
-                              className={`text-[11px] ${emp.is_active ? "" : "text-muted-foreground"}`}
-                            >
-                              {emp.is_active ? "Attivo" : "Inattivo"}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TooltipProvider>
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
-                      Nessun risultato per i filtri selezionati
-                    </TableCell>
-                  </TableRow>
+          {/* Dual Card System: SALA | CUCINA */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0 overflow-hidden">
+            {/* SALA Column */}
+            <div className="rounded-[32px] border-2 border-orange-200 dark:border-orange-800/40 bg-card shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+              <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
+                  <Users className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <h2 className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wide">Sala</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                  {salaEmployees.length}
+                </Badge>
+              </div>
+              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "cucina" ? "opacity-40" : ""}`}>
+                {salaEmployees.length > 0 ? (
+                  salaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-xs text-muted-foreground">Nessun dipendente in Sala</p>
+                  </div>
                 )}
-              </TableBody>
-            </Table>
+              </div>
+            </div>
+
+            {/* CUCINA Column */}
+            <div className="rounded-[32px] border-2 border-emerald-200 dark:border-emerald-800/40 bg-card shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+              <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+                  <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <h2 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Cucina</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                  {cucinaEmployees.length}
+                </Badge>
+              </div>
+              <div className={`flex-1 overflow-y-auto space-y-2 pr-1 ${deptFilter === "sala" ? "opacity-40" : ""}`}>
+                {cucinaEmployees.length > 0 ? (
+                  cucinaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-xs text-muted-foreground">Nessun dipendente in Cucina</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </>
+        </div>
       )}
 
       <EmployeeDetailDrawer

@@ -60,7 +60,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "rounded-[32px] border border-border/60 bg-card shadow-2xl shadow-black/[0.04] dark:shadow-black/[0.12] p-5";
+  "rounded-[32px] border border-border/60 bg-card shadow-lg shadow-black/[0.04] dark:shadow-black/[0.12] p-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl";
 
 /* ── component ───────────────────────────────────────── */
 
@@ -149,16 +149,18 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header – compact */}
+      {/* Header – greeting */}
       <div className="mb-3 flex-shrink-0">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">Dashboard</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          Benvenuto {displayName} 👋
+        </h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Panoramica generale di tutti gli store e del team
         </p>
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-4 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-3 min-h-0 overflow-hidden">
 
         {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
@@ -308,27 +310,27 @@ const Dashboard = () => {
 
         {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
         <Card className={`${cardBase} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
-          <CardHeader className="p-0 pb-2 flex-shrink-0">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40">
-                <CalendarIcon className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+          <CardHeader className="p-0 pb-1 flex-shrink-0">
+            <CardTitle className="flex items-center gap-2 text-xs font-semibold text-foreground">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40">
+                <CalendarIcon className="h-3 w-3 text-teal-600 dark:text-teal-400" />
               </div>
               Agenda Settimanale
-              <span className="ml-auto text-xs font-normal text-muted-foreground">
+              <span className="ml-auto text-[10px] font-normal text-muted-foreground">
                 {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-auto p-0">
+          <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
             {/* Inverted axes: days as rows (vertical), hours as columns (horizontal) */}
-            <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[10px] min-h-0"
-              style={{ gridTemplateColumns: `3rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
+            <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
+              style={{ gridTemplateColumns: `2.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
               {/* Column headers: hours across the top */}
-              <div className="sticky top-0 bg-card z-10" />
+              <div className="bg-card" />
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="sticky top-0 z-10 bg-card text-center pb-1 font-medium text-muted-foreground"
+                  className="bg-card text-center pb-0.5 font-medium text-muted-foreground text-[9px]"
                 >
                   {String(hour).padStart(2, "0")}
                 </div>
@@ -339,17 +341,17 @@ const Dashboard = () => {
                 return (
                   <div key={i} className="contents">
                     <div
-                      className={`flex flex-col items-center justify-center pr-2 border-t border-border/30 py-1
+                      className={`flex flex-col items-center justify-center pr-1 border-t border-border/30 py-0.5
                         ${isToday ? "text-primary" : "text-muted-foreground"}`}
                     >
-                      <span className="block text-[10px] font-medium">{DAYS_IT[i]}</span>
-                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px]
+                      <span className="block text-[9px] font-medium leading-tight">{DAYS_IT[i]}</span>
+                      <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px]
                         ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
                         {d.getDate()}
                       </span>
                     </div>
                     {HOURS.map((hour) => (
-                      <div key={hour} className="border-t border-border/30 py-1 min-h-[1.5rem]" />
+                      <div key={hour} className="border-t border-border/30 py-0.5 min-h-[1.2rem]" />
                     ))}
                   </div>
                 );
