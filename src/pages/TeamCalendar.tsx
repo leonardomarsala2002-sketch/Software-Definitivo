@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
@@ -11,6 +11,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
@@ -18,7 +21,6 @@ import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
 import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion, type CorrectionAction } from "@/hooks/useOptimizationSuggestions";
-import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
 import { OptimizationPanel } from "@/components/team-calendar/OptimizationPanel";
@@ -50,6 +52,8 @@ const TeamCalendar = () => {
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+
+  const [showOptimizationErrors, setShowOptimizationErrors] = useState(false);
 
   const { data: shifts = [], isLoading: loadingShifts } = useMonthShifts(storeId, year, month);
   const { data: allEmployees = [], isLoading: loadingEmp } = useEmployeeList();
@@ -173,6 +177,13 @@ const TeamCalendar = () => {
   const hasCriticalConflicts = useMemo(() => {
     return suggestions.some(s => s.severity === "critical");
   }, [suggestions]);
+
+  // Auto-show blocking optimization errors popup when generation completes with critical issues
+  useEffect(() => {
+    if (hasCriticalConflicts && hasDraftShifts && canEdit) {
+      setShowOptimizationErrors(true);
+    }
+  }, [hasCriticalConflicts, hasDraftShifts, canEdit]);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(year - 1); }
@@ -353,31 +364,34 @@ const TeamCalendar = () => {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Calendario Team"
-        subtitle={`${activeStore?.name ?? "Store"} · ${department === "sala" ? "Sala" : "Cucina"}`}
-      />
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Compact header with controls */}
+      <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
+        {/* Title */}
+        <div className="mr-auto">
+          <h1 className="text-lg font-bold tracking-tight text-foreground">Calendario Team</h1>
+          <p className="text-[11px] text-muted-foreground">
+            {activeStore?.name ?? "Store"} · {department === "sala" ? "Sala" : "Cucina"}
+          </p>
+        </div>
 
-      {/* Controls bar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Month nav */}
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}>
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-[32px]" onClick={prevMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm font-semibold capitalize min-w-[140px] text-center">{monthLabel}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}>
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-[32px]" onClick={nextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Department toggle */}
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-muted rounded-[32px] p-0.5">
           {(["sala", "cucina"] as const).map((d) => (
             <button
               key={d}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize ${
+              className={`px-3 py-1 text-xs font-medium rounded-[32px] transition-colors capitalize ${
                 department === d
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -389,51 +403,23 @@ const TeamCalendar = () => {
           ))}
         </div>
 
-        {/* Week selector */}
-        <div className="flex items-center gap-1">
-          <button
-            className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-              selectedWeek === null
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setSelectedWeek(null)}
-          >
-            Tutto
-          </button>
-          {Array.from({ length: totalWeeks }, (_, i) => (
-            <button
-              key={i}
-              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-                selectedWeek === i
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setSelectedWeek(i)}
-            >
-              W{i + 1}
-            </button>
-          ))}
-        </div>
-
         {/* Action buttons */}
         {canEdit && (
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2">
             {hasDraftShifts && (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded-[32px]">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 Draft
               </Badge>
             )}
 
-            {/* Approva Proposta (patch mode: drafts alongside published) */}
             {isPatchProposal && (
               <Button
                 size="sm"
                 variant="default"
                 onClick={() => setShowApproveConfirm(true)}
                 disabled={approvePatch.isPending}
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-[32px]"
               >
                 {approvePatch.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -444,14 +430,13 @@ const TeamCalendar = () => {
               </Button>
             )}
 
-            {/* Pubblica Settimana (only if NOT a patch proposal) */}
             {hasAnyDraftShifts && !isPatchProposal && (
               <Button
                 size="sm"
                 variant="default"
                 onClick={() => setShowPublishConfirm(true)}
                 disabled={publishWeek.isPending || hasCriticalConflicts}
-                className="gap-1.5"
+                className="gap-1.5 rounded-[32px]"
                 title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
                 {publishWeek.isPending ? (
@@ -468,7 +453,7 @@ const TeamCalendar = () => {
               variant="outline"
               onClick={() => setShowGenerateConfirm(true)}
               disabled={generateShifts.isPending}
-              className="gap-1.5"
+              className="gap-1.5 rounded-[32px]"
             >
               {generateShifts.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -481,65 +466,11 @@ const TeamCalendar = () => {
         )}
       </div>
 
-      {/* Generation run info banner */}
-      {activeDraftRun && activeDraftRun.status === "completed" && (
-        <div className="mb-4 rounded-lg border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 flex items-start gap-2">
-          <Wand2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-800 dark:text-amber-300">
-            <p className="font-semibold mb-1">
-              Draft generato — Fitness: {activeDraftRun.fitness_score?.toFixed(1) ?? "N/A"}
-              {activeDraftRun.iterations_run && ` (${activeDraftRun.iterations_run} iterazioni)`}
-            </p>
-            {activeDraftRun.notes && <p className="text-amber-700/80 dark:text-amber-400/80">{activeDraftRun.notes}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Optimization Panel - reads suggestions from server */}
-      {canEdit && suggestions.length > 0 && (
-        <OptimizationPanel
-          suggestions={suggestions}
-          onAccept={handleAcceptSuggestion}
-          onDecline={() => {}}
-          onApplyAll={handleApplyAll}
-          onNavigateToDay={(date) => {
-            // Navigate to the correct month if needed
-            const d = new Date(date + "T00:00:00");
-            const targetMonth = d.getMonth() + 1;
-            const targetYear = d.getFullYear();
-            if (targetMonth !== month || targetYear !== year) {
-              setMonth(targetMonth);
-              setYear(targetYear);
-            }
-            setSelectedDate(date);
-          }}
-        />
-      )}
-
-      {/* Uncovered slots warning (only if no draft / optimization panel not shown) */}
-      {(!hasDraftShifts || !canEdit) && uncoveredSlotsMap.size > 0 && (
-        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-          <div className="text-xs text-destructive">
-            <p className="font-semibold mb-1">Copertura insufficiente in {uncoveredSlotsMap.size} giorni</p>
-            <p className="text-destructive/80">
-              Alcuni slot orari non raggiungono il minimo di personale richiesto.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-3">
-            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
-          </div>
-          <Skeleton className="h-[400px] rounded-xl" />
-        </div>
-      ) : (
-        <>
-          <KpiCards shifts={shifts} employeeCount={employees.length} year={year} month={month} />
-
+      {/* Full-view calendar */}
+      <div className="flex-1 min-h-0 overflow-auto">
+        {isLoading ? (
+          <Skeleton className="h-full w-full rounded-[32px]" />
+        ) : (
           <MonthGrid
             year={year}
             month={month}
@@ -552,32 +483,88 @@ const TeamCalendar = () => {
             balances={[]}
             currentStoreId={storeId}
           />
+        )}
+      </div>
 
-          {selectedDate && (
-            <DayDetailDialog
-              open={!!selectedDate}
-              onOpenChange={(v) => !v && setSelectedDate(null)}
-              date={selectedDate}
-              department={department}
-              shifts={shifts}
-              employees={employees}
-              openingHours={openingHours}
-              allowedEntries={allowedEntries}
-              allowedExits={allowedExits}
-              canEdit={canEdit}
-              onCreateShift={(s) =>
-                createShift.mutate({ store_id: storeId!, department, ...s })
-              }
-              onUpdateShift={(id, updates) => updateShift.mutate({ id, updates })}
-              onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
-            />
-          )}
-        </>
+      {selectedDate && (
+        <DayDetailDialog
+          open={!!selectedDate}
+          onOpenChange={(v) => !v && setSelectedDate(null)}
+          date={selectedDate}
+          department={department}
+          shifts={shifts}
+          employees={employees}
+          openingHours={openingHours}
+          allowedEntries={allowedEntries}
+          allowedExits={allowedExits}
+          canEdit={canEdit}
+          onCreateShift={(s) =>
+            createShift.mutate({ store_id: storeId!, department, ...s })
+          }
+          onUpdateShift={(id, updates) => updateShift.mutate({ id, updates })}
+          onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
+        />
+      )}
+
+      {/* Blocking Optimization Errors Popup */}
+      {canEdit && suggestions.length > 0 && showOptimizationErrors && (
+        <Dialog open={showOptimizationErrors} onOpenChange={() => {/* Non-closable: do nothing */}}>
+          <DialogContent
+            className="rounded-[32px] max-w-2xl max-h-[85vh] overflow-hidden [&>button.absolute]:hidden"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                Problemi Rilevati nell'Orario
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                L'algoritmo ha rilevato problemi che devono essere risolti prima di poter procedere. Seleziona una soluzione per ogni problema.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-auto max-h-[60vh]">
+              <OptimizationPanel
+                suggestions={suggestions}
+                onAccept={(s, action) => {
+                  handleAcceptSuggestion(s, action);
+                  // Close popup when all suggestions are resolved
+                  const remaining = suggestions.filter(sg => sg.id !== s.id);
+                  if (remaining.length === 0) {
+                    setShowOptimizationErrors(false);
+                  }
+                }}
+                onDecline={(id) => {
+                  // Check remaining critical suggestions
+                  const remaining = suggestions.filter(s => s.id !== id && s.severity === "critical");
+                  if (remaining.length === 0) {
+                    setShowOptimizationErrors(false);
+                  }
+                }}
+                onApplyAll={() => {
+                  handleApplyAll();
+                  setShowOptimizationErrors(false);
+                }}
+                onNavigateToDay={(date) => {
+                  const d = new Date(date + "T00:00:00");
+                  const targetMonth = d.getMonth() + 1;
+                  const targetYear = d.getFullYear();
+                  if (targetMonth !== month || targetYear !== year) {
+                    setMonth(targetMonth);
+                    setYear(targetYear);
+                  }
+                  setSelectedDate(date);
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Generate confirmation dialog */}
       <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-[32px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
             <AlertDialogDescription>
@@ -596,7 +583,7 @@ const TeamCalendar = () => {
 
       {/* Publish confirmation dialog */}
       <AlertDialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-[32px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Pubblica Settimana</AlertDialogTitle>
             <AlertDialogDescription>
@@ -626,7 +613,7 @@ const TeamCalendar = () => {
 
       {/* Approve patch confirmation dialog */}
       <AlertDialog open={showApproveConfirm} onOpenChange={setShowApproveConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-[32px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Approva Proposta di Copertura</AlertDialogTitle>
             <AlertDialogDescription>
