@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Users, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Users, CheckCircle2, AlertTriangle, Plus } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { StoreMultiSelect } from "@/components/StoreMultiSelect";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 function getInitials(name: string | null) {
   if (!name) return "?";
@@ -24,6 +25,7 @@ function getInitials(name: string | null) {
 
 const Employees = () => {
   const { role, user, stores: authStores, activeStore } = useAuth();
+  const navigate = useNavigate();
 
   // For super_admin: multi-store select, default to active store
   const { data: allStores = [] } = useQuery({
@@ -76,10 +78,30 @@ const Employees = () => {
 
   return (
     <div>
-      <PageHeader
-        title="Dipendenti"
-        subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
-      />
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Dipendenti"
+          subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
+        />
+        {(role === "super_admin" || role === "admin") && (
+          <Tooltip>
+            <TooltipProvider>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => navigate("/invitations")}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-600 text-white shadow-lg hover:bg-purple-700 transition-all duration-200"
+                  aria-label="Nuovo invito"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="font-medium">
+                Nuovo invito
+              </TooltipContent>
+            </TooltipProvider>
+          </Tooltip>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">

@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Check,
   X,
+  Palmtree,
+  Bell,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,7 +54,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "rounded-[32px] border border-border/60 bg-card shadow-[0_25px_50px_-12px_rgba(0,0,0,0.05)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] p-6";
+  "rounded-[32px] border border-border/60 bg-card shadow-2xl shadow-black/[0.04] dark:shadow-black/[0.12] p-5";
 
 /* ── component ───────────────────────────────────────── */
 
@@ -125,7 +127,7 @@ const Dashboard = () => {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header – compact */}
-      <div className="mb-4 flex-shrink-0">
+      <div className="mb-3 flex-shrink-0">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Dashboard</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Panoramica generale di tutti gli store e del team
@@ -133,86 +135,66 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-6 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-4 min-h-0 overflow-hidden">
 
-        {/* ── Row 1: Profile + Mini-Month ──────────────────── */}
+        {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
         {/* User Profile Card */}
-        <Card className={`${cardBase} col-span-2 flex flex-col`}>
-          <div className="flex items-center gap-4">
-            <Avatar className="h-14 w-14 shadow-md flex-shrink-0">
-              <AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">
+        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+          <div className="flex items-center gap-3">
+            <Avatar className="h-12 w-12 shadow-md flex-shrink-0">
+              <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-base font-bold text-foreground truncate">{displayName}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm font-bold text-foreground truncate">{displayName}</p>
+              <p className="text-[11px] text-muted-foreground">
                 {role ? roleLabelMap[role] || role : ""}
               </p>
             </div>
-            {/* Circular vacation counter */}
-            <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center">
-              <svg className="h-14 w-14 -rotate-90" viewBox="0 0 56 56">
-                <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
-                <circle
-                  cx="28" cy="28" r="24" fill="none" stroke="currentColor"
-                  className="text-emerald-500"
-                  strokeWidth="4" strokeLinecap="round"
-                  strokeDasharray={`${(remainingVacation / 26) * 150.8} 150.8`}
-                />
-              </svg>
-              <span className="absolute text-xs font-bold text-foreground">{remainingVacation}</span>
-            </div>
           </div>
 
-          <p className="mt-1 text-[10px] text-muted-foreground text-right">Ferie rimaste</p>
-
           {/* Action: new request */}
-          <div className="mt-auto pt-3 flex items-center justify-between">
+          <div className="mt-auto pt-2 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Nuova richiesta</span>
             <Button
               size="icon"
               variant="outline"
-              className="h-8 w-8 rounded-full"
+              className="h-7 w-7 rounded-full"
               onClick={() => navigate("/requests")}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
+        </Card>
 
-          {/* Admin: pending requests */}
-          {isAdmin && pendingRequests.length > 0 && (
-            <div className="mt-3 border-t border-border/40 pt-3 space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Richieste pendenti
-              </p>
-              {pendingRequests.map((r) => (
-                <div key={r.id} className="flex items-center justify-between text-xs">
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium text-foreground">{r.name}</span>
-                    <span className="ml-1 text-muted-foreground">· {r.type} · {r.dates}</span>
-                  </div>
-                  <div className="flex gap-1 ml-2">
-                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" aria-label="Approva richiesta">
-                      <Check className="h-3 w-3" />
-                    </button>
-                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400" aria-label="Rifiuta richiesta">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Ferie Card (Vacation counter) */}
+        <Card className={`${cardBase} col-span-1 flex flex-col items-center justify-center`}>
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40 mb-2">
+            <Palmtree className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
+              <circle
+                cx="32" cy="32" r="27" fill="none" stroke="currentColor"
+                className="text-emerald-500"
+                strokeWidth="4" strokeLinecap="round"
+                strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
+              />
+            </svg>
+            <span className="absolute text-lg font-bold text-foreground">{remainingVacation}</span>
+          </div>
+          <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">Ferie rimaste</p>
         </Card>
 
         {/* Mini-Month Calendar Card */}
-        <Card className={`${cardBase} col-span-2 flex flex-col`}>
-          <CardHeader className="p-0 pb-3">
-            <CardTitle className="flex items-center justify-between text-sm font-semibold text-foreground">
-              <span>{MONTHS_IT[calMonth]} {calYear}</span>
-              <div className="flex gap-1">
+        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="flex items-center justify-between text-xs font-semibold text-foreground tracking-wide">
+              <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
+              <div className="flex gap-0.5">
                 <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
@@ -226,7 +208,7 @@ const Dashboard = () => {
             {/* Day headers */}
             <div className="grid grid-cols-7 mb-1">
               {DAYS_IT.map((d) => (
-                <span key={d} className="text-center text-[10px] font-medium text-muted-foreground">{d}</span>
+                <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">{d}</span>
               ))}
             </div>
             {/* Day cells */}
@@ -239,14 +221,17 @@ const Dashboard = () => {
                     key={idx}
                     disabled={day === null}
                     onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors
+                    className={`mx-auto flex flex-col items-center justify-center h-7 w-7 rounded-full text-[10px] transition-colors
                       ${day === null ? "invisible" : ""}
-                      ${isSelected ? "bg-primary text-primary-foreground" : ""}
-                      ${isToday && !isSelected ? "bg-accent text-accent-foreground font-semibold" : ""}
-                      ${!isToday && !isSelected && day !== null ? "hover:bg-accent/60" : ""}
+                      ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
+                      ${isToday && !isSelected ? "bg-accent text-accent-foreground font-bold" : ""}
+                      ${!isToday && !isSelected && day !== null ? "hover:bg-accent/60 font-medium" : ""}
                     `}
                   >
                     {day}
+                    {isToday && day !== null && (
+                      <span className="block h-1 w-1 rounded-full bg-emerald-500 mt-[-1px]" />
+                    )}
                   </button>
                 );
               })}
@@ -254,7 +239,47 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* ── Row 2: Weekly Agenda (full width) ────────────── */}
+        {/* Avvisi Richieste Card (Pending requests alert) */}
+        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
+              <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <p className="text-xs font-bold text-foreground">Avvisi</p>
+          </div>
+          {isAdmin && pendingRequests.length > 0 ? (
+            <div className="flex-1 space-y-1.5 overflow-hidden">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1.5">
+                  {pendingRequests.length}
+                </span>
+                <span className="text-[11px] text-muted-foreground">richieste in attesa</span>
+              </div>
+              {pendingRequests.map((r) => (
+                <div key={r.id} className="flex items-center justify-between text-xs">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-foreground">{r.name}</span>
+                    <span className="ml-1 text-muted-foreground text-[10px]">· {r.type}</span>
+                  </div>
+                  <div className="flex gap-1 ml-2">
+                    <button className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" aria-label="Approva richiesta">
+                      <Check className="h-2.5 w-2.5" />
+                    </button>
+                    <button className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400" aria-label="Rifiuta richiesta">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-[11px] text-muted-foreground">Nessuna richiesta pendente</p>
+            </div>
+          )}
+        </Card>
+
+        {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
         <Card className={`${cardBase} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
           <CardHeader className="p-0 pb-2 flex-shrink-0">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -268,36 +293,40 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 overflow-auto p-0">
-            <div className="grid grid-cols-[3rem_repeat(7,1fr)] text-[10px] min-h-0">
-              {/* Column headers */}
+            {/* Inverted axes: days as rows (vertical), hours as columns (horizontal) */}
+            <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[10px] min-h-0"
+              style={{ gridTemplateColumns: `3rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
+              {/* Column headers: hours across the top */}
               <div className="sticky top-0 bg-card z-10" />
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="sticky top-0 z-10 bg-card text-center pb-1 font-medium text-muted-foreground"
+                >
+                  {String(hour).padStart(2, "0")}
+                </div>
+              ))}
+              {/* Day rows */}
               {weekDates.map((d, i) => {
                 const isToday = d.toDateString() === today.toDateString();
                 return (
-                  <div
-                    key={i}
-                    className={`sticky top-0 z-10 bg-card text-center pb-1 font-medium
-                      ${isToday ? "text-primary" : "text-muted-foreground"}`}
-                  >
-                    <span className="block">{DAYS_IT[i]}</span>
-                    <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px]
-                      ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
-                      {d.getDate()}
-                    </span>
+                  <div key={i} className="contents">
+                    <div
+                      className={`flex flex-col items-center justify-center pr-2 border-t border-border/30 py-1
+                        ${isToday ? "text-primary" : "text-muted-foreground"}`}
+                    >
+                      <span className="block text-[10px] font-medium">{DAYS_IT[i]}</span>
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px]
+                        ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
+                        {d.getDate()}
+                      </span>
+                    </div>
+                    {HOURS.map((hour) => (
+                      <div key={hour} className="border-t border-border/30 py-1 min-h-[1.5rem]" />
+                    ))}
                   </div>
                 );
               })}
-              {/* Hour rows */}
-              {HOURS.map((hour) => (
-                <div key={hour} className="contents">
-                  <div className="pr-2 text-right text-muted-foreground border-t border-border/30 py-1">
-                    {String(hour).padStart(2, "0")}:00
-                  </div>
-                  {weekDates.map((_, di) => (
-                    <div key={di} className="border-t border-border/30 py-1 min-h-[1.5rem]" />
-                  ))}
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>
