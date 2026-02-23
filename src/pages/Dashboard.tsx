@@ -70,13 +70,8 @@ function useVacationBalance(userId: string | undefined) {
   return useQuery({
     queryKey: ["vacation-balance", userId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("employee_details")
-        .select("vacation_days_total, vacation_days_used, permission_hours_total, permission_hours_used")
-        .eq("user_id", userId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? { vacation_days_total: 26, vacation_days_used: 0, permission_hours_total: 40, permission_hours_used: 0 };
+      // These columns don't exist yet in employee_details — return defaults
+      return { vacation_days_total: 26, vacation_days_used: 0, permission_hours_total: 40, permission_hours_used: 0 };
     },
     enabled: !!userId,
   });
