@@ -19,8 +19,8 @@ export function AppShell() {
 
   return (
     <SidebarProvider>
-      {/* Page background (zinc satin gray) is set via body in index.css */}
-      <div className="h-screen w-screen p-4 md:p-6 overflow-hidden">
+      {/* Page background (bg-zinc-100) is set via body in index.css */}
+      <div className="h-screen w-screen p-6 overflow-hidden">
         {/* Main Island Container */}
         <div className="flex h-full w-full rounded-[40px] bg-background overflow-hidden shadow-2xl">
           <AppSidebar accentColor={accentColor} />
