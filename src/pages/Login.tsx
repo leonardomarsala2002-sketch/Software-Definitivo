@@ -5,13 +5,21 @@ import { Label } from "@/components/ui/label";
 import { UtensilsCrossed, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import ForgotPasswordDialog from "@/components/ForgotPasswordDialog";
 
 export default function Login() {
+  const { user, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Redirect if already authenticated
+  if (!isLoading && user) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
