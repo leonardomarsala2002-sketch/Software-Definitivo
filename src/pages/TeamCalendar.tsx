@@ -564,7 +564,7 @@ const TeamCalendar = () => {
               openingHours={openingHours}
               allowedEntries={allowedEntries}
               allowedExits={allowedExits}
-              canEdit={false}
+              canEdit={canEdit}
               onCreateShift={(s) =>
                 createShift.mutate({ store_id: storeId!, department, ...s })
               }

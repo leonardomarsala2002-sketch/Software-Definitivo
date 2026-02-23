@@ -840,7 +840,7 @@ Deno.serve(async (req) => {
           const alternatives = findCorrectionAlternatives(slot.date, h, dept);
 
           deptSuggestions.push({
-            id: `uncov-${slot.date}-${h}`,
+            id: `uncov-${dept}-${slot.date}-${h}`,
             type: "uncovered",
             severity: "critical",
             title: `1 ora non coperta ${dayLabel} alle ${h}:00 (${dept === "cucina" ? "Cucina" : "Sala"})`,
@@ -879,7 +879,7 @@ Deno.serve(async (req) => {
               const surplusNames = coveringShifts.slice(-surplus).map(s => nameMap.get(s.user_id) ?? "?").join(", ");
 
               deptSuggestions.push({
-                id: `surplus-${dateStr}-${h}`,
+                id: `surplus-${dept}-${dateStr}-${h}`,
                 type: "surplus",
                 severity: surplus >= 2 ? "warning" : "info",
                 title: `${surplus} persona/e in più ${dayLabel} alle ${h}:00`,
@@ -1111,7 +1111,7 @@ Deno.serve(async (req) => {
                       .from("generation_runs").select("suggestions").eq("id", res.runId).single();
                     if (!runData?.suggestions) continue;
                     const suggs = runData.suggestions as any[];
-                    const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.date}-${slot.hour}`);
+                    const uncovSugg = suggs.find((s: any) => s.id === `uncov-${dept}-${slot.date}-${slot.hour}`);
                     if (uncovSugg && uncovSugg.alternatives) {
                       uncovSugg.alternatives.push({
                         id: `lending-${candidate.user_id}-${slot.date}-${slot.hour}`,
@@ -1175,7 +1175,7 @@ Deno.serve(async (req) => {
                     const { data: runData } = await adminClient
                       .from("generation_runs").select("suggestions").eq("id", runId).single();
                     const suggs = (runData?.suggestions as any[]) ?? [];
-                    const existsKey = `other-surplus-${otherStore.id}-${dateStr}-${h}`;
+                    const existsKey = `other-surplus-${dept}-${otherStore.id}-${dateStr}-${h}`;
                     if (!suggs.find((s: any) => s.id === existsKey)) {
                       suggs.push({
                         id: existsKey,

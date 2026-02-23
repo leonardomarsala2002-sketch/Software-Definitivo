@@ -68,10 +68,16 @@ export function useOptimizationSuggestions(
   const suggestions = useMemo(() => {
     if (!runs || runs.length === 0) return [];
     const all: OptimizationSuggestion[] = [];
+    const seenIds = new Set<string>();
     for (const run of runs) {
       const raw = run.suggestions as unknown as OptimizationSuggestion[] | null;
       if (Array.isArray(raw)) {
-        all.push(...raw);
+        for (const s of raw) {
+          if (!seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            all.push(s);
+          }
+        }
       }
     }
     // Sort: critical first, then warning, then info
