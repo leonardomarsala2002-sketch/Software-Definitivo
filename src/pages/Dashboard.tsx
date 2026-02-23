@@ -9,9 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useStoreRequests } from "@/hooks/useRequests";
+import { useStoreRequests, useReviewRequest } from "@/hooks/useRequests";
+import { useEmployeeList } from "@/hooks/useEmployees";
+import { toast } from "sonner";
 
 interface PersonalShift {
   id: string;
@@ -120,8 +122,29 @@ const Dashboard = () => {
   const { data: shifts = [] } = usePersonalShifts(user?.id);
   const { data: vacationData } = useVacationBalance(user?.id);
   const { data: storeRequests = [] } = useStoreRequests(isAdmin ? activeStore?.id : undefined);
+  const { data: employees = [] } = useEmployeeList();
+  const reviewRequest = useReviewRequest();
+
+  // Build profile map for displaying requester names
+  const profileMap = useMemo(() => {
+    const m = new Map<string, string>();
+    employees.forEach((e) => m.set(e.user_id, e.full_name ?? e.email ?? ""));
+    return m;
+  }, [employees]);
 
   const pendingRequests = storeRequests.filter(r => r.status === "pending");
+
+  // Handle request approval
+  const handleApprove = (requestId: string) => {
+    if (!user?.id) return;
+    reviewRequest.mutate({ id: requestId, status: "approved", reviewedBy: user.id });
+  };
+
+  // Handle request rejection
+  const handleReject = (requestId: string) => {
+    if (!user?.id) return;
+    reviewRequest.mutate({ id: requestId, status: "rejected", reviewedBy: user.id });
+  };
 
   // Group shifts by date
   const shiftsByDate = useMemo(() => {
@@ -395,37 +418,46 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {pendingRequests.slice(0, 5).map(req => (
-                      <div
-                        key={req.id}
-                        className="flex items-center justify-between p-2 rounded-xl bg-accent/30 hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate capitalize">
-                            {req.request_type.replace(/_/g, " ")}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {format(parseISO(req.request_date), "d MMM", { locale: it })}
-                          </p>
+                    {pendingRequests.slice(0, 5).map(req => {
+                      const requesterName = profileMap.get(req.user_id) || "Dipendente";
+                      return (
+                        <div
+                          key={req.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-accent/30 hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">
+                              {requesterName}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground capitalize">
+                              {req.request_type.replace(/_/g, " ")} · {format(parseISO(req.request_date), "d MMM", { locale: it })}
+                            </p>
+                          </div>
+                          <div className="flex gap-1 ml-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full bg-green-500/10 hover:bg-green-500/20 text-green-600"
+                              onClick={() => handleApprove(req.id)}
+                              disabled={reviewRequest.isPending}
+                              title="Accetta richiesta"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive"
+                              onClick={() => handleReject(req.id)}
+                              disabled={reviewRequest.isPending}
+                              title="Rifiuta richiesta"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex gap-1 ml-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-full bg-green-500/10 hover:bg-green-500/20 text-green-600"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
