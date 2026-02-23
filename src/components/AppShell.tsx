@@ -4,28 +4,31 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { getAccentColorForPath } from "@/config/navigation";
 
-// Accent color background classes for each section
-const accentBackgrounds: Record<string, string> = {
-  blue: "bg-blue-50/30 dark:bg-blue-950/10",
-  green: "bg-green-50/30 dark:bg-green-950/10",
-  amber: "bg-amber-50/30 dark:bg-amber-950/10",
-  purple: "bg-purple-50/30 dark:bg-purple-950/10",
-  rose: "bg-rose-50/30 dark:bg-rose-950/10",
+// Accent color border classes for each section - applied to widgets
+const accentBorders: Record<string, string> = {
+  blue: "border-blue-400/40 dark:border-blue-500/30",
+  green: "border-green-400/40 dark:border-green-500/30",
+  amber: "border-amber-400/40 dark:border-amber-500/30",
+  purple: "border-purple-400/40 dark:border-purple-500/30",
+  rose: "border-rose-400/40 dark:border-rose-500/30",
 };
 
 export function AppShell() {
   const location = useLocation();
   const accentColor = getAccentColorForPath(location.pathname);
-  const bgClass = accentBackgrounds[accentColor] || accentBackgrounds.blue;
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden">
-        <AppSidebar />
-        <main className={`flex-1 overflow-auto ${bgClass} transition-colors duration-300 px-5 py-4 pb-24 md:px-6 md:py-4 md:pb-4`}>
-          <Outlet />
-        </main>
-        <MobileBottomNav />
+      {/* Page background (zinc satin gray) is set via body in index.css */}
+      <div className="h-screen w-screen p-4 md:p-6 overflow-hidden">
+        {/* Main Island Container */}
+        <div className="flex h-full w-full rounded-[40px] bg-background overflow-hidden shadow-2xl">
+          <AppSidebar accentColor={accentColor} />
+          <main className="flex-1 overflow-hidden transition-colors duration-300 p-4 md:p-6">
+            <Outlet context={{ accentColor, accentBorders }} />
+          </main>
+          <MobileBottomNav accentColor={accentColor} />
+        </div>
       </div>
     </SidebarProvider>
   );
