@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
-import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +23,12 @@ import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
 import { OptimizationPanel } from "@/components/team-calendar/OptimizationPanel";
 import EmptyState from "@/components/EmptyState";
 import { toast } from "sonner";
+import { useOutletContext } from "react-router-dom";
+
+interface OutletContextType {
+  accentColor: string;
+  accentBorders: Record<string, string>;
+}
 
 function getWeekStartForWeek(year: number, month: number, weekIdx: number): string {
   const firstDay = new Date(year, month - 1, 1);
@@ -341,23 +346,29 @@ const TeamCalendar = () => {
 
   if (!storeId) {
     return (
-      <div>
-        <PageHeader title="Calendario Team" subtitle="Seleziona uno store per visualizzare il calendario" />
-        <EmptyState
-          icon={<CalendarDays className="h-6 w-6" />}
-          title="Nessuno store selezionato"
-          description="Seleziona uno store dalla barra laterale."
-        />
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={<CalendarDays className="h-6 w-6" />}
+            title="Nessuno store selezionato"
+            description="Seleziona uno store dalla barra laterale."
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Calendario Team"
-        subtitle={`${activeStore?.name ?? "Store"} · ${department === "sala" ? "Sala" : "Cucina"}`}
-      />
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header with title and controls */}
+      <div className="shrink-0 mb-4">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-2xl">📅</span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Calendario Team</h1>
+            <p className="text-xs text-muted-foreground">{activeStore?.name ?? "Store"} · {department === "sala" ? "Sala" : "Cucina"}</p>
+          </div>
+        </div>
 
       {/* Controls bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -643,6 +654,7 @@ const TeamCalendar = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 };

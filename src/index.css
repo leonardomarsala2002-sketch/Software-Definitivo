@@ -4,7 +4,10 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
+    /* Island layout - satin gray background */
+    --page-background: 240 6% 90%;
+    
+    --background: 0 0% 100%;
     --foreground: 224 30% 12%;
 
     --card: 0 0% 100%;
@@ -34,7 +37,7 @@
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 100%;
+    --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 220 12% 42%;
     --sidebar-primary: 225 65% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -47,16 +50,26 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+
+    /* Section accent colors */
+    --section-blue: 225 65% 52%;
+    --section-green: 152 60% 42%;
+    --section-amber: 38 92% 50%;
+    --section-purple: 280 60% 50%;
+    --section-rose: 350 80% 55%;
   }
 
   .dark {
-    --background: 224 28% 7%;
+    /* Island layout - dark satin background */
+    --page-background: 240 6% 6%;
+    
+    --background: 224 24% 11%;
     --foreground: 210 20% 96%;
 
-    --card: 224 24% 11%;
+    --card: 224 24% 13%;
     --card-foreground: 210 20% 96%;
 
-    --popover: 224 24% 11%;
+    --popover: 224 24% 13%;
     --popover-foreground: 210 20% 96%;
 
     --primary: 225 65% 58%;
@@ -91,6 +104,13 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 90% 55%;
     --warning-foreground: 0 0% 100%;
+
+    /* Section accent colors - slightly brighter in dark mode */
+    --section-blue: 225 70% 60%;
+    --section-green: 152 65% 50%;
+    --section-amber: 38 95% 55%;
+    --section-purple: 280 65% 58%;
+    --section-rose: 350 85% 60%;
   }
 }
 
@@ -99,8 +119,64 @@
     @apply border-border;
   }
 
+  html {
+    overflow: hidden;
+    height: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
+    background: hsl(var(--page-background));
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Island glow effects for active sidebar items */
+@layer utilities {
+  .emoji-glow-blue {
+    box-shadow: inset 0 0 12px 2px hsl(225 65% 52% / 0.3), 0 0 8px 1px hsl(225 65% 52% / 0.2);
+  }
+  .emoji-glow-green {
+    box-shadow: inset 0 0 12px 2px hsl(152 60% 42% / 0.3), 0 0 8px 1px hsl(152 60% 42% / 0.2);
+  }
+  .emoji-glow-amber {
+    box-shadow: inset 0 0 12px 2px hsl(38 92% 50% / 0.3), 0 0 8px 1px hsl(38 92% 50% / 0.2);
+  }
+  .emoji-glow-purple {
+    box-shadow: inset 0 0 12px 2px hsl(280 60% 50% / 0.3), 0 0 8px 1px hsl(280 60% 50% / 0.2);
+  }
+  .emoji-glow-rose {
+    box-shadow: inset 0 0 12px 2px hsl(350 80% 55% / 0.3), 0 0 8px 1px hsl(350 80% 55% / 0.2);
+  }
+
+  .dark .emoji-glow-blue {
+    box-shadow: inset 0 0 14px 3px hsl(225 70% 60% / 0.35), 0 0 10px 2px hsl(225 70% 60% / 0.25);
+  }
+  .dark .emoji-glow-green {
+    box-shadow: inset 0 0 14px 3px hsl(152 65% 50% / 0.35), 0 0 10px 2px hsl(152 65% 50% / 0.25);
+  }
+  .dark .emoji-glow-amber {
+    box-shadow: inset 0 0 14px 3px hsl(38 95% 55% / 0.35), 0 0 10px 2px hsl(38 95% 55% / 0.25);
+  }
+  .dark .emoji-glow-purple {
+    box-shadow: inset 0 0 14px 3px hsl(280 65% 58% / 0.35), 0 0 10px 2px hsl(280 65% 58% / 0.25);
+  }
+  .dark .emoji-glow-rose {
+    box-shadow: inset 0 0 14px 3px hsl(350 85% 60% / 0.35), 0 0 10px 2px hsl(350 85% 60% / 0.25);
+  }
+
+  /* Super round card shadow */
+  .shadow-bento {
+    box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.05);
+  }
+  .dark .shadow-bento {
+    box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.3);
   }
 }

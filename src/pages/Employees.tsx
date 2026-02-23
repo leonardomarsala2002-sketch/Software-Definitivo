@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { Users, CheckCircle2, AlertTriangle, Plus } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList, isEmployeeReady, type EmployeeRow } from "@/hooks/useEmployees";
@@ -18,6 +17,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { StoreMultiSelect } from "@/components/StoreMultiSelect";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOutletContext } from "react-router-dom";
+
+interface OutletContextType {
+  accentColor: string;
+  accentBorders: Record<string, string>;
+}
 
 function getInitials(name: string | null) {
   if (!name) return "?";
@@ -79,59 +84,69 @@ const Employees = () => {
   const readyCount = filtered.filter(isEmployeeReady).length;
 
   return (
-    <div>
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <PageHeader
-          title="Dipendenti"
-          subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
-        />
-        {canInvite && (
-          <Button
-            onClick={() => setInviteDialogOpen(true)}
-            className="gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Invita</span>
-          </Button>
-        )}
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 mb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">👥</span>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Dipendenti</h1>
+              <p className="text-xs text-muted-foreground">Gestisci il personale, i ruoli e le assegnazioni agli store</p>
+            </div>
+          </div>
+          {canInvite && (
+            <Button
+              onClick={() => setInviteDialogOpen(true)}
+              className="gap-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white shrink-0 transition-all duration-300"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Invita</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="space-y-3">
+        <div className="space-y-3 flex-1 overflow-auto">
           {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            <Skeleton key={i} className="h-14 w-full rounded-2xl" />
           ))}
         </div>
       ) : error ? (
-        <EmptyState
-          icon={<Users className="h-6 w-6" />}
-          title="Errore caricamento"
-          description={error instanceof Error ? error.message : "Si è verificato un errore"}
-        />
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={<Users className="h-6 w-6" />}
+            title="Errore caricamento"
+            description={error instanceof Error ? error.message : "Si è verificato un errore"}
+          />
+        </div>
       ) : employees && employees.length === 0 ? (
-        <EmptyState
-          icon={<Users className="h-6 w-6" />}
-          title="Nessun dipendente"
-          description="Aggiungi i dipendenti per iniziare a pianificare i turni."
-        />
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={<Users className="h-6 w-6" />}
+            title="Nessun dipendente"
+            description="Aggiungi i dipendenti per iniziare a pianificare i turni."
+          />
+        </div>
       ) : (
-        <>
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Filters + summary */}
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap shrink-0">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Cerca per nome o email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className="pl-9 rounded-2xl"
               />
             </div>
             <Select value={deptFilter} onValueChange={setDeptFilter}>
-              <SelectTrigger className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-40 rounded-2xl">
                 <SelectValue placeholder="Reparto" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-2xl">
                 <SelectItem value="all">Tutti i reparti</SelectItem>
                 <SelectItem value="sala">Sala</SelectItem>
                 <SelectItem value="cucina">Cucina</SelectItem>
@@ -144,13 +159,13 @@ const Employees = () => {
                 onChange={setSelectedStoreIds}
               />
             )}
-            <Badge variant="secondary" className="text-xs whitespace-nowrap hidden sm:inline-flex">
+            <Badge variant="secondary" className="text-xs whitespace-nowrap hidden sm:inline-flex rounded-full px-3">
               {readyCount}/{filtered.length} pronti
             </Badge>
           </div>
 
           {/* Table */}
-          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="rounded-[24px] border border-border/40 bg-card shadow-bento overflow-hidden flex-1 min-h-0 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -168,12 +183,12 @@ const Employees = () => {
                     return (
                       <TableRow
                         key={emp.user_id}
-                        className="cursor-pointer"
+                        className="cursor-pointer transition-colors duration-300"
                         onClick={() => handleRowClick(emp)}
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
+                            <Avatar className="h-9 w-9">
                               <AvatarImage src={emp.avatar_url ?? undefined} />
                               <AvatarFallback className="bg-accent text-accent-foreground text-[11px] font-semibold">
                                 {getInitials(emp.full_name)}
@@ -186,7 +201,7 @@ const Employees = () => {
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          <Badge variant="secondary" className="text-[11px] capitalize">
+                          <Badge variant="secondary" className="text-[11px] capitalize rounded-full">
                             {emp.department}
                           </Badge>
                         </TableCell>
@@ -208,13 +223,13 @@ const Employees = () => {
                                   )}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="text-xs">
+                              <TooltipContent side="left" className="text-xs rounded-xl">
                                 {ready ? "Pronto per generazione" : "Dati incompleti (contratto/disponibilità)"}
                               </TooltipContent>
                             </Tooltip>
                             <Badge
                               variant={emp.is_active ? "default" : "outline"}
-                              className={`text-[11px] ${emp.is_active ? "" : "text-muted-foreground"}`}
+                              className={`text-[11px] rounded-full ${emp.is_active ? "" : "text-muted-foreground"}`}
                             >
                               {emp.is_active ? "Attivo" : "Inattivo"}
                             </Badge>
@@ -234,7 +249,7 @@ const Employees = () => {
               </TableBody>
             </Table>
           </div>
-        </>
+        </div>
       )}
 
       <EmployeeDetailDrawer
