@@ -512,11 +512,17 @@ export type Database = {
           generation_run_id: string
           id: string
           reason: string | null
+          source_approved: boolean | null
+          source_approved_at: string | null
+          source_approved_by: string | null
           source_store_id: string
           status: string
           suggested_date: string
           suggested_end_time: string
           suggested_start_time: string
+          target_approved: boolean | null
+          target_approved_at: string | null
+          target_approved_by: string | null
           target_store_id: string
           user_id: string
         }
@@ -526,11 +532,17 @@ export type Database = {
           generation_run_id: string
           id?: string
           reason?: string | null
+          source_approved?: boolean | null
+          source_approved_at?: string | null
+          source_approved_by?: string | null
           source_store_id: string
           status?: string
           suggested_date: string
           suggested_end_time: string
           suggested_start_time: string
+          target_approved?: boolean | null
+          target_approved_at?: string | null
+          target_approved_by?: string | null
           target_store_id: string
           user_id: string
         }
@@ -540,11 +552,17 @@ export type Database = {
           generation_run_id?: string
           id?: string
           reason?: string | null
+          source_approved?: boolean | null
+          source_approved_at?: string | null
+          source_approved_by?: string | null
           source_store_id?: string
           status?: string
           suggested_date?: string
           suggested_end_time?: string
           suggested_start_time?: string
+          target_approved?: boolean | null
+          target_approved_at?: string | null
+          target_approved_by?: string | null
           target_store_id?: string
           user_id?: string
         }
