@@ -106,7 +106,6 @@
     -webkit-user-drag: none;
     -webkit-overflow-scrolling: auto;
     overscroll-behavior: none;
-    touch-action: none;
   }
 
   body {

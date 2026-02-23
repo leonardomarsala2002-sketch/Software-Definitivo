@@ -230,7 +230,7 @@ const Dashboard = () => {
                   >
                     {day}
                     {isToday && day !== null && (
-                      <span className="block h-1 w-1 rounded-full bg-emerald-500 mt-[-1px]" />
+                      <span className="block h-1 w-1 rounded-full bg-emerald-500 -mt-px" />
                     )}
                   </button>
                 );
