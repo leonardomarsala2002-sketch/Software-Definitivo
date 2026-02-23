@@ -56,7 +56,7 @@ export function useGenerateShifts() {
       const depts = data?.departments ?? [];
       const totalUncovered = depts.reduce((acc: number, d: any) => acc + (d.uncovered ?? 0), 0);
       if (totalUncovered > 0) {
-        toast.warning(`Turni generati con ${totalUncovered} slot non coperti`);
+        toast.warning(`Turni generati con ${totalUncovered} slot non coperti. Controlla i suggerimenti nel pannello Health Check.`);
       } else {
         const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
         toast.success(`Turni generati: ${totalShifts} turni`);
