@@ -2,7 +2,6 @@ import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Tooltip,
@@ -20,8 +19,18 @@ import {
 import { UtensilsCrossed, Store, LogOut, User, Moon, Sun } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 
+// Type for section color configuration
+interface SectionColorConfig {
+  bg: string;
+  bgHover: string;
+  text: string;
+  darkBg: string;
+  darkBgHover: string;
+  darkText: string;
+}
+
 // Dynamic color themes for each navigation section
-const sectionColors: Record<string, { bg: string; bgHover: string; text: string; darkBg: string; darkBgHover: string; darkText: string }> = {
+const sectionColors: Record<string, SectionColorConfig> = {
   "/": { bg: "bg-blue-100", bgHover: "hover:bg-blue-50", text: "text-blue-600", darkBg: "dark:bg-blue-900/40", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-400" },
   "/team-calendar": { bg: "bg-green-100", bgHover: "hover:bg-green-50", text: "text-green-600", darkBg: "dark:bg-green-900/40", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-400" },
   "/personal-calendar": { bg: "bg-teal-100", bgHover: "hover:bg-teal-50", text: "text-teal-600", darkBg: "dark:bg-teal-900/40", darkBgHover: "dark:hover:bg-teal-900/30", darkText: "dark:text-teal-400" },
@@ -33,7 +42,7 @@ const sectionColors: Record<string, { bg: string; bgHover: string; text: string;
   "/info": { bg: "bg-cyan-100", bgHover: "hover:bg-cyan-50", text: "text-cyan-600", darkBg: "dark:bg-cyan-900/40", darkBgHover: "dark:hover:bg-cyan-900/30", darkText: "dark:text-cyan-400" },
 };
 
-const getColorForPath = (url: string) => {
+const getColorForPath = (url: string): SectionColorConfig => {
   return sectionColors[url] || sectionColors["/"];
 };
 
