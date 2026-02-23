@@ -735,33 +735,129 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Compute optimization suggestions server-side
+        // Compute optimization suggestions server-side with SPECIFIC corrective actions
         const deptSuggestions: any[] = [];
         const empMapForSugg = new Map(employees.map(e => [e.user_id, e]));
         const { data: profilesForSugg } = await adminClient
           .from("profiles").select("id, full_name").in("id", employees.map(e => e.user_id));
         const nameMap = new Map((profilesForSugg ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
 
-        // Uncovered slot suggestions
+        // Helper: find employees who could cover an uncovered slot
+        function findCorrectionAlternatives(dateStr: string, uncoveredHour: number, dept: "sala" | "cucina"): any[] {
+          const alts: any[] = [];
+          const dayShifts = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
+          const dow = getDayOfWeek(dateStr);
+
+          // 1) Employees already working that day who could start earlier
+          for (const s of dayShifts) {
+            const startH = parseInt(s.start_time!.split(":")[0], 10);
+            if (startH > uncoveredHour && startH - uncoveredHour <= 2) {
+              const empName = nameMap.get(s.user_id) ?? "Dipendente";
+              alts.push({
+                id: `earlier-${s.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `${empName} arriva alle ${uncoveredHour}:00`,
+                description: `${empName} anticipa l'entrata da ${s.start_time?.slice(0,5)} a ${uncoveredHour}:00 (${startH - uncoveredHour}h prima)`,
+                actionType: "shift_earlier",
+                userId: s.user_id,
+                userName: empName,
+                shiftId: s.generation_run_id ? undefined : undefined, // Will use the shift from DB
+                newStartTime: `${String(uncoveredHour).padStart(2,"0")}:00`,
+                newEndTime: s.end_time,
+              });
+            }
+          }
+
+          // 2) Employees already working who could stay later
+          for (const s of dayShifts) {
+            let endH = parseInt(s.end_time!.split(":")[0], 10);
+            if (endH === 0) endH = 24;
+            if (endH <= uncoveredHour && uncoveredHour - endH <= 2) {
+              const empName = nameMap.get(s.user_id) ?? "Dipendente";
+              const newEnd = uncoveredHour + 1;
+              alts.push({
+                id: `later-${s.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `${empName} esce alle ${newEnd}:00`,
+                description: `${empName} prolunga il turno da ${s.end_time?.slice(0,5)} a ${newEnd}:00 (+${newEnd - endH}h)`,
+                actionType: "shift_later",
+                userId: s.user_id,
+                userName: empName,
+                newStartTime: s.start_time,
+                newEndTime: `${String(newEnd === 24 ? 0 : newEnd).padStart(2,"0")}:00`,
+              });
+            }
+          }
+
+          // 3) Available employees not working that day — add a split shift
+          const workingUserIds = new Set(dayShifts.map(s => s.user_id));
+          const deptEmps = employees.filter(e => e.department === dept && e.is_active);
+          for (const emp of deptEmps) {
+            if (workingUserIds.has(emp.user_id)) continue;
+            if (!isAvailable(emp.user_id, dateStr, availability, allExceptions)) continue;
+            const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+            const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+            if (!canCover) continue;
+            const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+            if (empWeeklyUsed >= emp.weekly_contract_hours + 5) continue;
+            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+            // Find a reasonable shift block
+            const nearestEntry = effectiveEntries_final.reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, effectiveEntries_final[0] ?? uncoveredHour);
+            const nearestExit = effectiveExits_final.find(e => e > nearestEntry) ?? nearestEntry + 4;
+            alts.push({
+              id: `split-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+              label: `Aggiungi ${empName} (${nearestEntry}:00-${nearestExit}:00)`,
+              description: `${empName} (giorno libero) viene a coprire dalle ${nearestEntry}:00 alle ${nearestExit}:00. Ore settimanali: ${empWeeklyUsed}/${emp.weekly_contract_hours}h`,
+              actionType: "add_split",
+              userId: emp.user_id,
+              userName: empName,
+              newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+              newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
+            });
+            if (alts.length >= 5) break;
+          }
+
+          return alts.slice(0, 5); // Max 5 alternatives
+        }
+
+        // Track weekly hours from best result for alternative calculations
+        const weeklyHours_final = new Map<string, number>();
+        for (const s of shifts) {
+          if (s.is_day_off || !s.start_time || !s.end_time) continue;
+          const dur = parseHour(s.end_time) - parseHour(s.start_time);
+          weeklyHours_final.set(s.user_id, (weeklyHours_final.get(s.user_id) ?? 0) + dur);
+        }
+        const effectiveEntries_final = allowedData
+          .filter(t => t.department === dept && t.kind === "entry" && t.is_active)
+          .map(t => t.hour).sort((a, b) => a - b);
+        const effectiveExits_final = allowedData
+          .filter(t => t.department === dept && t.kind === "exit" && t.is_active)
+          .map(t => t.hour).sort((a, b) => a - b);
+
+        // Uncovered slot suggestions with SPECIFIC alternatives
         for (const slot of uncoveredSlots) {
           const h = parseInt(slot.hour.split(":")[0], 10);
           const d = new Date(slot.date + "T00:00:00");
           const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+          const alternatives = findCorrectionAlternatives(slot.date, h, dept);
+
           deptSuggestions.push({
             id: `uncov-${slot.date}-${h}`,
             type: "uncovered",
             severity: "critical",
-            title: `Copertura mancante ${dayLabel} ore ${h}:00`,
-            description: `Slot non coperto. Assegnazione necessaria.`,
-            actionLabel: "Vai al giorno",
-            declineLabel: "Ignora",
+            title: `1 ora non coperta ${dayLabel} alle ${h}:00 (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            description: alternatives.length > 0
+              ? `Slot ${h}:00-${h + 1}:00 scoperto. ${alternatives.length} soluzioni disponibili.`
+              : `Slot ${h}:00-${h + 1}:00 scoperto. Nessun dipendente disponibile internamente.`,
+            actionLabel: alternatives.length > 0 ? alternatives[0].label : "Vai al giorno",
+            declineLabel: alternatives.length > 1 ? "Altra soluzione" : "Ignora",
             date: slot.date,
+            slot: `${h}:00`,
+            alternatives,
           });
         }
 
-        // Surplus suggestions
+        // Surplus suggestions with specific details
         const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
-        for (const dateStr of weekDates) {
+        for (const dateStr of iterDates) {
           const dow = getDayOfWeek(dateStr);
           const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
           const dayShifts = insertedShifts.filter(s => s.date === dateStr);
@@ -776,45 +872,38 @@ Deno.serve(async (req) => {
               if (h >= sh && h < eh) coveringShifts.push(s);
             }
 
-            if (coveringShifts.length > cov.min_staff_required + 1) {
-              const rankedByBalance = [...coveringShifts].sort((a, b) =>
-                (hourBalances.get(b.user_id) ?? 0) - (hourBalances.get(a.user_id) ?? 0)
-              );
-              const candidate = rankedByBalance[0];
-              const empName = nameMap.get(candidate.user_id) ?? "Dipendente";
-              const empBalance = hourBalances.get(candidate.user_id) ?? 0;
+            const surplus = coveringShifts.length - cov.min_staff_required;
+            if (surplus >= 1) {
               const dayD = new Date(dateStr + "T00:00:00");
               const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+              const surplusNames = coveringShifts.slice(-surplus).map(s => nameMap.get(s.user_id) ?? "?").join(", ");
 
-              if (empBalance > 0) {
-                const reductionHours = Math.min(empBalance, 2);
-                deptSuggestions.push({
-                  id: `hourreduce-${dateStr}-${h}-${candidate.user_id}`,
-                  type: "hour_reduction",
-                  severity: "info",
-                  title: `Riduci ore ${empName} ${dayLabel}`,
-                  description: `Surplus (${coveringShifts.length}/${cov.min_staff_required}). ${empName} ha +${empBalance}h nel monte ore. Ridurre di ${reductionHours}h.`,
-                  actionLabel: "Applica Riduzione",
-                  declineLabel: "Ignora",
-                  userId: candidate.user_id,
-                  userName: empName,
-                  date: dateStr,
-                  suggestedHours: reductionHours,
-                });
-              } else {
-                deptSuggestions.push({
-                  id: `surplus-${dateStr}-${h}`,
-                  type: "surplus",
-                  severity: "warning",
-                  title: `Surplus ${dayLabel} ore ${h}:00`,
-                  description: `Troppe persone (${coveringShifts.length}/${cov.min_staff_required}). Rimuovere il turno di ${empName}?`,
-                  actionLabel: "Rimuovi Turno",
-                  declineLabel: "Ignora",
-                  userId: candidate.user_id,
-                  userName: empName,
-                  date: dateStr,
-                });
-              }
+              deptSuggestions.push({
+                id: `surplus-${dateStr}-${h}`,
+                type: "surplus",
+                severity: surplus >= 2 ? "warning" : "info",
+                title: `${surplus} persona/e in più ${dayLabel} alle ${h}:00`,
+                description: `Presenti ${coveringShifts.length} su ${cov.min_staff_required} richiesti. Surplus: ${surplusNames}`,
+                actionLabel: "Vedi Dettagli",
+                declineLabel: "Ignora",
+                date: dateStr,
+                slot: `${h}:00`,
+                surplusCount: surplus,
+                surplusReason: `${coveringShifts.length} presenti vs ${cov.min_staff_required} richiesti alle ${h}:00`,
+                alternatives: coveringShifts.slice(-surplus).map(s => {
+                  const empName = nameMap.get(s.user_id) ?? "Dipendente";
+                  const empBal = hourBalances.get(s.user_id) ?? 0;
+                  return {
+                    id: `remove-${s.user_id}-${dateStr}-${h}`,
+                    label: `Rimuovi turno ${empName}`,
+                    description: `${empName} ha ${weeklyHours_final.get(s.user_id) ?? 0}h questa settimana (contratto: ${empMapForSugg.get(s.user_id)?.weekly_contract_hours ?? 40}h, bilancio: ${empBal > 0 ? "+" : ""}${empBal}h)`,
+                    actionType: "remove_surplus",
+                    userId: s.user_id,
+                    userName: empName,
+                    shiftId: s.generation_run_id, // reference
+                  };
+                }),
+              });
             }
           }
         }
@@ -826,14 +915,15 @@ Deno.serve(async (req) => {
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             const direction = balance > 0 ? "eccesso" : "deficit";
             const absBalance = Math.abs(balance);
+            const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
             deptSuggestions.push({
               id: `balance-${emp.user_id}`,
               type: "overtime_balance",
               severity: absBalance >= 5 ? "warning" : "info",
-              title: `${empName}: ${direction} ${absBalance}h`,
+              title: `${empName}: ${direction} ${absBalance}h nel monte ore`,
               description: balance > 0
-                ? `Ha accumulato +${absBalance}h. Ridurre di ${Math.min(absBalance, 2)}h questa settimana.`
-                : `Ha un deficit di ${absBalance}h. Aumentare le ore questa settimana.`,
+                ? `Ha accumulato +${absBalance}h. Questa settimana: ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto. Suggerito ridurre di ${Math.min(absBalance, 2)}h.`
+                : `Ha un deficit di ${absBalance}h. Questa settimana: ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto. Suggerito aumentare.`,
               actionLabel: balance > 0 ? "Applica Riduzione" : "Applica Aumento",
               declineLabel: "Ignora",
               userId: emp.user_id,
@@ -939,7 +1029,6 @@ Deno.serve(async (req) => {
             const dow = getDayOfWeek(slot.date);
 
             for (const otherStore of sameCityStores) {
-              // Get other store's coverage + shifts for this date+hour+dept
               const [otherCovRes, otherShiftsRes] = await Promise.all([
                 adminClient.from("store_coverage_requirements").select("*")
                   .eq("store_id", otherStore.id).eq("department", dept).eq("day_of_week", dow),
@@ -953,11 +1042,9 @@ Deno.serve(async (req) => {
                 s => !s.is_day_off && s.start_time && s.end_time
               );
 
-              // Find coverage requirement for this hour
               const covForHour = otherCov.find(c => parseInt(c.hour_slot.split(":")[0], 10) === slot.hour);
               if (!covForHour) continue;
 
-              // Count staff covering this hour
               let otherStaffCount = 0;
               const coveringShifts: any[] = [];
               for (const s of otherShifts) {
@@ -970,24 +1057,26 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Surplus: more staff than needed
               if (otherStaffCount > covForHour.min_staff_required) {
-                // Pick an employee to lend (prefer highest hour balance)
+                const surplusCount = otherStaffCount - covForHour.min_staff_required;
                 const surplusUserIds = coveringShifts.map(s => s.user_id);
-                const { data: surplusStats } = await adminClient
-                  .from("employee_stats").select("user_id, current_balance")
-                  .eq("store_id", otherStore.id).in("user_id", surplusUserIds);
+                const [surplusStatsRes, surplusProfilesRes] = await Promise.all([
+                  adminClient.from("employee_stats").select("user_id, current_balance")
+                    .eq("store_id", otherStore.id).in("user_id", surplusUserIds),
+                  adminClient.from("profiles").select("id, full_name")
+                    .in("id", surplusUserIds),
+                ]);
 
-                const balMap = new Map((surplusStats ?? []).map(s => [s.user_id, Number(s.current_balance)]));
+                const balMap = new Map((surplusStatsRes.data ?? []).map(s => [s.user_id, Number(s.current_balance)]));
+                const lendNameMap = new Map((surplusProfilesRes.data ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
                 const sorted = [...coveringShifts].sort((a, b) => (balMap.get(b.user_id) ?? 0) - (balMap.get(a.user_id) ?? 0));
                 const candidate = sorted[0];
                 if (!candidate) continue;
 
-                // Find the generation_run_id for this dept
+                const candidateName = lendNameMap.get(candidate.user_id) ?? "Dipendente";
                 const runId = results.find(r => r.department === dept)?.runId;
                 if (!runId) continue;
 
-                // Check if lending suggestion already exists
                 const { data: existing } = await adminClient
                   .from("lending_suggestions").select("id")
                   .eq("generation_run_id", runId)
@@ -996,9 +1085,6 @@ Deno.serve(async (req) => {
                   .maybeSingle();
 
                 if (!existing) {
-                  const startTime = candidate.start_time;
-                  const endTime = candidate.end_time;
-
                   await adminClient.from("lending_suggestions").insert({
                     generation_run_id: runId,
                     user_id: candidate.user_id,
@@ -1006,16 +1092,112 @@ Deno.serve(async (req) => {
                     target_store_id: store_id,
                     department: dept,
                     suggested_date: slot.date,
-                    suggested_start_time: startTime,
-                    suggested_end_time: endTime,
-                    reason: `Surplus a ${otherStore.name} (${otherStaffCount}/${covForHour.min_staff_required}), carenza a store corrente nello slot ${slot.hour}:00`,
+                    suggested_start_time: candidate.start_time,
+                    suggested_end_time: candidate.end_time,
+                    reason: `${candidateName} da ${otherStore.name} (surplus ${surplusCount} persona/e alle ${slot.hour}:00). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}`,
                     status: "pending",
                   } as any);
 
                   lendingSuggestionsCreated++;
+
+                  // Also add lending as an alternative to the uncovered suggestion
+                  const dayD = new Date(slot.date + "T00:00:00");
+                  const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+
+                  // Find the matching uncovered suggestion in results and append lending alternative
+                  for (const res of results) {
+                    if (res.department !== dept) continue;
+                    const { data: runData } = await adminClient
+                      .from("generation_runs").select("suggestions").eq("id", res.runId).single();
+                    if (!runData?.suggestions) continue;
+                    const suggs = runData.suggestions as any[];
+                    const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.date}-${slot.hour}`);
+                    if (uncovSugg && uncovSugg.alternatives) {
+                      uncovSugg.alternatives.push({
+                        id: `lending-${candidate.user_id}-${slot.date}-${slot.hour}`,
+                        label: `Prestito: ${candidateName} da ${otherStore.name}`,
+                        description: `${candidateName} viene prestato da ${otherStore.name} (${otherStaffCount}/${covForHour.min_staff_required} presenti, surplus di ${surplusCount}). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}, ${dayLabel}. Richiede approvazione di entrambi i locali.`,
+                        actionType: "lending",
+                        userId: candidate.user_id,
+                        userName: candidateName,
+                        sourceStoreId: otherStore.id,
+                        sourceStoreName: otherStore.name,
+                        targetStoreId: store_id,
+                        newStartTime: candidate.start_time,
+                        newEndTime: candidate.end_time,
+                      });
+                      // Update the generation run with the updated suggestions
+                      await adminClient.from("generation_runs").update({
+                        suggestions: suggs,
+                      } as any).eq("id", res.runId);
+                    }
+                  }
                 }
 
-                break; // One lending per uncovered slot
+                break;
+              }
+            }
+          }
+        }
+
+        // ─── Surplus detection in OTHER stores (show to admin even if our store is fine) ───
+        for (const otherStore of sameCityStores) {
+          for (const dept of departments) {
+            for (const dateStr of weekDates) {
+              const dow = getDayOfWeek(dateStr);
+              const [otherCovRes, otherShiftsRes] = await Promise.all([
+                adminClient.from("store_coverage_requirements").select("*")
+                  .eq("store_id", otherStore.id).eq("department", dept).eq("day_of_week", dow),
+                adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off")
+                  .eq("store_id", otherStore.id).eq("department", dept).eq("date", dateStr)
+                  .in("status", ["draft", "published"]),
+              ]);
+
+              const otherCov = otherCovRes.data ?? [];
+              const otherShifts = (otherShiftsRes.data ?? []).filter(s => !s.is_day_off && s.start_time && s.end_time);
+
+              for (const cov of otherCov) {
+                const h = parseInt(cov.hour_slot.split(":")[0], 10);
+                let count = 0;
+                for (const s of otherShifts) {
+                  const sh = parseInt(String(s.start_time).split(":")[0], 10);
+                  let eh = parseInt(String(s.end_time).split(":")[0], 10);
+                  if (eh === 0) eh = 24;
+                  if (h >= sh && h < eh) count++;
+                }
+                const surplus = count - cov.min_staff_required;
+                if (surplus >= 1) {
+                  const dayD = new Date(dateStr + "T00:00:00");
+                  const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
+                  // Add as info-level suggestion for visibility
+                  const runId = results[0]?.runId;
+                  if (runId) {
+                    const { data: runData } = await adminClient
+                      .from("generation_runs").select("suggestions").eq("id", runId).single();
+                    const suggs = (runData?.suggestions as any[]) ?? [];
+                    const existsKey = `other-surplus-${otherStore.id}-${dateStr}-${h}`;
+                    if (!suggs.find((s: any) => s.id === existsKey)) {
+                      suggs.push({
+                        id: existsKey,
+                        type: "surplus",
+                        severity: "info",
+                        title: `${otherStore.name}: ${surplus} in più ${dayLabel} alle ${h}:00`,
+                        description: `${otherStore.name} ha ${count} presenti su ${cov.min_staff_required} richiesti (${dept}). Possibile prestito disponibile.`,
+                        actionLabel: "Proponi Prestito",
+                        declineLabel: "Ignora",
+                        date: dateStr,
+                        slot: `${h}:00`,
+                        surplusCount: surplus,
+                        surplusReason: `${otherStore.name}: ${count} presenti vs ${cov.min_staff_required} richiesti`,
+                        sourceStoreId: otherStore.id,
+                        sourceStoreName: otherStore.name,
+                      });
+                      await adminClient.from("generation_runs").update({
+                        suggestions: suggs,
+                      } as any).eq("id", runId);
+                    }
+                  }
+                }
               }
             }
           }

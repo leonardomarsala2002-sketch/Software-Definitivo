@@ -17,7 +17,7 @@ import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
-import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion } from "@/hooks/useOptimizationSuggestions";
+import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion, type CorrectionAction } from "@/hooks/useOptimizationSuggestions";
 import { KpiCards } from "@/components/team-calendar/KpiCards";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
@@ -231,7 +231,68 @@ const TeamCalendar = () => {
     setShowApproveConfirm(false);
   };
 
-  const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion) => {
+  const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion, action?: CorrectionAction) => {
+    if (!storeId) return;
+
+    // If there's a specific corrective action, apply it
+    if (action) {
+      if (action.actionType === "shift_earlier" || action.actionType === "shift_later" || action.actionType === "extend_shift") {
+        // Find the shift for this user on this date and update it
+        const userShifts = shifts.filter(s => s.user_id === action.userId && s.date === suggestion.date && !s.is_day_off);
+        if (userShifts.length > 0) {
+          updateShift.mutate({
+            id: userShifts[0].id,
+            updates: {
+              start_time: action.newStartTime ? `${action.newStartTime}:00` : undefined,
+              end_time: action.newEndTime ? `${action.newEndTime}:00` : undefined,
+            },
+          });
+          toast.success(`Turno di ${action.userName} modificato`);
+        }
+      } else if (action.actionType === "add_split") {
+        // Create a new shift
+        createShift.mutate({
+          store_id: storeId,
+          department,
+          user_id: action.userId!,
+          date: suggestion.date!,
+          start_time: action.newStartTime ? `${action.newStartTime}:00` : null,
+          end_time: action.newEndTime ? `${action.newEndTime}:00` : null,
+          is_day_off: false,
+        });
+        toast.success(`Turno aggiunto per ${action.userName}`);
+      } else if (action.actionType === "lending") {
+        // Create lending request - needs dual approval
+        if (action.sourceStoreId && action.userId) {
+          const { error } = await supabase.from("shifts").insert({
+            store_id: storeId,
+            user_id: action.userId,
+            date: suggestion.date!,
+            start_time: action.newStartTime ? `${action.newStartTime}:00` : null,
+            end_time: action.newEndTime ? `${action.newEndTime}:00` : null,
+            department,
+            is_day_off: false,
+            status: "draft",
+          } as any);
+          if (error) {
+            toast.error("Errore: " + error.message);
+          } else {
+            toast.success(`Prestito di ${action.userName} da ${action.sourceStoreName} richiesto`);
+            queryClient.invalidateQueries({ queryKey: ["shifts"] });
+          }
+        }
+      } else if (action.actionType === "remove_surplus") {
+        // Find and remove the surplus shift
+        const userShifts = shifts.filter(s => s.user_id === action.userId && s.date === suggestion.date && !s.is_day_off);
+        if (userShifts.length > 0) {
+          deleteShift.mutate({ id: userShifts[0].id, storeId });
+          toast.success(`Turno di ${action.userName} rimosso`);
+        }
+      }
+      return;
+    }
+
+    // Fallback behavior (no specific action)
     if (suggestion.type === "uncovered" && suggestion.date) {
       setSelectedDate(suggestion.date);
     } else if (suggestion.type === "surplus" && suggestion.shiftId) {
@@ -239,7 +300,6 @@ const TeamCalendar = () => {
       toast.success(`Turno di ${suggestion.userName} rimosso`);
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
       const isDbLending = suggestion.id.startsWith("db-lending-");
-      
       if (isDbLending) {
         const lendingId = suggestion.shiftId;
         const dbSuggestion = dbLendingSuggestions.find(ls => ls.id === lendingId);
@@ -254,45 +314,18 @@ const TeamCalendar = () => {
             is_day_off: false,
             status: "draft",
           } as any);
-
           if (createErr) {
-            toast.error("Errore nel prestito: " + createErr.message);
+            toast.error("Errore: " + createErr.message);
             return;
           }
-
-          await supabase.from("lending_suggestions")
-            .update({ status: "accepted" } as any)
-            .eq("id", lendingId);
-
+          await supabase.from("lending_suggestions").update({ status: "accepted" } as any).eq("id", lendingId);
           queryClient.invalidateQueries({ queryKey: ["shifts"] });
           queryClient.invalidateQueries({ queryKey: ["lending-suggestions"] });
           toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
         }
-      } else {
-        const { error } = await supabase
-          .from("shifts")
-          .update({ store_id: suggestion.targetStoreId } as any)
-          .eq("id", suggestion.shiftId);
-        if (error) {
-          toast.error("Errore nel prestito: " + error.message);
-        } else {
-          toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
-          queryClient.invalidateQueries({ queryKey: ["shifts"] });
-        }
-      }
-    } else if (suggestion.type === "hour_reduction" && suggestion.shiftId && suggestion.suggestedHours) {
-      const shift = shifts.find(s => s.id === suggestion.shiftId);
-      if (shift?.end_time) {
-        const endH = parseInt(shift.end_time.split(":")[0], 10);
-        const newEnd = Math.max(endH - suggestion.suggestedHours, parseInt(shift.start_time?.split(":")[0] ?? "0", 10) + 1);
-        updateShift.mutate({
-          id: suggestion.shiftId,
-          updates: { end_time: `${String(newEnd).padStart(2, "0")}:00:00` },
-        });
-        toast.success(`Turno di ${suggestion.userName} ridotto di ${suggestion.suggestedHours}h`);
       }
     } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
-      toast.info(`Bilanciamento ore per ${suggestion.userName}: applicare nel dettaglio giornaliero`);
+      toast.info(`Bilanciamento ore per ${suggestion.userName}: verrà compensato nella prossima generazione`);
     }
   };
 
@@ -531,7 +564,7 @@ const TeamCalendar = () => {
               openingHours={openingHours}
               allowedEntries={allowedEntries}
               allowedExits={allowedExits}
-              canEdit={canEdit}
+              canEdit={false}
               onCreateShift={(s) =>
                 createShift.mutate({ store_id: storeId!, department, ...s })
               }

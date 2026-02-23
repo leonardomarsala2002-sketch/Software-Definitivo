@@ -118,7 +118,7 @@ export function DayDetailDialog({
                   </div>
                 ))}
               </div>
-              {effectiveCanEdit && <div className="w-20 shrink-0" />}
+              {/* Read-only view */}
             </div>
 
             {/* Grid lines */}
@@ -187,71 +187,7 @@ export function DayDetailDialog({
                       )}
                     </div>
 
-                    {/* Actions */}
-                    {effectiveCanEdit && (
-                      <div className="w-20 shrink-0 flex items-center gap-0.5 pl-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {empShifts.length === 0 ? (
-                          <ShiftEditPopover
-                            mode="create"
-                            allowedEntries={allowedEntries}
-                            allowedExits={allowedExits}
-                            onSave={(st, et, dayOff) => {
-                              onCreateShift({
-                                user_id: emp.user_id,
-                                date,
-                                start_time: dayOff ? null : `${String(st).padStart(2, "0")}:00`,
-                                end_time: dayOff ? null : `${String(et === 24 ? 0 : et).padStart(2, "0")}:00`,
-                                is_day_off: dayOff,
-                              });
-                            }}
-                          />
-                        ) : (
-                          <>
-                            {empShifts.map((s) => (
-                              <div key={s.id} className="flex gap-0.5">
-                                <ShiftEditPopover
-                                  mode="edit"
-                                  initialStart={s.start_time ? parseInt(s.start_time.split(":")[0]) : undefined}
-                                  initialEnd={s.end_time ? parseInt(s.end_time.split(":")[0]) : undefined}
-                                  initialDayOff={s.is_day_off}
-                                  allowedEntries={allowedEntries}
-                                  allowedExits={allowedExits}
-                                  onSave={(st, et, dayOff) => {
-                                    onUpdateShift(s.id, {
-                                      start_time: dayOff ? null : `${String(st).padStart(2, "0")}:00`,
-                                      end_time: dayOff ? null : `${String(et === 24 ? 0 : et).padStart(2, "0")}:00`,
-                                      is_day_off: dayOff,
-                                    });
-                                  }}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => onDeleteShift(s.id)}
-                                >
-                                  <Trash2 className="h-3 w-3 text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
-                            <ShiftEditPopover
-                              mode="create"
-                              allowedEntries={allowedEntries}
-                              allowedExits={allowedExits}
-                              onSave={(st, et, dayOff) => {
-                                onCreateShift({
-                                  user_id: emp.user_id,
-                                  date,
-                                  start_time: dayOff ? null : `${String(st).padStart(2, "0")}:00`,
-                                  end_time: dayOff ? null : `${String(et === 24 ? 0 : et).padStart(2, "0")}:00`,
-                                  is_day_off: dayOff,
-                                });
-                              }}
-                            />
-                          </>
-                        )}
-                      </div>
-                    )}
+                    {/* Actions removed - shifts are managed only via AI suggestions */}
                   </div>
                 );
               })}
