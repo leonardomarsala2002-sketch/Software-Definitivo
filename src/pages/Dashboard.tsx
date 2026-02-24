@@ -70,7 +70,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[14px] p-1.5";
+const cardBase = "glass-card rounded-[12px] p-1";
 
 /* all card variants use same soft glass style */
 const cardProfile = cardBase;
@@ -199,17 +199,17 @@ const Dashboard = () => {
 
         {/* User Profile Card */}
         <Card className={`${cardProfile} col-span-1 flex flex-col`}>
-          <div className="flex items-center gap-2">
-            <Avatar className="h-10 w-10 shadow-md flex-shrink-0">
+          <div className="flex items-center gap-1.5">
+            <Avatar className="h-8 w-8 shadow-md flex-shrink-0">
               {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
-              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-foreground">
+              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-foreground">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-foreground truncate">{displayName}</p>
+              <p className="text-xs font-bold text-foreground truncate">{displayName}</p>
               {role && (
-                <Badge className="mt-0.5 text-[10px] px-1.5 py-0 bg-[rgba(0,200,83,0.14)] text-[#009624] border border-[rgba(0,200,83,0.35)] hover:bg-[rgba(0,200,83,0.2)]">
+                <Badge className="mt-0.5 text-[9px] px-1 py-0 bg-[rgba(0,200,83,0.14)] text-[#009624] border border-[rgba(0,200,83,0.35)] hover:bg-[rgba(0,200,83,0.2)]">
                   {roleLabelMap[role] || role}
                 </Badge>
               )}
@@ -217,26 +217,26 @@ const Dashboard = () => {
           </div>
 
           {/* Action: new request */}
-          <div className="mt-auto pt-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Nuova richiesta</span>
+          <div className="mt-auto pt-1.5 flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">Nuova richiesta</span>
             <Button
               size="icon"
               variant="outline"
-              className="h-7 w-7 rounded-full border-border text-foreground/60 hover:text-foreground hover:border-foreground/30"
+              className="h-6 w-6 rounded-full border-border text-foreground/60 hover:text-foreground hover:border-foreground/30"
               onClick={() => setShowRequestPopup(true)}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3 w-3" />
             </Button>
           </div>
         </Card>
 
         {/* Ferie Card (Vacation counter) */}
         <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent mb-1">
-            <Palmtree className="h-3.5 w-3.5 text-[#666]" />
+          <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent mb-0.5">
+            <Palmtree className="h-3 w-3 text-[#666]" />
           </div>
-          <div className="relative flex h-14 w-14 items-center justify-center">
-            <svg className="h-14 w-14 -rotate-90" viewBox="0 0 64 64">
+          <div className="relative flex h-11 w-11 items-center justify-center">
+            <svg className="h-11 w-11 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
@@ -245,31 +245,31 @@ const Dashboard = () => {
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
             </svg>
-            <span className="absolute text-base font-bold text-foreground">{remainingVacation}</span>
+            <span className="absolute text-sm font-bold text-foreground">{remainingVacation}</span>
           </div>
-          <p className="mt-1 text-[10px] font-medium text-muted-foreground">Ferie rimaste</p>
+          <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Ferie rimaste</p>
         </Card>
 
         {/* Mini-Month Calendar Card */}
         <Card className={`${cardCalendar} col-span-1 flex flex-col`}>
-          <CardHeader className="p-0 pb-1">
-            <CardTitle className="flex items-center justify-between text-[11px] font-semibold text-foreground tracking-wide">
+          <CardHeader className="p-0 pb-0.5">
+            <CardTitle className="flex items-center justify-between text-[10px] font-semibold text-foreground tracking-wide">
               <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
               <div className="flex gap-0.5">
-                <button onClick={prevMonth} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
-                  <ChevronLeft className="h-3 w-3" />
+                <button onClick={prevMonth} className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
+                  <ChevronLeft className="h-2.5 w-2.5" />
                 </button>
-                <button onClick={nextMonth} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
-                  <ChevronRight className="h-3 w-3" />
+                <button onClick={nextMonth} className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
+                  <ChevronRight className="h-2.5 w-2.5" />
                 </button>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
             {/* Day headers */}
-            <div className="grid grid-cols-7 mb-1">
+            <div className="grid grid-cols-7 mb-0.5">
               {DAYS_IT.map((d, i) => (
-                <span key={d} className={`text-center text-[9px] font-semibold uppercase tracking-wider text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
+                <span key={d} className={`text-center text-[8px] font-semibold uppercase tracking-wider text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
               ))}
             </div>
             {/* Day cells */}
@@ -283,7 +283,7 @@ const Dashboard = () => {
                     key={idx}
                     disabled={day === null}
                     onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex flex-col items-center justify-center h-6 w-6 rounded-full text-[10px] transition-colors
+                    className={`mx-auto flex flex-col items-center justify-center h-5 w-5 rounded-full text-[9px] transition-colors
                       ${day === null ? "invisible" : ""}
                       ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
                       ${isToday && !isSelected ? "bg-primary/10 text-foreground font-bold" : ""}
@@ -293,7 +293,7 @@ const Dashboard = () => {
                   >
                     {day}
                     {isToday && day !== null && (
-                      <span className="block h-1 w-1 rounded-full bg-[#111] -mt-px" />
+                      <span className="block h-0.5 w-0.5 rounded-full bg-[#111] -mt-px" />
                     )}
                   </button>
                 );
@@ -304,52 +304,52 @@ const Dashboard = () => {
 
         {/* Richieste / Avvisi Card */}
         <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent">
+          <div className="flex items-center gap-1 mb-1">
+            <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent">
               {isAdmin ? (
-                <Inbox className="h-3.5 w-3.5 text-[#666]" />
+                <Inbox className="h-3 w-3 text-[#666]" />
               ) : (
-                <Bell className="h-3.5 w-3.5 text-[#666]" />
+                <Bell className="h-3 w-3 text-[#666]" />
               )}
             </div>
-            <p className="text-[11px] font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
+            <p className="text-[10px] font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
           </div>
           {isAdmin && pendingRequests.length > 0 ? (
-            <div className="flex-1 space-y-1.5 overflow-hidden">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#111] text-white text-[10px] font-bold px-1.5">
+            <div className="flex-1 space-y-1 overflow-hidden">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#111] text-white text-[9px] font-bold px-1">
                   {pendingRequests.length}
                 </span>
-                <span className="text-[11px] text-muted-foreground">richieste in attesa</span>
+                <span className="text-[10px] text-muted-foreground">richieste in attesa</span>
               </div>
               {pendingRequests.map((r) => (
-                <div key={r.id} className="flex items-center justify-between text-xs">
+                <div key={r.id} className="flex items-center justify-between text-[10px]">
                   <div className="min-w-0 flex-1">
                     <span className="font-medium text-foreground">{r.name}</span>
-                    <span className="ml-1 text-muted-foreground text-[10px]">· {r.type}</span>
+                    <span className="ml-1 text-muted-foreground text-[9px]">· {r.type}</span>
                   </div>
-                  <div className="flex gap-1 ml-2">
+                  <div className="flex gap-0.5 ml-1.5">
                     <button
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-foreground hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-foreground hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Approva richiesta di ${r.name}`}
                       onClick={() => setConfirmAction({ type: "approve", request: r })}
                     >
-                      <Check className="h-4 w-4" />
+                      <Check className="h-3 w-3" />
                     </button>
                     <button
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Rifiuta richiesta di ${r.name}`}
                       onClick={() => setConfirmAction({ type: "reject", request: r })}
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
               ))}
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <Link
                   to="/requests"
-                  className="text-[11px] text-primary hover:text-primary/80 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                  className="text-[10px] text-primary hover:text-primary/80 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   Vedi tutte →
                 </Link>
@@ -357,7 +357,7 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-[11px] text-muted-foreground">Nessuna richiesta pendente</p>
+              <p className="text-[10px] text-muted-foreground">Nessuna richiesta pendente</p>
             </div>
           )}
         </Card>
@@ -365,22 +365,22 @@ const Dashboard = () => {
         {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
         <Card className={`${cardAgenda} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
           <CardHeader className="p-0 pb-0.5 flex-shrink-0">
-            <CardTitle className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10">
-                <CalendarIcon className="h-3 w-3 text-primary" />
+            <CardTitle className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground">
+              <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-primary/10">
+                <CalendarIcon className="h-2.5 w-2.5 text-primary" />
               </div>
               Agenda Settimanale
-              <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+              <span className="ml-auto text-[9px] font-normal text-muted-foreground">
                 {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className={`flex-1 min-h-0 overflow-hidden p-0 ${agendaEvents.length === 0 ? "min-h-[120px]" : ""}`}>
+          <CardContent className={`flex-1 min-h-0 overflow-hidden p-0 ${agendaEvents.length === 0 ? "min-h-[80px]" : ""}`}>
             {agendaEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[120px] gap-2 py-6">
-                <CalendarIcon className="h-8 w-8 text-muted-foreground/30" />
-                <p className="text-[11px] font-medium text-muted-foreground">Nessun evento in programma questa settimana</p>
-                <p className="text-[10px] text-muted-foreground/60">Gli eventi appariranno qui quando saranno pianificati</p>
+              <div className="flex flex-col items-center justify-center h-full min-h-[80px] gap-1.5 py-4">
+                <CalendarIcon className="h-6 w-6 text-muted-foreground/30" />
+                <p className="text-[10px] font-medium text-muted-foreground">Nessun evento in programma questa settimana</p>
+                <p className="text-[9px] text-muted-foreground/60">Gli eventi appariranno qui quando saranno pianificati</p>
               </div>
             ) : (
               /* Inverted axes: days as rows (vertical), hours as columns (horizontal) */
