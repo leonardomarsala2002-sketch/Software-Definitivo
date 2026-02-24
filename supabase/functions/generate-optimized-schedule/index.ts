@@ -1102,6 +1102,56 @@ Deno.serve(async (req) => {
           }
         }
 
+        // ─── Smart post-generation suggestions ─────────────────────────
+        // Condition 1: Still uncovered slots AND no internal alternatives left → suggest increase splits
+        const uncoveredWithNoAlts = deptSuggestions.filter(
+          (s: any) => s.type === "uncovered" && (!s.alternatives || s.alternatives.length === 0)
+        );
+        if (uncoveredSlots.length > 0 && uncoveredWithNoAlts.length > 0) {
+          const currentSplitLimit = rules.max_split_shifts_per_employee_per_week + (fallbackUsed ? 1 : 0);
+          deptSuggestions.push({
+            id: `smart-increase-splits-${dept}`,
+            type: "uncovered",
+            severity: "warning",
+            title: `Aumentare spezzati a ${currentSplitLimit + 1}/settimana? (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            description: `Ci sono ancora ${uncoveredSlots.length} slot scoperti e nessuna alternativa interna disponibile. Aumentando il limite spezzati da ${currentSplitLimit} a ${currentSplitLimit + 1} per dipendente, l'algoritmo potrebbe coprire più slot.`,
+            actionLabel: "Sì, aumenta spezzati",
+            declineLabel: "No, mantieni limite",
+            alternatives: [{
+              id: `action-increase-splits-${dept}`,
+              label: `Aumenta spezzati a ${currentSplitLimit + 1}`,
+              description: `Porta il limite spezzati settimanali da ${currentSplitLimit} a ${currentSplitLimit + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} e rigenera i turni.`,
+              actionType: "increase_splits",
+              suggestedHours: currentSplitLimit + 1,
+            }],
+          });
+        }
+
+        // Condition 2: ALL slots covered AND frequent surplus → suggest increase days off
+        if (uncoveredSlots.length === 0) {
+          // Count how many surplus slots exist
+          const surplusSuggestions = deptSuggestions.filter((s: any) => s.type === "surplus");
+          if (surplusSuggestions.length >= 3) {
+            const currentDaysOff = rules.mandatory_days_off_per_week;
+            deptSuggestions.push({
+              id: `smart-increase-daysoff-${dept}`,
+              type: "surplus",
+              severity: "info",
+              title: `Aggiungere +1 giorno libero a testa? (${dept === "cucina" ? "Cucina" : "Sala"})`,
+              description: `Tutti gli slot sono coperti e ci sono ${surplusSuggestions.length} slot con surplus. Aumentando i giorni liberi da ${currentDaysOff} a ${currentDaysOff + 1} si riduce il sovraffollamento e si migliora il benessere del team.`,
+              actionLabel: "Sì, +1 giorno libero",
+              declineLabel: "No, mantieni",
+              alternatives: [{
+                id: `action-increase-daysoff-${dept}`,
+                label: `Porta giorni liberi a ${currentDaysOff + 1}`,
+                description: `Aumenta i giorni liberi obbligatori da ${currentDaysOff} a ${currentDaysOff + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} per questa settimana e rigenera.`,
+                actionType: "increase_days_off",
+                suggestedHours: currentDaysOff + 1,
+              }],
+            });
+          }
+        }
+
         // Update run with notes AND suggestions
         const notes = [
           uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
