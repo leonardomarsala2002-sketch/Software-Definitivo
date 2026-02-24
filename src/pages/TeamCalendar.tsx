@@ -408,7 +408,7 @@ const TeamCalendar = () => {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 140px)" }}>
+    <div className="flex flex-col h-full">
       {/* Compact header with controls */}
       <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
         {/* Title */}
