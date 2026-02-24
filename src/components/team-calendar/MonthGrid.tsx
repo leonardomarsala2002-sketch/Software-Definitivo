@@ -118,7 +118,7 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "glass-card rounded-[18px] p-1.5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(0,0,0,0.11)] flex flex-col",
+                "glass-card rounded-[18px] p-1.5 cursor-pointer transition-[box-shadow,border-color] duration-150 ease-in-out hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_12px_40px_rgba(0,0,0,0.12)] hover:border-[rgba(0,200,83,0.35)] flex flex-col",
                 dimmed && "opacity-40",
                 isToday && "ring-2 ring-[#00C853] shadow-[0_0_16px_rgba(0,200,83,0.3)]",
                 isUncovered && !isArchived && !isToday && "ring-1 ring-[#FF3D00]/40",
