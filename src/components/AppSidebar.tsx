@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut, Eye, EyeOff, Plus, Settings } from "lucide-react";
+import { UtensilsCrossed, Store, LogOut, Eye, EyeOff, Settings } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 
 export function AppSidebar() {
@@ -33,20 +33,27 @@ export function AppSidebar() {
     return location.pathname.startsWith(url);
   };
 
+  const iconClass = (active: boolean) =>
+    `glass-icon-card flex h-11 w-11 items-center justify-center transition-all duration-200 ${
+      active
+        ? "bg-[rgba(255,255,255,0.95)] shadow-[0_2px_10px_rgba(0,0,0,0.06)] text-[#00C853]"
+        : "text-[#666] hover:bg-[rgba(255,255,255,0.90)] hover:text-[#333]"
+    }`;
+
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center bg-transparent">
-      <div className="flex flex-col h-full items-center">
+    <aside className="hidden md:flex w-20 flex-col h-full">
+      <div className="glass-sidebar-base flex flex-col h-full items-center py-4">
         {/* Logo */}
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
           <UtensilsCrossed className="h-5 w-5 text-[#333]" />
         </div>
 
-        {/* View as Employee banner */}
+        {/* View as Employee indicator */}
         {isViewingAsEmployee && (
           <div className="mb-3 px-1">
             <button
               onClick={toggleViewAsEmployee}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700 shadow-md animate-pulse hover:animate-none hover:bg-amber-200 transition-colors"
+              className="glass-icon-card flex h-9 w-9 items-center justify-center bg-amber-100/80 text-amber-700 animate-pulse hover:animate-none hover:bg-amber-200/80 transition-colors"
               title="Stai visualizzando come Dipendente. Clicca per tornare alla vista Admin."
             >
               <EyeOff className="h-4 w-4" />
@@ -61,25 +68,13 @@ export function AppSidebar() {
             return (
               <Tooltip key={item.url}>
                 <TooltipTrigger asChild>
-                  <Link
-                    to={item.url}
-                    aria-label={item.title}
-                    className="flex items-center justify-center"
-                  >
-                    <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                        ${active
-                          ? "bg-white shadow-lg text-[#00C853]"
-                          : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
-                        }`}
-                    >
+                  <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
+                    <div className={iconClass(active)}>
                       <item.icon className="h-5 w-5" />
                     </div>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
-                  {item.title}
-                </TooltipContent>
+                <TooltipContent side="right" className="font-medium">{item.title}</TooltipContent>
               </Tooltip>
             );
           })}
@@ -92,25 +87,13 @@ export function AppSidebar() {
                 return (
                   <Tooltip key={item.url}>
                     <TooltipTrigger asChild>
-                      <Link
-                        to={item.url}
-                        aria-label={item.title}
-                        className="flex items-center justify-center"
-                      >
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                            ${active
-                              ? "bg-white shadow-lg text-[#00C853]"
-                              : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
-                            }`}
-                        >
+                      <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
+                        <div className={iconClass(active)}>
                           <item.icon className="h-5 w-5" />
                         </div>
                       </Link>
                     </TooltipTrigger>
-                    <TooltipContent side="right" className="font-medium">
-                      {item.title}
-                    </TooltipContent>
+                    <TooltipContent side="right" className="font-medium">{item.title}</TooltipContent>
                   </Tooltip>
                 );
               })}
@@ -118,32 +101,29 @@ export function AppSidebar() {
           )}
         </nav>
 
-        {/* Bottom Section: View as Employee + Store + Logout */}
+        {/* Bottom Section */}
         <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-          {/* View as Employee toggle */}
           {canViewAsEmployee && !isViewingAsEmployee && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={toggleViewAsEmployee}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#00C853] transition-all duration-200"
+                  className={iconClass(false)}
                   aria-label="Visualizza come Dipendente"
                 >
                   <Eye className="h-5 w-5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium">
-                Visualizza come Dipendente
-              </TooltipContent>
+              <TooltipContent side="right" className="font-medium">Visualizza come Dipendente</TooltipContent>
             </Tooltip>
           )}
 
-          {/* Store Selector with Management */}
+          {/* Store Selector */}
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333] transition-all duration-200">
+                  <button className={iconClass(false)}>
                     <Store className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
@@ -166,7 +146,6 @@ export function AppSidebar() {
                   {s.name}
                 </DropdownMenuItem>
               ))}
-
               {canManageStores && (
                 <>
                   <DropdownMenuSeparator />
@@ -187,15 +166,13 @@ export function AppSidebar() {
             <TooltipTrigger asChild>
               <button
                 onClick={signOut}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-destructive transition-all duration-200"
+                className={`${iconClass(false)} hover:text-destructive`}
                 aria-label="Esci"
               >
                 <LogOut className="h-5 w-5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-medium">
-              Esci
-            </TooltipContent>
+            <TooltipContent side="right" className="font-medium">Esci</TooltipContent>
           </Tooltip>
         </div>
       </div>

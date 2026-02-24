@@ -69,7 +69,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[12px] p-1";
+const cardBase = "glass-card rounded-[16px] p-2";
 
 const cardProfile = cardBase;
 const cardFerie = cardBase;

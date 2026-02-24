@@ -99,29 +99,12 @@
   }
 
   body {
-    background: #FFFFFF;
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 30%, #a5d6a7 70%, #e8f5e9 100%);
+    background-attachment: fixed;
     @apply text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     color: #111111;
     position: relative;
-  }
-
-  /* Watermark logo in background – full color, no blur */
-  body::before {
-    content: '';
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 70vw;
-    max-width: 1100px;
-    aspect-ratio: 2.5 / 1;
-    background: url('/panino-giusto-logo.png') center center / contain no-repeat;
-    opacity: 0.14;
-    pointer-events: none;
-    z-index: 0;
-    filter: none;
-    -webkit-filter: none;
   }
 
   #root {
@@ -132,20 +115,55 @@
 
 /* ── Glassmorphism utilities ────────────────────────── */
 @layer utilities {
+  /* Level 2 – Main Card (content wrapper) */
+  .glass-main-card {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  /* Level 2 – Sidebar Base Card */
+  .glass-sidebar-base {
+    background: rgba(255, 255, 255, 0.70);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  /* Level 3 – Inner Cards */
   .glass-card {
-    background: rgba(255, 255, 255, 0.40);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 12px 40px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.80);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    transition: box-shadow 200ms ease;
   }
-  .glass-sidebar {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
+  .glass-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
   }
-  .gradient-bg {
-    background: transparent;
+
+  /* Level 3 – Sidebar Icon Cards */
+  .glass-icon-card {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow 200ms ease;
+  }
+  .glass-icon-card:hover {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   }
 
   /* Hide scrollbar but keep scrolling */
