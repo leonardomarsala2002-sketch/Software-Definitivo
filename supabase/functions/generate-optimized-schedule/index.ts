@@ -1001,25 +1001,48 @@ Deno.serve(async (req) => {
           .filter(t => t.department === dept && t.kind === "exit" && t.is_active)
           .map(t => t.hour).sort((a, b) => a - b);
 
-        // Uncovered slot suggestions with SPECIFIC alternatives
+        // Uncovered slot suggestions GROUPED BY DAY (not one per hour)
+        const uncoveredByDay = new Map<string, number[]>();
         for (const slot of uncoveredSlots) {
           const h = parseInt(slot.hour.split(":")[0], 10);
-          const d = new Date(slot.date + "T00:00:00");
+          const existing = uncoveredByDay.get(slot.date) ?? [];
+          existing.push(h);
+          uncoveredByDay.set(slot.date, existing);
+        }
+
+        for (const [dateStr, hours] of uncoveredByDay) {
+          const d = new Date(dateStr + "T00:00:00");
           const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
-          const alternatives = findCorrectionAlternatives(slot.date, h, dept);
+          hours.sort((a, b) => a - b);
+          const hoursStr = hours.map(h => `${h}:00`).join(", ");
+
+          // Collect alternatives for the FIRST uncovered hour (most actionable)
+          const alternatives = findCorrectionAlternatives(dateStr, hours[0], dept);
+
+          // For remaining hours, try to find additional alternatives
+          for (let i = 1; i < Math.min(hours.length, 3); i++) {
+            const moreAlts = findCorrectionAlternatives(dateStr, hours[i], dept);
+            for (const alt of moreAlts) {
+              if (alternatives.length < 5 && !alternatives.some(a => a.id === alt.id)) {
+                alternatives.push(alt);
+              }
+            }
+          }
+
+          const noAltsMsg = alternatives.length === 0
+            ? `Nessuna alternativa interna trovata. Valuta le opzioni "Aumenta spezzati" o prestito inter-store nel pannello sotto.`
+            : `${alternatives.length} soluzioni disponibili.`;
 
           deptSuggestions.push({
-            id: `uncov-${dept}-${slot.date}-${h}`,
+            id: `uncov-${dept}-${dateStr}`,
             type: "uncovered",
             severity: "critical",
-            title: `1 ora non coperta ${dayLabel} alle ${h}:00 (${dept === "cucina" ? "Cucina" : "Sala"})`,
-            description: alternatives.length > 0
-              ? `Slot ${h}:00-${h + 1}:00 scoperto. ${alternatives.length} soluzioni disponibili.`
-              : `Slot ${h}:00-${h + 1}:00 scoperto. Nessun dipendente disponibile internamente.`,
+            title: `${hours.length} ore non coperte ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            description: `Slot scoperti: ${hoursStr}. ${noAltsMsg}`,
             actionLabel: alternatives.length > 0 ? alternatives[0].label : "Vai al giorno",
             declineLabel: alternatives.length > 1 ? "Altra soluzione" : "Ignora",
-            date: slot.date,
-            slot: `${h}:00`,
+            date: dateStr,
+            slot: `${hours[0]}:00`,
             alternatives,
           });
         }
