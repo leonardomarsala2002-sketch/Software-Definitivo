@@ -625,6 +625,21 @@ Deno.serve(async (req) => {
       hourBalances.set(s.user_id, Number(s.current_balance));
     }
 
+    // Apply previous week's manual adjustments to hourBalances
+    const prevWeekStart = new Date(startD);
+    prevWeekStart.setUTCDate(prevWeekStart.getUTCDate() - 7);
+    const prevWeekStartStr = getDateStr(prevWeekStart);
+    const { data: prevAdjustments } = await adminClient
+      .from("generation_adjustments")
+      .select("user_id, extra_hours")
+      .eq("store_id", store_id)
+      .eq("week_start", prevWeekStartStr);
+
+    for (const adj of (prevAdjustments ?? [])) {
+      const current = hourBalances.get(adj.user_id) ?? 0;
+      hourBalances.set(adj.user_id, current - Number(adj.extra_hours));
+    }
+
     const empConstraints = new Map<string, EmployeeConstraints>();
     for (const c of (constraintsRes.data ?? [])) {
       empConstraints.set(c.user_id, c as EmployeeConstraints);

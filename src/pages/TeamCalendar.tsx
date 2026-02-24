@@ -245,12 +245,35 @@ const TeamCalendar = () => {
   const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion, action?: CorrectionAction) => {
     if (!storeId) return;
 
+    // Helper to track adjustment
+    const trackAdjustment = async (userId: string, adjustmentType: string, extraHours: number, notes?: string) => {
+      try {
+        await supabase.from("generation_adjustments").insert({
+          store_id: storeId,
+          user_id: userId,
+          week_start: currentWeekStart,
+          adjustment_type: adjustmentType,
+          extra_hours: extraHours,
+          notes: notes ?? null,
+          source_suggestion_id: suggestion.id ?? null,
+        } as any);
+      } catch (e) {
+        console.error("Failed to track adjustment:", e);
+      }
+    };
+
     // If there's a specific corrective action, apply it
     if (action) {
       if (action.actionType === "shift_earlier" || action.actionType === "shift_later" || action.actionType === "extend_shift") {
         // Find the shift for this user on this date and update it
         const userShifts = shifts.filter(s => s.user_id === action.userId && s.date === suggestion.date && !s.is_day_off);
         if (userShifts.length > 0) {
+          const oldStart = parseInt(userShifts[0].start_time?.split(":")[0] ?? "0", 10);
+          const oldEnd = parseInt(userShifts[0].end_time?.split(":")[0] ?? "0", 10);
+          const newStart = action.newStartTime ? parseInt(action.newStartTime.split(":")[0], 10) : oldStart;
+          const newEnd = action.newEndTime ? parseInt(action.newEndTime.split(":")[0], 10) : oldEnd;
+          const extraHours = (newEnd - newStart) - (oldEnd - oldStart);
+
           updateShift.mutate({
             id: userShifts[0].id,
             updates: {
@@ -259,6 +282,7 @@ const TeamCalendar = () => {
             },
           });
           toast.success(`Turno di ${action.userName} modificato`);
+          if (action.userId) trackAdjustment(action.userId, action.actionType, extraHours, `${action.userName}: ${action.newStartTime ?? ""}–${action.newEndTime ?? ""}`);
         }
       } else if (action.actionType === "add_split") {
         // Create a new shift
@@ -272,6 +296,10 @@ const TeamCalendar = () => {
           is_day_off: false,
         });
         toast.success(`Turno aggiunto per ${action.userName}`);
+        const splitHours = action.newStartTime && action.newEndTime
+          ? parseInt(action.newEndTime.split(":")[0], 10) - parseInt(action.newStartTime.split(":")[0], 10)
+          : 0;
+        if (action.userId) trackAdjustment(action.userId, "add_split", splitHours, `${action.userName}: spezzato ${action.newStartTime}–${action.newEndTime}`);
       } else if (action.actionType === "lending") {
         // Create lending request - needs dual approval
         if (action.sourceStoreId && action.userId) {
@@ -290,14 +318,22 @@ const TeamCalendar = () => {
           } else {
             toast.success(`Prestito di ${action.userName} da ${action.sourceStoreName} richiesto`);
             queryClient.invalidateQueries({ queryKey: ["shifts"] });
+            const lendingHours = action.newStartTime && action.newEndTime
+              ? parseInt(action.newEndTime.split(":")[0], 10) - parseInt(action.newStartTime.split(":")[0], 10)
+              : 0;
+            trackAdjustment(action.userId, "lending", lendingHours, `Prestito da ${action.sourceStoreName}`);
           }
         }
       } else if (action.actionType === "remove_surplus") {
         // Find and remove the surplus shift
         const userShifts = shifts.filter(s => s.user_id === action.userId && s.date === suggestion.date && !s.is_day_off);
         if (userShifts.length > 0) {
+          const removedHours = userShifts[0].start_time && userShifts[0].end_time
+            ? parseInt(userShifts[0].end_time.split(":")[0], 10) - parseInt(userShifts[0].start_time.split(":")[0], 10)
+            : 0;
           deleteShift.mutate({ id: userShifts[0].id, storeId });
           toast.success(`Turno di ${action.userName} rimosso`);
+          if (action.userId) trackAdjustment(action.userId, "remove_surplus", -removedHours, `${action.userName}: turno rimosso`);
         }
       }
       return;

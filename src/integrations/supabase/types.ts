@@ -350,6 +350,57 @@ export type Database = {
           },
         ]
       }
+      generation_adjustments: {
+        Row: {
+          adjustment_type: string
+          created_at: string
+          extra_hours: number
+          id: string
+          notes: string | null
+          source_suggestion_id: string | null
+          store_id: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          adjustment_type: string
+          created_at?: string
+          extra_hours?: number
+          id?: string
+          notes?: string | null
+          source_suggestion_id?: string | null
+          store_id: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          adjustment_type?: string
+          created_at?: string
+          extra_hours?: number
+          id?: string
+          notes?: string | null
+          source_suggestion_id?: string | null
+          store_id?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_adjustments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generation_adjustments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_runs: {
         Row: {
           completed_at: string | null
