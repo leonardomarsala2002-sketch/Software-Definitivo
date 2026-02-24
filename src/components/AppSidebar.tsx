@@ -116,48 +116,50 @@ export function AppSidebar() {
             </Tooltip>
           )}
 
-          {/* Store Selector */}
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <button className={iconClass(false)}>
-                    <Store className="h-5 w-5" />
-                  </button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium">
-                {activeStore?.name ?? "Seleziona store"}
-              </TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
-              <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                Seleziona Store
-              </DropdownMenuLabel>
-              {stores.map((s) => (
-                <DropdownMenuItem
-                  key={s.id}
-                  onClick={() => setActiveStore(s)}
-                  className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
-                >
-                  <Store className="mr-2.5 h-4 w-4" />
-                  {s.name}
-                </DropdownMenuItem>
-              ))}
-              {canManageStores && (
-                <>
-                  <DropdownMenuSeparator />
+          {/* Store Selector – hidden for employees */}
+          {role !== "employee" && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button className={iconClass(false)}>
+                      <Store className="h-5 w-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {activeStore?.name ?? "Seleziona store"}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
+                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                  Seleziona Store
+                </DropdownMenuLabel>
+                {stores.map((s) => (
                   <DropdownMenuItem
-                    onClick={() => navigate("/manage-stores")}
-                    className="rounded-lg px-3 py-2 text-[13px] text-[#00C853] font-medium"
+                    key={s.id}
+                    onClick={() => setActiveStore(s)}
+                    className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
                   >
-                    <Settings className="mr-2.5 h-4 w-4" />
-                    Gestisci Store
+                    <Store className="mr-2.5 h-4 w-4" />
+                    {s.name}
                   </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                ))}
+                {canManageStores && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => navigate("/manage-stores")}
+                      className="rounded-lg px-3 py-2 text-[13px] text-[#00C853] font-medium"
+                    >
+                      <Settings className="mr-2.5 h-4 w-4" />
+                      Gestisci Store
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Logout */}
           <Tooltip>

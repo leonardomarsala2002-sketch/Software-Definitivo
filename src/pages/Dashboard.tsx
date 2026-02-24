@@ -202,18 +202,18 @@ const Dashboard = () => {
   return (
     <div className="flex h-full flex-col overflow-hidden animate-in fade-in duration-500">
       {/* Header – greeting */}
-      <div className="mb-2 flex-shrink-0">
-        <h1 className="text-lg font-bold tracking-tight text-foreground">
+      <div className="mb-1 flex-shrink-0">
+        <h1 className="text-base font-bold tracking-tight text-foreground">
           Benvenuto {displayName} 👋
         </h1>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
+        <p className="text-[10px] text-muted-foreground">
           {subtitle}
         </p>
       </div>
 
       {/* Quadrant Grid – fills viewport, no scroll */}
       <div
-        className="flex-1 gap-5 min-h-0 overflow-hidden"
+        className="flex-1 gap-3 min-h-0 overflow-hidden"
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto auto 1fr',
