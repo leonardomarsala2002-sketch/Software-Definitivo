@@ -1077,27 +1077,28 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Overtime balance suggestions
+        // Weekly hour deviation suggestions (only based on THIS generated week, not historical balances)
         for (const emp of deptEmployees) {
-          const balance = hourBalances.get(emp.user_id) ?? 0;
-          if (Math.abs(balance) >= 3) {
+          const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+          const delta = weeklyUsed - emp.weekly_contract_hours;
+          // Only flag significant deviations (>=3h) within this generated week
+          if (Math.abs(delta) >= 3) {
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
-            const direction = balance > 0 ? "eccesso" : "deficit";
-            const absBalance = Math.abs(balance);
-            const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+            const direction = delta > 0 ? "eccesso" : "deficit";
+            const absDelta = Math.abs(delta);
             deptSuggestions.push({
-              id: `balance-${emp.user_id}`,
+              id: `weekdelta-${emp.user_id}`,
               type: "overtime_balance",
-              severity: absBalance >= 5 ? "warning" : "info",
-              title: `${empName}: ${direction} ${absBalance}h nel monte ore`,
-              description: balance > 0
-                ? `Ha accumulato +${absBalance}h. Questa settimana: ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto. Suggerito ridurre di ${Math.min(absBalance, 2)}h.`
-                : `Ha un deficit di ${absBalance}h. Questa settimana: ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto. Suggerito aumentare.`,
-              actionLabel: balance > 0 ? "Applica Riduzione" : "Applica Aumento",
+              severity: absDelta >= 5 ? "warning" : "info",
+              title: `${empName}: ${direction} di ${absDelta}h questa settimana`,
+              description: delta > 0
+                ? `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito ridurre di ${Math.min(absDelta, 2)}h.`
+                : `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito aumentare di ${Math.min(absDelta, 2)}h.`,
+              actionLabel: delta > 0 ? "Applica Riduzione" : "Applica Aumento",
               declineLabel: "Ignora",
               userId: emp.user_id,
               userName: empName,
-              suggestedHours: Math.min(absBalance, 2),
+              suggestedHours: Math.min(absDelta, 2),
             });
           }
         }
