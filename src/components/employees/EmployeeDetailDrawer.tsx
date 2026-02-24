@@ -5,13 +5,10 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { EmployeeRow } from "@/hooks/useEmployees";
 import EmployeeInfoTab from "./EmployeeInfoTab";
-import EmployeeAvailabilityTab from "./EmployeeAvailabilityTab";
-import EmployeeExceptionsTab from "./EmployeeExceptionsTab";
 
 interface Props {
   employee: EmployeeRow | null;
@@ -51,25 +48,9 @@ export default function EmployeeDetailDrawer({ employee, open, onOpenChange, can
           </div>
         </SheetHeader>
 
-        <Tabs defaultValue="info" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="mx-6 mt-3 w-auto grid grid-cols-3">
-            <TabsTrigger value="info" className="text-xs">Info</TabsTrigger>
-            <TabsTrigger value="availability" className="text-xs">Disponibilità</TabsTrigger>
-            <TabsTrigger value="exceptions" className="text-xs">Eccezioni</TabsTrigger>
-          </TabsList>
-
-          <ScrollArea className="flex-1 px-6 pb-6">
-            <TabsContent value="info" className="mt-0">
-              <EmployeeInfoTab employee={employee} canEdit={canEdit} />
-            </TabsContent>
-            <TabsContent value="availability" className="mt-0">
-              <EmployeeAvailabilityTab userId={employee.user_id} storeId={employee.primary_store_id} canEdit={canEdit} />
-            </TabsContent>
-            <TabsContent value="exceptions" className="mt-0">
-              <EmployeeExceptionsTab userId={employee.user_id} storeId={employee.primary_store_id} canEdit={canEdit} />
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+        <ScrollArea className="flex-1 px-6 pb-6">
+          <EmployeeInfoTab employee={employee} canEdit={canEdit} />
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   );
