@@ -1,6 +1,5 @@
 import {
   Calendar as CalendarIcon,
-  FlaskConical,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -84,7 +83,6 @@ const cardAgenda = "glass-card rounded-[20px] p-3";
 const Dashboard = () => {
   const { user, role, activeStore } = useAuth();
   const navigate = useNavigate();
-  const [seeding, setSeeding] = useState(false);
   const [showRequestPopup, setShowRequestPopup] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: "approve" | "reject";
@@ -142,22 +140,6 @@ const Dashboard = () => {
   };
 
   const remainingVacation = 14;
-
-  /* seed (dev) */
-  const handleSeed = async () => {
-    setSeeding(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { toast.error("Devi essere loggato"); return; }
-      const { data, error } = await supabase.functions.invoke("seed-employee-test-data");
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(data?.message ?? "Dati test creati!");
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Errore durante il seed";
-      toast.error(errorMessage);
-    } finally { setSeeding(false); }
-  };
 
   const isAdmin = role === "admin" || role === "super_admin";
 
@@ -407,7 +389,7 @@ const Dashboard = () => {
                 const isDayOff = dayShifts.some((s) => s.is_day_off);
 
                 return (
-                  <div key={i} className="flex items-center min-h-[28px]">
+                  <div key={i} className="flex items-center min-h-[22px]">
                     {/* Day label */}
                     <div className={`w-20 shrink-0 pr-2 text-right text-[10px] font-medium ${isDayToday ? "text-primary font-bold" : "text-muted-foreground"}`}>
                       <span className={isDayToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}>
@@ -416,7 +398,7 @@ const Dashboard = () => {
                     </div>
 
                     {/* Timeline bar */}
-                    <div className="flex-1 relative h-6 bg-muted/30 rounded-md overflow-hidden border border-border/40">
+                    <div className="flex-1 relative h-5 bg-muted/30 rounded-md overflow-hidden border border-border/40">
                       {/* Hour grid lines */}
                       {TIMELINE_HOURS.map((h, hi) => (
                         <div
@@ -525,20 +507,6 @@ const Dashboard = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {import.meta.env.DEV && (
-        <div className="mt-2 flex justify-center flex-shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSeed}
-            disabled={seeding}
-            className="gap-2 text-muted-foreground"
-          >
-            <FlaskConical className="h-4 w-4" />
-            {seeding ? "Seeding…" : "Seed dati test dipendente"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 };
