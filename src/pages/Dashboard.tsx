@@ -12,15 +12,26 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import RequestForm from "@/components/requests/RequestForm";
 import { useQuery } from "@tanstack/react-query";
 
@@ -77,6 +88,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [seeding, setSeeding] = useState(false);
   const [showRequestPopup, setShowRequestPopup] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "approve" | "reject";
+    request: { id: string; name: string; type: string; dates: string };
+  } | null>(null);
 
   /* employee department for request form */
   const { data: myDetails } = useQuery({
@@ -113,6 +128,7 @@ const Dashboard = () => {
 
   /* user info */
   const displayName = user?.user_metadata?.full_name || user?.email || "Utente";
+  const avatarUrl: string | undefined = user?.user_metadata?.avatar_url;
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name
         .split(" ")
@@ -155,15 +171,25 @@ const Dashboard = () => {
       ]
     : [];
 
+  /* agenda events (placeholder) */
+  const agendaEvents: { id: string; day: number; hour: number; label: string }[] = [];
+
+  /* dynamic subtitle */
+  const subtitle = isAdmin && pendingRequests.length > 0
+    ? `Hai ${pendingRequests.length} richieste in attesa e ${remainingVacation} giorni di ferie disponibili`
+    : !isAdmin
+      ? `Hai ${remainingVacation} giorni di ferie disponibili`
+      : "Panoramica generale di tutti gli store e del team";
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden animate-in fade-in duration-500">
       {/* Header – greeting */}
       <div className="mb-2 flex-shrink-0">
         <h1 className="text-lg font-bold tracking-tight text-white">
           Benvenuto {displayName} 👋
         </h1>
         <p className="mt-0.5 text-[11px] text-white/50">
-          Panoramica generale di tutti gli store e del team
+          {subtitle}
         </p>
       </div>
 
@@ -176,15 +202,18 @@ const Dashboard = () => {
         <Card className={`${cardProfile} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12 shadow-md flex-shrink-0">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
               <AvatarFallback className="bg-white/10 text-base font-semibold text-white">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white truncate">{displayName}</p>
-              <p className="text-[11px] text-white/50">
-                {role ? roleLabelMap[role] || role : ""}
-              </p>
+              {role && (
+                <Badge className="mt-0.5 text-[10px] px-1.5 py-0 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/20">
+                  {roleLabelMap[role] || role}
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -240,8 +269,8 @@ const Dashboard = () => {
           <CardContent className="flex-1 flex flex-col p-0">
             {/* Day headers */}
             <div className="grid grid-cols-7 mb-1">
-              {DAYS_IT.map((d) => (
-                <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-wider text-white/40">{d}</span>
+              {DAYS_IT.map((d, i) => (
+                <span key={d} className={`text-center text-[9px] font-semibold uppercase tracking-wider text-white/40 ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
               ))}
             </div>
             {/* Day cells */}
@@ -249,16 +278,18 @@ const Dashboard = () => {
               {calendarCells.map((day, idx) => {
                 const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
                 const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
+                const isWeekend = idx % 7 >= 5;
                 return (
                   <button
                     key={idx}
                     disabled={day === null}
                     onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex flex-col items-center justify-center h-7 w-7 rounded-full text-[10px] transition-colors
+                    className={`mx-auto flex flex-col items-center justify-center h-7 w-7 rounded-full text-[11px] transition-colors
                       ${day === null ? "invisible" : ""}
                       ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
                       ${isToday && !isSelected ? "bg-white/10 text-white font-bold" : ""}
                       ${!isToday && !isSelected && day !== null ? "hover:bg-white/10 font-medium text-white/70" : ""}
+                      ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
                     `}
                   >
                     {day}
@@ -299,15 +330,31 @@ const Dashboard = () => {
                     <span className="ml-1 text-white/40 text-[10px]">· {r.type}</span>
                   </div>
                   <div className="flex gap-1 ml-2">
-                    <button className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" aria-label="Approva richiesta">
-                      <Check className="h-2.5 w-2.5" />
+                    <button
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 focus-visible:ring-2 focus-visible:ring-teal-400"
+                      aria-label={`Approva richiesta di ${r.name}`}
+                      onClick={() => setConfirmAction({ type: "approve", request: r })}
+                    >
+                      <Check className="h-4 w-4" />
                     </button>
-                    <button className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400" aria-label="Rifiuta richiesta">
-                      <X className="h-2.5 w-2.5" />
+                    <button
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 focus-visible:ring-2 focus-visible:ring-teal-400"
+                      aria-label={`Rifiuta richiesta di ${r.name}`}
+                      onClick={() => setConfirmAction({ type: "reject", request: r })}
+                    >
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
               ))}
+              <div className="pt-1">
+                <Link
+                  to="/requests"
+                  className="text-[11px] text-teal-400 hover:text-teal-300 transition-colors focus-visible:ring-2 focus-visible:ring-teal-400"
+                >
+                  Vedi tutte →
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
@@ -329,41 +376,49 @@ const Dashboard = () => {
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
-            {/* Inverted axes: days as rows (vertical), hours as columns (horizontal) */}
-            <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
-              style={{ gridTemplateColumns: `3.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
-              {/* Column headers: hours across the top */}
-              <div className="bg-transparent" />
-              {HOURS.map((hour) => (
-                <div
-                  key={hour}
-                  className="bg-transparent text-center pb-0.5 font-medium text-white/40 text-[9px]"
-                >
-                  {String(hour).padStart(2, "0")}
-                </div>
-              ))}
-              {/* Day rows — day number next to name (e.g. Mar 24) */}
-              {weekDates.map((d, i) => {
-                const isToday = d.toDateString() === today.toDateString();
-                return (
-                  <div key={i} className="contents">
-                    <div
-                      className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-white/10 py-0.5
-                        ${isToday ? "text-primary font-bold" : "text-white/40"}`}
-                    >
-                      <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
-                        ${isToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
-                        {DAYS_IT[i]} {d.getDate()}
-                      </span>
-                    </div>
-                    {HOURS.map((hour) => (
-                      <div key={hour} className="border-t border-white/10 py-0.5 min-h-[1rem]" />
-                    ))}
+          <CardContent className={`flex-1 min-h-0 overflow-hidden p-0 ${agendaEvents.length === 0 ? "min-h-[120px]" : ""}`}>
+            {agendaEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full min-h-[120px] gap-2 py-6">
+                <CalendarIcon className="h-8 w-8 text-white/20" />
+                <p className="text-[11px] font-medium text-white/40">Nessun evento in programma questa settimana</p>
+                <p className="text-[10px] text-white/25">Gli eventi appariranno qui quando saranno pianificati</p>
+              </div>
+            ) : (
+              /* Inverted axes: days as rows (vertical), hours as columns (horizontal) */
+              <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
+                style={{ gridTemplateColumns: `3.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
+                {/* Column headers: hours across the top */}
+                <div className="bg-transparent" />
+                {HOURS.map((hour) => (
+                  <div
+                    key={hour}
+                    className="bg-transparent text-center pb-0.5 font-medium text-white/40 text-[9px]"
+                  >
+                    {String(hour).padStart(2, "0")}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+                {/* Day rows — day number next to name (e.g. Mar 24) */}
+                {weekDates.map((d, i) => {
+                  const isToday = d.toDateString() === today.toDateString();
+                  return (
+                    <div key={i} className="contents">
+                      <div
+                        className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-white/10 py-0.5
+                          ${isToday ? "text-primary font-bold" : "text-white/40"}`}
+                      >
+                        <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
+                          ${isToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
+                          {DAYS_IT[i]} {d.getDate()}
+                        </span>
+                      </div>
+                      {HOURS.map((hour) => (
+                        <div key={hour} className="border-t border-white/10 py-0.5 min-h-[1rem]" />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -390,6 +445,38 @@ const Dashboard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Action Dialog */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === "approve" ? "Approva richiesta" : "Rifiuta richiesta"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler {confirmAction?.type === "approve" ? "approvare" : "rifiutare"} la richiesta di{" "}
+              <strong>{confirmAction?.request.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirmAction?.type === "approve" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-destructive hover:bg-destructive/90"}
+              onClick={() => {
+                if (!confirmAction) return;
+                toast.success(
+                  confirmAction.type === "approve"
+                    ? `Richiesta di ${confirmAction.request.name} approvata`
+                    : `Richiesta di ${confirmAction.request.name} rifiutata`
+                );
+                setConfirmAction(null);
+              }}
+            >
+              {confirmAction?.type === "approve" ? "Approva" : "Rifiuta"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {import.meta.env.DEV && (
         <div className="mt-2 flex justify-center flex-shrink-0">
