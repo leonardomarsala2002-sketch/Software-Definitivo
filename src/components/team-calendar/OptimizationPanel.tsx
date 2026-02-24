@@ -268,7 +268,7 @@ export function OptimizationPanel({
                       <div className="flex items-center gap-2">
                         <GroupIcon className={cn("h-3.5 w-3.5", groupCfg.color)} />
                         <span className={cn("text-xs font-semibold", groupCfg.color)}>{groupCfg.label}</span>
-                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-3.5">{items.length}</Badge>
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-3.5 gap-0.5">{items.length}</Badge>
                       </div>
                       {isGroupCollapsed ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />}
                     </button>
@@ -282,11 +282,13 @@ export function OptimizationPanel({
                           const alts = suggestion.alternatives ?? [];
                           const currentIdx = alternativeIndex[suggestion.id] ?? 0;
                           const hasMoreAlts = alts.length > 0 && currentIdx < alts.length - 1;
-                          const declineLabel = hasMoreAlts
-                            ? "Altra soluzione"
-                            : suggestion.type === "uncovered"
-                            ? "Riparti da capo"
-                            : "Ignora";
+                          const isOnLastAlt = alts.length > 0 && currentIdx === alts.length - 1;
+                          let declineLabel: string;
+                          if (suggestion.type === "uncovered") {
+                            declineLabel = isOnLastAlt ? "Riparti da capo" : "Altra soluzione";
+                          } else {
+                            declineLabel = hasMoreAlts ? "Altra soluzione" : "Ignora";
+                          }
 
                           return (
                             <div
