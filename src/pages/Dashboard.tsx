@@ -70,7 +70,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[16px] p-2";
+const cardBase = "glass-card rounded-[14px] p-1.5";
 
 /* all card variants use same soft glass style */
 const cardProfile = cardBase;
@@ -193,7 +193,7 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-2.5 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-3.5 min-h-0 overflow-hidden">
 
         {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
