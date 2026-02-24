@@ -24,6 +24,7 @@ interface MonthGridProps {
   balances?: EmployeeBalance[];
   currentStoreId?: string;
   storeLookup?: Map<string, string>;
+  totalWeeks?: number;
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -60,6 +61,7 @@ export function MonthGrid({
   balances,
   currentStoreId,
   storeLookup,
+  totalWeeks = 5,
 }: MonthGridProps) {
   const today = new Date();
   const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -83,14 +85,17 @@ export function MonthGrid({
       ? String(today.getDate())
       : null;
 
+  // Adaptive: fewer rows visible when month has more weeks
+  const maxVisibleShifts = totalWeeks >= 6 ? 1 : totalWeeks >= 5 ? 2 : 4;
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-3 mb-1 flex-shrink-0 px-3">
+      <div className="grid grid-cols-7 gap-1.5 mb-0.5 flex-shrink-0 px-1.5">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
-            className="text-center text-[11px] font-semibold text-[#444] py-2 uppercase tracking-[0.6px]"
+            className="text-center text-[10px] font-semibold text-muted-foreground py-1 uppercase tracking-[0.6px]"
           >
             {d}
           </div>
@@ -98,10 +103,10 @@ export function MonthGrid({
       </div>
 
       {/* Days grid */}
-      <div className="grid grid-cols-7 gap-3 flex-1 auto-rows-fr px-3 pb-3">
+      <div className="grid grid-cols-7 gap-1.5 flex-1 auto-rows-fr px-1.5 pb-1.5">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`e-${i}`} className="min-h-[60px]" />;
+            return <div key={`e-${i}`} />;
           }
 
           const weekIdx = Math.floor(i / 7);
@@ -118,10 +123,10 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "glass-card rounded-[18px] p-1.5 cursor-pointer transition-[box-shadow,border-color] duration-150 ease-in-out hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_12px_40px_rgba(0,0,0,0.12)] hover:border-[rgba(0,200,83,0.35)] flex flex-col",
+                "glass-card rounded-[14px] p-1 cursor-pointer transition-[box-shadow,border-color] duration-150 ease-in-out hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_12px_40px_rgba(0,0,0,0.12)] hover:border-[rgba(0,200,83,0.35)] flex flex-col overflow-hidden min-h-0",
                 dimmed && "opacity-40",
                 isToday && "ring-2 ring-[#00C853] shadow-[0_0_16px_rgba(0,200,83,0.3)]",
-                isUncovered && !isArchived && !isToday && "ring-1 ring-[#FF3D00]/40",
+                isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/40",
                 hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-amber-400/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
               )}
@@ -130,31 +135,26 @@ export function MonthGrid({
             >
               <div
                 className={cn(
-                  "text-xs font-medium mb-1",
+                  "text-[10px] font-medium mb-0.5 leading-none",
                   isToday
-                    ? "bg-[#00C853] text-white w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
-                    : "text-[#222] font-medium"
+                    ? "bg-[#00C853] text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                    : "text-foreground font-medium"
                 )}
               >
                 {day}
               </div>
-              <div className="space-y-0.5 flex-1 overflow-hidden">
-                {dayShifts.slice(0, 4).map((s) => {
+              <div className="space-y-px flex-1 overflow-hidden min-h-0">
+                {dayShifts.slice(0, maxVisibleShifts).map((s) => {
                   const emp = employees.find((e) => e.user_id === s.user_id);
                   const name = emp?.full_name?.split(" ")[0] ?? "?";
-                  const bal = balances?.find(b => b.user_id === s.user_id);
-                  const balLabel = bal && Math.abs(bal.current_balance) >= 1
-                    ? `${bal.current_balance > 0 ? "+" : ""}${bal.current_balance}h`
-                    : null;
                   const isLent = currentStoreId && s.store_id !== currentStoreId;
-                  const lentFromName = isLent && storeLookup ? storeLookup.get(s.store_id) : null;
                   return (
                     <div
                       key={s.id}
                       className={cn(
-                        "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
+                        "text-[8px] leading-tight truncate rounded px-0.5 py-px",
                         s.is_day_off
-                          ? "bg-red-50 text-[#FF3D00]"
+                          ? "bg-destructive/10 text-destructive"
                           : s.status === "archived"
                             ? "bg-muted text-muted-foreground"
                             : s.status === "draft"
@@ -164,26 +164,16 @@ export function MonthGrid({
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
                       {isLent && (
-                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-[#2962FF]/10 text-[#2962FF]">
-                          Prestito{lentFromName ? ` da ${lentFromName}` : ""}
-                        </span>
-                      )}
-                      {balLabel && (
-                        <span className={cn(
-                          "text-[7px] font-bold shrink-0 px-0.5 rounded",
-                          bal!.current_balance > 0
-                            ? "text-amber-700 bg-amber-50"
-                            : "text-[#2962FF] bg-[#2962FF]/10"
-                        )}>
-                          {balLabel}
+                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-primary/10 text-primary ml-0.5">
+                          P
                         </span>
                       )}
                     </div>
                   );
                 })}
-                {dayShifts.length > 4 && (
-                  <div className="text-[9px] text-muted-foreground">
-                    +{dayShifts.length - 4} altri
+                {dayShifts.length > maxVisibleShifts && totalWeeks <= 5 && (
+                  <div className="text-[8px] text-muted-foreground leading-tight">
+                    +{dayShifts.length - maxVisibleShifts}
                   </div>
                 )}
               </div>
