@@ -9,7 +9,7 @@ export function MobileBottomNav() {
   const visibleItems = filterNavByRole(bottomNavItems, role);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-card/95 backdrop-blur-lg md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-black/60 backdrop-blur-lg md:hidden">
       <div className="flex h-[4.25rem] items-center justify-around px-1 pb-1">
         {visibleItems.map((item) => {
           const isActive =

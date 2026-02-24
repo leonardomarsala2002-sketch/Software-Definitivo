@@ -59,7 +59,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8 text-center">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
@@ -67,17 +67,17 @@ export default function Login() {
             <UtensilsCrossed className="h-8 w-8" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
               Shift Scheduler
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-white/50">
               Gestione turni per la tua catena di ristoranti
             </p>
           </div>
         </div>
 
         {/* Login card */}
-        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm space-y-6">
+        <div className="glass-card rounded-2xl p-8 space-y-6">
           {/* Email + password form */}
           <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
             <div className="space-y-2">
@@ -135,7 +135,7 @@ export default function Login() {
               <span className="w-full border-t border-border/60" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-3 text-muted-foreground">oppure</span>
+              <span className="bg-transparent px-3 text-white/40">oppure</span>
             </div>
           </div>
 
@@ -168,7 +168,7 @@ export default function Login() {
           </Button>
         </div>
 
-        <p className="text-[10px] text-muted-foreground/50">
+        <p className="text-[10px] text-white/30">
           © 2026 Shift Scheduler
         </p>
       </div>
