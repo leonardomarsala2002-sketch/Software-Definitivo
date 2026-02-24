@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
               .select("id, email, full_name")
               .in("id", adminIds);
 
-            for (const p of profiles ?? []) {
+             for (const p of profiles ?? []) {
               if (!p.email) continue;
               try {
                 await fetch("https://api.resend.com/emails", {
@@ -140,6 +140,20 @@ Deno.serve(async (req) => {
                 });
               } catch (emailErr) {
                 console.error(`Email to ${p.email} failed:`, emailErr);
+              }
+
+              // In-app notification
+              try {
+                await adminClient.from("notifications").insert({
+                  user_id: p.id,
+                  store_id: store.id,
+                  type: "draft_ready",
+                  title: "Draft turni pronto",
+                  message: `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Controlla e pubblica quando sei pronto.`,
+                  link: "/team-calendar",
+                });
+              } catch (notifErr) {
+                console.error(`Notification insert failed for ${p.id}:`, notifErr);
               }
             }
           }

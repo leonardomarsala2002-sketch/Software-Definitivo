@@ -173,6 +173,20 @@ Deno.serve(async (req) => {
         } catch (emailErr) {
           console.error(`Failed to email ${profile.email}:`, emailErr);
         }
+
+        // In-app notification
+        try {
+          await adminClient.from("notifications").insert({
+            user_id: userId,
+            store_id: store_id,
+            type: "shifts_published",
+            title: "Turni pubblicati",
+            message: `I tuoi turni per la settimana del ${week_start} su ${store?.name ?? "Store"} sono stati pubblicati.`,
+            link: "/team-calendar",
+          });
+        } catch (notifErr) {
+          console.error(`Notification insert failed for ${userId}:`, notifErr);
+        }
       }
     }
 
