@@ -107,17 +107,33 @@ function getWeekDates(weekStart: string): string[] {
   return dates;
 }
 
-function isAvailable(emp: string, dateStr: string, availability: AvailSlot[], exceptions: ExceptionBlock[]): boolean {
+/** Check if employee is available on a given date.
+ *  - Full-day exceptions block the entire day.
+ *  - If employee has NO availability records at all → always available (contract hours).
+ *  - If employee HAS availability records → must match day_of_week. */
+function isAvailable(emp: string, dateStr: string, availability: AvailSlot[], exceptions: ExceptionBlock[], allEmployeeIds?: Set<string>): boolean {
   for (const ex of exceptions) {
     if (ex.user_id === emp && dateStr >= ex.start_date && dateStr <= ex.end_date) {
       return false;
     }
   }
+  // If employee has NO custom schedule → always available
+  const hasAnyAvailability = availability.some(a => a.user_id === emp);
+  if (!hasAnyAvailability) return true;
+
   const dow = getDayOfWeek(dateStr);
   return availability.some(a => a.user_id === emp && a.day_of_week === dow);
 }
 
+/** Get available hour ranges for an employee on a given date.
+ *  If no custom schedule exists → returns a single range covering 0-24 (full day).
+ *  The actual shift will be constrained by allowed entry/exit times and opening hours. */
 function getAvailableHoursForDay(emp: string, dateStr: string, availability: AvailSlot[]): { start: number; end: number }[] {
+  const hasAnyAvailability = availability.some(a => a.user_id === emp);
+  if (!hasAnyAvailability) {
+    // No custom schedule → available all day, engine will use allowed times & opening hours
+    return [{ start: 0, end: 24 }];
+  }
   const dow = getDayOfWeek(dateStr);
   return availability
     .filter(a => a.user_id === emp && a.day_of_week === dow)
@@ -271,6 +287,33 @@ function computeFitness(
 
   return { score, hourAdjustments };
 }
+/** Remove blocked time ranges from availability (for partial-day requests like mattina_libera / sera_libera) */
+function applyPartialBlocks(
+  avail: { start: number; end: number }[],
+  blocks: { blockedStart: number; blockedEnd: number }[],
+): { start: number; end: number }[] {
+  let result = [...avail];
+  for (const block of blocks) {
+    const next: { start: number; end: number }[] = [];
+    for (const range of result) {
+      // No overlap
+      if (range.end <= block.blockedStart || range.start >= block.blockedEnd) {
+        next.push(range);
+        continue;
+      }
+      // Left portion
+      if (range.start < block.blockedStart) {
+        next.push({ start: range.start, end: block.blockedStart });
+      }
+      // Right portion
+      if (range.end > block.blockedEnd) {
+        next.push({ start: block.blockedEnd, end: range.end });
+      }
+    }
+    result = next;
+  }
+  return result.filter(r => r.end - r.start >= 1); // At least 1h slot
+}
 
 // ─── Single Iteration Generator ──────────────────────────────────────────────
 
@@ -290,6 +333,7 @@ function runIteration(
   empConstraints: Map<string, EmployeeConstraints>,
   maxSplitOverride: number,
   randomize: boolean,
+  partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -426,7 +470,12 @@ function runIteration(
         }
       }
 
-      const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+      let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+      // Apply partial-day blocks (approved mattina_libera / sera_libera)
+      const blocks = partialDayBlocks.get(emp.user_id)?.get(dateStr);
+      if (blocks) {
+        empAvail = applyPartialBlocks(empAvail, blocks);
+      }
       if (empAvail.length === 0) continue;
 
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
@@ -553,7 +602,11 @@ function runIteration(
         // The new split shift must start at least 2h after the last shift ended
         const earliestSplitStart = lastEndToday + 2;
 
-        const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+        let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+        const blocks2 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
+        if (blocks2) {
+          empAvail = applyPartialBlocks(empAvail, blocks2);
+        }
         if (empAvail.length === 0) continue;
 
         let bestStart = -1, bestEnd = -1, bestCoverage = 0;
@@ -732,10 +785,34 @@ Deno.serve(async (req) => {
     const availability = (availRes.data ?? []) as AvailSlot[];
 
     const baseExceptions = (excRes.data ?? []) as ExceptionBlock[];
-    const approvedRequests = (requestsRes.data ?? []).map((r: any) => ({
-      user_id: r.user_id, start_date: r.request_date, end_date: r.request_date,
-    }));
-    const allExceptions = [...baseExceptions, ...approvedRequests];
+    // Only full-day approved requests become full-day exceptions.
+    // Partial-day requests (mattina_libera, sera_libera) are handled as availability constraints, not exceptions.
+    const fullDayRequestTypes = ["giorno_libero", "ferie", "malattia"];
+    const approvedFullDayRequests = (requestsRes.data ?? [])
+      .filter((r: any) => fullDayRequestTypes.includes(r.request_type))
+      .map((r: any) => ({
+        user_id: r.user_id, start_date: r.request_date, end_date: r.request_date,
+      }));
+    const allExceptions = [...baseExceptions, ...approvedFullDayRequests];
+
+    // Partial-day approved requests: create synthetic availability constraints
+    // that block the requested half of the day
+    const partialDayRequests = (requestsRes.data ?? [])
+      .filter((r: any) => !fullDayRequestTypes.includes(r.request_type) && r.request_type !== "cambio_turno");
+    const partialDayBlocks = new Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>();
+    for (const r of partialDayRequests as any[]) {
+      const key = r.user_id;
+      if (!partialDayBlocks.has(key)) partialDayBlocks.set(key, new Map());
+      const dateMap = partialDayBlocks.get(key)!;
+      if (!dateMap.has(r.request_date)) dateMap.set(r.request_date, []);
+      if (r.request_type === "mattina_libera") {
+        // Block morning: employee unavailable until selected_hour or 14
+        dateMap.get(r.request_date)!.push({ blockedStart: 0, blockedEnd: r.selected_hour ?? 14 });
+      } else if (r.request_type === "sera_libera") {
+        // Block evening: employee unavailable from selected_hour or 18
+        dateMap.get(r.request_date)!.push({ blockedStart: r.selected_hour ?? 18, blockedEnd: 24 });
+      }
+    }
 
     const coverageData = (covRes.data ?? []) as CoverageReq[];
     const allowedData = (allowedRes.data ?? []) as AllowedTime[];
@@ -830,7 +907,7 @@ Deno.serve(async (req) => {
             store_id, dept, iterDates, employees, availability,
             allExceptions, coverageData, allowedData, rules, run.id,
             openingHoursData, hourBalances, empConstraints, splitOverride,
-            i > 0,
+            i > 0, partialDayBlocks,
           );
 
           if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
@@ -851,7 +928,7 @@ Deno.serve(async (req) => {
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
               openingHoursData, hourBalances, empConstraints, splitOverride,
-              true,
+              true, partialDayBlocks,
             );
 
             if (result.fitnessScore > bestResult!.fitnessScore) {
