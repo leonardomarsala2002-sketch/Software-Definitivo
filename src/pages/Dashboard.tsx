@@ -60,7 +60,19 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "rounded-[32px] border border-blue-200 dark:border-blue-800/40 bg-blue-50/60 dark:bg-blue-950/30 shadow-lg shadow-black/[0.04] dark:shadow-black/[0.12] p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl";
+  "glass-card rounded-[32px] p-3 transition-all duration-300 hover:bg-white/80 dark:hover:bg-white/10 hover:shadow-2xl";
+
+/* tinted card variants for icon-colored backgrounds */
+const cardProfile =
+  `${cardBase} bg-blue-50/40 dark:bg-blue-900/10`;
+const cardFerie =
+  `${cardBase} bg-emerald-50/40 dark:bg-emerald-900/10`;
+const cardCalendar = cardBase;
+const cardRichiesteAdmin =
+  `${cardBase} bg-violet-50/40 dark:bg-violet-900/10`;
+const cardRichiesteUser =
+  `${cardBase} bg-amber-50/40 dark:bg-amber-900/10`;
+const cardAgenda = cardBase;
 
 /* ── component ───────────────────────────────────────── */
 
@@ -160,12 +172,12 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-2 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-1.5 min-h-0 overflow-hidden">
 
         {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
         {/* User Profile Card */}
-        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+        <Card className={`${cardProfile} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12 shadow-md flex-shrink-0">
               <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
@@ -195,7 +207,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Ferie Card (Vacation counter) */}
-        <Card className={`${cardBase} col-span-1 flex flex-col items-center justify-center`}>
+        <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40 mb-2">
             <Palmtree className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -215,7 +227,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Mini-Month Calendar Card */}
-        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+        <Card className={`${cardCalendar} col-span-1 flex flex-col`}>
           <CardHeader className="p-0 pb-2">
             <CardTitle className="flex items-center justify-between text-xs font-semibold text-foreground tracking-wide">
               <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
@@ -265,7 +277,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Richieste / Avvisi Card */}
-        <Card className={`${cardBase} col-span-1 flex flex-col`}>
+        <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-2 mb-2">
             <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${isAdmin ? "bg-violet-100 dark:bg-violet-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
               {isAdmin ? (
@@ -309,8 +321,8 @@ const Dashboard = () => {
         </Card>
 
         {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
-        <Card className={`${cardBase} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
-          <CardHeader className="p-0 pb-1 flex-shrink-0">
+        <Card className={`${cardAgenda} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
+          <CardHeader className="p-0 pb-0.5 flex-shrink-0">
             <CardTitle className="flex items-center gap-2 text-xs font-semibold text-foreground">
               <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40">
                 <CalendarIcon className="h-3 w-3 text-teal-600 dark:text-teal-400" />
@@ -335,23 +347,22 @@ const Dashboard = () => {
                   {String(hour).padStart(2, "0")}
                 </div>
               ))}
-              {/* Day rows */}
+              {/* Day rows — day number next to name (e.g. Mar 24) */}
               {weekDates.map((d, i) => {
                 const isToday = d.toDateString() === today.toDateString();
                 return (
                   <div key={i} className="contents">
                     <div
-                      className={`flex flex-row items-center justify-end gap-1 pr-1 border-t border-border/30 py-0.5
-                        ${isToday ? "text-primary" : "text-muted-foreground"}`}
+                      className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-white/20 dark:border-white/5 py-0.5
+                        ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}
                     >
-                      <span className="text-[9px] font-medium leading-tight">{DAYS_IT[i]}</span>
-                      <span className={`inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[9px] px-0.5
-                        ${isToday ? "bg-primary text-primary-foreground font-bold" : ""}`}>
-                        {d.getDate()}
+                      <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
+                        ${isToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
+                        {DAYS_IT[i]} {d.getDate()}
                       </span>
                     </div>
                     {HOURS.map((hour) => (
-                      <div key={hour} className="border-t border-border/30 py-0.5 min-h-[1rem]" />
+                      <div key={hour} className="border-t border-white/20 dark:border-white/5 py-0.5 min-h-[1rem]" />
                     ))}
                   </div>
                 );

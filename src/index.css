@@ -113,3 +113,33 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
+
+/* ── Glassmorphism utilities ────────────────────────── */
+@layer utilities {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  .dark .glass-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .glass-sidebar {
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  .dark .glass-sidebar {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .gradient-bg {
+    background: linear-gradient(135deg, #e8eaf6 0%, #ede7f6 50%, #e3f2fd 100%);
+  }
+  .dark .gradient-bg {
+    background: linear-gradient(135deg, #0f1729 0%, #1a1040 50%, #0d1b2a 100%);
+  }
+}

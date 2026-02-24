@@ -93,7 +93,7 @@ export function MonthGrid({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-1 mb-1 flex-shrink-0">
+      <div className="grid grid-cols-7 gap-3 mb-1 flex-shrink-0">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
@@ -104,8 +104,8 @@ export function MonthGrid({
         ))}
       </div>
 
-      {/* Days - card grid with small gaps */}
-      <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-fr">
+      {/* Days - brick card grid with gap-3 (12px) */}
+      <div className="grid grid-cols-7 gap-3 flex-1 auto-rows-fr">
         {cells.map((day, i) => {
           if (day === null) {
             return <div key={`e-${i}`} className="min-h-[60px]" />;
@@ -125,9 +125,9 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "rounded-2xl border border-green-200 dark:border-green-800/40 bg-green-50/50 dark:bg-green-950/20 p-1.5 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg flex flex-col",
+                "glass-card rounded-2xl p-1.5 cursor-pointer transition-all duration-200 hover:bg-white/80 dark:hover:bg-white/10 hover:shadow-2xl flex flex-col",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)] bg-emerald-50/80 dark:bg-emerald-950/30",
+                isToday && "ring-2 ring-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)] bg-emerald-50/70 dark:bg-emerald-950/20",
                 isUncovered && !isArchived && !isToday && "bg-red-50/60 dark:bg-red-950/20 ring-1 ring-red-400/40 border-red-300 dark:border-red-800/40",
                 hasDraft && !isUncovered && !isArchived && !isToday && "bg-amber-50/60 dark:bg-amber-950/20 ring-1 ring-amber-400/40 border-amber-300 dark:border-amber-800/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
