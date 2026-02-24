@@ -467,7 +467,7 @@ const TeamCalendar = () => {
       </div>
 
       {/* Full-view calendar */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {isLoading ? (
           <Skeleton className="h-full w-full rounded-[32px]" />
         ) : (

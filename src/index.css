@@ -109,7 +109,7 @@
   }
 
   body {
-    background: radial-gradient(ellipse at 50% 30%, #00312d 0%, #000000 100%);
+    background: #00473e url('/panino-giusto-bg.jpg') center center / cover no-repeat fixed;
     @apply text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     color: rgba(255, 255, 255, 0.92);
@@ -119,14 +119,14 @@
 /* ── Glassmorphism utilities ────────────────────────── */
 @layer utilities {
   .glass-card {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.12);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
-    border: 1px solid rgba(200, 200, 200, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
   }
   .dark .glass-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(200, 200, 200, 0.1);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
   }
   .glass-sidebar {
     background: transparent;
