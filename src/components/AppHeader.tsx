@@ -36,8 +36,8 @@ export function AppHeader() {
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-white/10 bg-transparent px-5 backdrop-blur-sm md:px-8">
       <SidebarTrigger className="hidden md:flex" />
 
-      {/* Store selector */}
-      {stores.length > 1 ? (
+      {/* Store selector – hidden for employees (they only see their primary store) */}
+      {role !== "employee" && stores.length > 1 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
