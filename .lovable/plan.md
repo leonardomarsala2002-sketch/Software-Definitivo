@@ -1,53 +1,68 @@
+# Dashboard Cards: riduzione proporzionale di tutte le card
 
-# Calendario: celle responsive che si adattano alla viewport
+## Obiettivo
 
-## Problema
-Le celle del calendario hanno altezze minime fisse (`min-h-[60px]`) e contenuto testuale che non si riduce. Quando il mese ha 5-6 righe, le ultime escono dalla viewport.
+Ridurre le dimensioni interne di tutte le card della dashboard (font, icone, avatar, padding, margini) in modo proporzionale, mantenendo circa 14px di spazio visibile tra le card dove si vede lo sfondo, e tra i bordi del div contenitore.
 
-## Soluzione
+## Stato attuale
 
-### 1. Rimuovere altezze minime fisse
-- Eliminare `min-h-[60px]` dalle celle vuote
-- Le righe devono occupare esattamente `1fr` dello spazio disponibile, senza forzare dimensioni
+- Gap tra card: `gap-3.5` (14px) -- gia corretto
+- Padding card: `p-1.5` (6px)
+- Avatar profilo: `h-10 w-10`
+- Icone: `h-3.5 w-3.5`
+- Contenitori icone: `h-6 w-6`
+- Cerchio ferie: `h-14 w-14`
+- Font: `text-sm`, `text-xs`, `text-[11px]`, `text-[10px]`
+- Pulsanti azioni richieste: `h-7 w-7`
+- Celle calendario: `h-6 w-6`
 
-### 2. Contenere ogni cella nel suo spazio
-- Aggiungere `overflow: hidden` su ogni cella del giorno
-- Il contenuto che non entra viene semplicemente nascosto (non spinge la cella)
+## Modifiche previste
 
-### 3. Nascondere i testi quando lo spazio e troppo piccolo
-Usare un approccio CSS con container queries o un semplice calcolo basato sul numero di righe:
-- Se il mese ha 6 righe: mostrare solo il numero del giorno e al massimo 1-2 turni
-- Se ha 5 righe: mostrare fino a 3 turni
-- Se ha 4 righe: mostrare fino a 4 turni (comportamento attuale)
+File: `src/pages/Dashboard.tsx`
 
-Questo viene calcolato nel componente (`totalWeeks` e passato come prop da `TeamCalendar`) per decidere quanti turni mostrare.
+### Card base
 
-### 4. Numero giorno compatto
-- Ridurre padding e margini del numero del giorno
-- Il cerchio verde del "oggi" diventa piu piccolo (w-5 h-5, text-[10px])
+- Padding da `p-1.5` a `p-1` (4px)
+- Border-radius da `rounded-[14px]` a `rounded-[12px]`
 
----
+### Card Profilo (riga 1, colonna 1)
 
-## Dettagli tecnici
+- Avatar: da `h-10 w-10` a `h-8 w-8`
+- Nome: da `text-sm` a `text-xs`
+- Badge ruolo: da `text-[10px]` a `text-[9px]`, padding ridotto
+- Pulsante "nuova richiesta": da `h-7 w-7` a `h-6 w-6`
+- Testo "Nuova richiesta": da `text-xs` a `text-[10px]`
+- Gap tra avatar e testo: da `gap-2` a `gap-1.5`
 
-### File: `src/components/team-calendar/MonthGrid.tsx`
+### Card Ferie (riga 1, colonna 2)
 
-**Props nuova:** `totalWeeks: number` (numero di righe nel mese)
+- Contenitore icona: da `h-6 w-6` a `h-5 w-5`
+- Cerchio SVG: da `h-14 w-14` a `h-11 w-11`, viewBox regolato
+- Numero ferie: da `text-base` a `text-sm`
+- Testo "Ferie rimaste": da `text-[10px]` a `text-[9px]`
+- Margini ridotti (`mb-1` a `mb-0.5`)
 
-**Celle vuote:** da `min-h-[60px]` a nessuna altezza minima
+### Card Calendario (riga 1, colonna 3)
 
-**Celle giorno:**
-- Aggiungere `overflow-hidden` e `min-h-0`
-- Calcolare `maxVisibleShifts` in base a `totalWeeks`:
-  - 6 righe: max 1 turno visibile
-  - 5 righe: max 2 turni
-  - 4 righe: max 4 turni
-- Il contatore "+N altri" appare solo se c'e spazio
+- Titolo mese: da `text-[11px]` a `text-[10px]`
+- Pulsanti nav mese: da `h-5 w-5` a `h-4 w-4`
+- Header giorni: da `text-[9px]` a `text-[8px]`
+- Celle giorno: da `h-6 w-6` a `h-5 w-5`, font da `text-[10px]` a `text-[9px]`
 
-**Numero giorno:**
-- `mb-0.5` invece di `mb-1`
-- Cerchio oggi: `w-5 h-5 text-[10px]`
+### Card Richieste/Avvisi (riga 1, colonna 4)
 
-### File: `src/pages/TeamCalendar.tsx`
+- Contenitore icona: da `h-6 w-6` a `h-5 w-5`
+- Titolo: da `text-[11px]` a `text-[10px]`
+- Badge contatore: da `h-5` a `h-4`
+- Pulsanti approva/rifiuta: da `h-7 w-7` a `h-5 w-5`
+- Icone check/X: da `h-4 w-4` a `h-3 w-3`
 
-- Passare `totalWeeks` come prop a `MonthGrid` (gia calcolato alla riga 213)
+### Card Agenda Settimanale (riga 2, intera larghezza)
+
+- Contenitore icona header: da `h-6 w-6` a `h-5 w-5`
+- Titolo: da `text-xs` a `text-[10px]`
+- Icona vuota: da `h-8 w-8` a `h-6 w-6`
+- Testi vuoti: da `text-[11px]`/`text-[10px]` a `text-[10px]`/`text-[9px]`
+- Empty state min-height: da `min-h-[120px]` a `min-h-[80px]`
+
+Tutte le modifiche sono nel singolo file `src/pages/Dashboard.tsx`.
