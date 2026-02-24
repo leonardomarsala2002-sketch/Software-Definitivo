@@ -7,10 +7,10 @@
     --background: 0 0% 100%;
     --foreground: 0 0% 7%;
 
-    --card: 0 0% 100%;
+    --card: 0 0% 100% / 0.88;
     --card-foreground: 0 0% 7%;
 
-    --popover: 0 0% 100%;
+    --popover: 0 0% 100% / 0.88;
     --popover-foreground: 0 0% 7%;
 
     --primary: 145 100% 39%;
@@ -52,9 +52,9 @@
   .dark {
     --background: 0 0% 100%;
     --foreground: 0 0% 7%;
-    --card: 0 0% 100%;
+    --card: 0 0% 100% / 0.88;
     --card-foreground: 0 0% 7%;
-    --popover: 0 0% 100%;
+    --popover: 0 0% 100% / 0.88;
     --popover-foreground: 0 0% 7%;
     --primary: 145 100% 39%;
     --primary-foreground: 0 0% 100%;
@@ -137,7 +137,7 @@
     overflow: hidden;
   }
 
-  /* Level 3 – Inner Cards */
+  /* Level 3 – Inner Cards (unified style for ALL cards) */
   .glass-card {
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(10px);
@@ -148,25 +148,29 @@
     overflow: hidden;
     transition: all 200ms ease;
   }
-  .glass-card:hover {
-    transform: scale(1.015);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10);
-  }
 
-  /* Level 3 – Sidebar Icon Cards */
+  /* Level 3 – Sidebar Icon Cards (same glass as cards) */
   .glass-icon-card {
-    background: rgba(255, 255, 255, 0.90);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.35);
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     border-radius: 16px;
     overflow: hidden;
     transition: all 200ms ease;
   }
   .glass-icon-card:hover {
-    transform: scale(1.015);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09);
+  }
+
+  /* Unified glass for shadcn popover, dialog, dropdown, sheet, etc. */
+  .glass-popup {
+    background: rgba(255, 255, 255, 0.88) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.35) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
   }
 
   /* Hide scrollbar but keep scrolling */
