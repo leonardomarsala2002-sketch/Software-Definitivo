@@ -11,17 +11,22 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut } from "lucide-react";
-import { useLocation, Link } from "react-router-dom";
+import { UtensilsCrossed, Store, LogOut, Eye, EyeOff, Plus, Settings } from "lucide-react";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 
 export function AppSidebar() {
-  const { role, stores, activeStore, setActiveStore, signOut } = useAuth();
+  const { role, realRole, stores, activeStore, setActiveStore, signOut, isViewingAsEmployee, toggleViewAsEmployee } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
   const secondaryItems = filtered.filter((i) => i.section === "secondary");
+
+  const canManageStores = realRole === "super_admin" || realRole === "admin";
+  const canViewAsEmployee = realRole === "super_admin" || realRole === "admin";
 
   const isActive = (url: string) => {
     if (url === "/") return location.pathname === "/";
@@ -35,6 +40,19 @@ export function AppSidebar() {
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
           <UtensilsCrossed className="h-5 w-5 text-[#333]" />
         </div>
+
+        {/* View as Employee banner */}
+        {isViewingAsEmployee && (
+          <div className="mb-3 px-1">
+            <button
+              onClick={toggleViewAsEmployee}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700 shadow-md animate-pulse hover:animate-none hover:bg-amber-200 transition-colors"
+              title="Stai visualizzando come Dipendente. Clicca per tornare alla vista Admin."
+            >
+              <EyeOff className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Main Navigation */}
         <nav className="flex-1 flex flex-col items-center py-2 space-y-3 overflow-y-auto">
@@ -100,51 +118,71 @@ export function AppSidebar() {
           )}
         </nav>
 
-        {/* Bottom Section: Store + Logout */}
+        {/* Bottom Section: View as Employee + Store + Logout */}
         <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-          {stores.length > 1 ? (
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333] transition-all duration-200">
-                      <Store className="h-5 w-5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
-                  {activeStore?.name ?? "Seleziona store"}
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
-                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                  Seleziona Store
-                </DropdownMenuLabel>
-                {stores.map((s) => (
-                  <DropdownMenuItem
-                    key={s.id}
-                    onClick={() => setActiveStore(s)}
-                    className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
-                  >
-                    <Store className="mr-2.5 h-4 w-4" />
-                    {s.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : activeStore ? (
+          {/* View as Employee toggle */}
+          {canViewAsEmployee && !isViewingAsEmployee && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666]">
-                  <Store className="h-5 w-5" />
-                </div>
+                <button
+                  onClick={toggleViewAsEmployee}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#00C853] transition-all duration-200"
+                  aria-label="Visualizza come Dipendente"
+                >
+                  <Eye className="h-5 w-5" />
+                </button>
               </TooltipTrigger>
               <TooltipContent side="right" className="font-medium">
-                {activeStore.name}
+                Visualizza come Dipendente
               </TooltipContent>
             </Tooltip>
-          ) : null}
+          )}
 
+          {/* Store Selector with Management */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333] transition-all duration-200">
+                    <Store className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium">
+                {activeStore?.name ?? "Seleziona store"}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
+              <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                Seleziona Store
+              </DropdownMenuLabel>
+              {stores.map((s) => (
+                <DropdownMenuItem
+                  key={s.id}
+                  onClick={() => setActiveStore(s)}
+                  className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
+                >
+                  <Store className="mr-2.5 h-4 w-4" />
+                  {s.name}
+                </DropdownMenuItem>
+              ))}
+
+              {canManageStores && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => navigate("/manage-stores")}
+                    className="rounded-lg px-3 py-2 text-[13px] text-[#00C853] font-medium"
+                  >
+                    <Settings className="mr-2.5 h-4 w-4" />
+                    Gestisci Store
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Logout */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button

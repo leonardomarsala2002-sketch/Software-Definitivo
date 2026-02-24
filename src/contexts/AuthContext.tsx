@@ -15,7 +15,14 @@ interface StoreInfo {
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
+  /** The effective role (may be overridden by "View as Employee") */
   role: AppRole | null;
+  /** The real role from the database */
+  realRole: AppRole | null;
+  /** Whether we're currently in "view as employee" mode */
+  isViewingAsEmployee: boolean;
+  /** Toggle "view as employee" mode (only for admin/super_admin) */
+  toggleViewAsEmployee: () => void;
   stores: StoreInfo[];
   activeStore: StoreInfo | null;
   setActiveStore: (store: StoreInfo) => void;
@@ -30,21 +37,29 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [realRole, setRealRole] = useState<AppRole | null>(null);
+  const [isViewingAsEmployee, setIsViewingAsEmployee] = useState(false);
   const [stores, setStores] = useState<StoreInfo[]>([]);
   const [activeStore, setActiveStore] = useState<StoreInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Effective role: if viewing as employee, override to "employee"
+  const role: AppRole | null = isViewingAsEmployee && realRole ? "employee" : realRole;
+
+  const toggleViewAsEmployee = useCallback(() => {
+    if (realRole === "super_admin" || realRole === "admin") {
+      setIsViewingAsEmployee(prev => !prev);
+    }
+  }, [realRole]);
+
   const loadUserData = useCallback(async (userId: string) => {
     try {
-      // Load role via RPC
       const { data: roleData } = await supabase.rpc("get_user_role", {
         _user_id: userId,
       });
 
-      setRole(roleData as AppRole | null);
+      setRealRole(roleData as AppRole | null);
 
-      // Super admin sees ALL stores; others see only assigned stores
       if (roleData === "super_admin") {
         const { data: allStores } = await supabase
           .from("stores")
@@ -88,36 +103,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error loading user data:", error);
-      setRole(null);
+      setRealRole(null);
       setStores([]);
       setActiveStore(null);
     }
   }, []);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          // Show loading spinner while we fetch role & stores
           setIsLoading(true);
-          // Defer data loading to avoid deadlocks
           setTimeout(() => {
             loadUserData(newSession.user.id).finally(() => setIsLoading(false));
           }, 0);
         } else {
-          setRole(null);
+          setRealRole(null);
           setStores([]);
           setActiveStore(null);
+          setIsViewingAsEmployee(false);
           setIsLoading(false);
         }
       }
     );
 
-    // Then check existing session
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
@@ -134,12 +146,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    setRole(null);
+    setRealRole(null);
     setStores([]);
     setActiveStore(null);
+    setIsViewingAsEmployee(false);
   }, []);
 
-  const isAuthorized = role !== null && stores.length > 0;
+  const isAuthorized = realRole !== null && stores.length > 0;
 
   return (
     <AuthContext.Provider
@@ -147,6 +160,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         role,
+        realRole,
+        isViewingAsEmployee,
+        toggleViewAsEmployee,
         stores,
         activeStore,
         setActiveStore,
