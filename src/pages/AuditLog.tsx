@@ -100,7 +100,7 @@ const AuditLog = () => {
               const ts = parseISO(log.created_at);
 
               return (
-                <Card key={log.id} className="p-3 border border-slate-200 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-900/20 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg">
+                <Card key={log.id} className="p-3 border border-slate-200 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-900/20 transition-all duration-200 hover:shadow-2xl">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">

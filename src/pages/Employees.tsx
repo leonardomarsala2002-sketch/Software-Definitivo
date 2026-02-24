@@ -81,7 +81,7 @@ const Employees = () => {
     return (
       <div
         onClick={() => handleRowClick(emp)}
-        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
+        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-200 hover:shadow-2xl ${
           isSala
             ? "border-orange-300 dark:border-orange-700/50 bg-orange-50/40 dark:bg-orange-950/10 hover:bg-orange-100/60 dark:hover:bg-orange-900/20"
             : "border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/40 dark:bg-emerald-950/10 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20"
@@ -202,7 +202,7 @@ const Employees = () => {
           {/* Dual Card System: SALA | CUCINA */}
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0 overflow-hidden">
             {/* SALA Column */}
-            <div className="rounded-[32px] border-2 border-orange-300 dark:border-orange-700/50 bg-orange-50/50 dark:bg-orange-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
+            <div className="rounded-[32px] border-2 border-orange-300 dark:border-orange-700/50 bg-orange-50/50 dark:bg-orange-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-200 dark:bg-orange-900/50">
                   <Users className="h-4 w-4 text-orange-700 dark:text-orange-400" />
@@ -224,7 +224,7 @@ const Employees = () => {
             </div>
 
             {/* CUCINA Column */}
-            <div className="rounded-[32px] border-2 border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
+            <div className="rounded-[32px] border-2 border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-200 dark:bg-emerald-900/50">
                   <Users className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />

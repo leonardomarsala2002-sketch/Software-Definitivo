@@ -57,7 +57,8 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen bg-sidebar border-r border-sidebar-border">
+    <aside className="hidden md:flex w-20 flex-col h-screen py-3 pl-3">
+      <div className="flex flex-col h-full glass-sidebar rounded-3xl shadow-lg">
       {/* Top Section: Logo + Navigation */}
       <div className="flex flex-col items-center pt-4 pb-2">
         {/* Logo */}
@@ -66,7 +67,7 @@ export function AppSidebar() {
         </div>
       </div>
 
-      <Separator className="mx-4 w-auto opacity-40" />
+      <Separator className="mx-4 w-auto opacity-30" />
 
       {/* Main Navigation */}
       <nav className="flex-1 flex flex-col items-center py-4 space-y-2 overflow-y-auto">
@@ -83,8 +84,8 @@ export function AppSidebar() {
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                       ${active 
-                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
-                        : `bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110`
+                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg shadow-current/20 ring-2 ${colors.ring} ${colors.darkRing}` 
+                        : `text-sidebar-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/10`
                       }`}
                   >
                     <item.icon className="h-5 w-5" />
@@ -100,7 +101,7 @@ export function AppSidebar() {
 
         {secondaryItems.length > 0 && (
           <>
-            <Separator className="mx-2 my-2 w-10 opacity-40" />
+            <Separator className="mx-2 my-2 w-10 opacity-30" />
             {secondaryItems.map((item) => {
               const active = isActive(item.url);
               const colors = getColorForPath(item.url);
@@ -114,8 +115,8 @@ export function AppSidebar() {
                       <div
                         className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                           ${active 
-                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg ring-2 ${colors.ring} ${colors.darkRing}` 
-                            : `bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110`
+                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg shadow-current/20 ring-2 ${colors.ring} ${colors.darkRing}` 
+                            : `text-sidebar-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/10`
                           }`}
                       >
                         <item.icon className="h-5 w-5" />
@@ -139,7 +140,7 @@ export function AppSidebar() {
           <TooltipTrigger asChild>
             <button
               onClick={toggleTheme}
-              className="relative flex h-7 w-12 items-center rounded-full bg-sidebar-accent/60 transition-all duration-300"
+              className="relative flex h-7 w-12 items-center rounded-full bg-white/30 dark:bg-white/10 transition-all duration-300"
               aria-label={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
             >
               <span
@@ -159,7 +160,7 @@ export function AppSidebar() {
           </TooltipContent>
         </Tooltip>
 
-        <Separator className="mx-4 w-10 opacity-40" />
+        <Separator className="mx-4 w-10 opacity-30" />
 
         {/* Store Selector */}
         {stores.length > 1 ? (
@@ -167,7 +168,7 @@ export function AppSidebar() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200">
+                  <button className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200">
                     <Store className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
@@ -195,7 +196,7 @@ export function AppSidebar() {
         ) : activeStore ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground">
                 <Store className="h-5 w-5" />
               </div>
             </TooltipTrigger>
@@ -210,7 +211,7 @@ export function AppSidebar() {
           <TooltipTrigger asChild>
             <button
               onClick={signOut}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-sidebar-accent/50 text-sidebar-foreground hover:scale-110 transition-all duration-200"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200"
               aria-label="Logout"
             >
               <span className="text-xl leading-none">🚪</span>
@@ -220,6 +221,7 @@ export function AppSidebar() {
             Logout
           </TooltipContent>
         </Tooltip>
+      </div>
       </div>
     </aside>
   );

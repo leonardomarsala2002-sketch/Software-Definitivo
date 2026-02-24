@@ -163,7 +163,7 @@ const StoreSettings = () => {
             {cards.map((card) => (
               <Card
                 key={card.title}
-                className="border border-rose-200 dark:border-rose-800/40 bg-rose-50/50 dark:bg-rose-950/20 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02] cursor-pointer group"
+                className="border border-rose-200 dark:border-rose-800/40 bg-rose-50/50 dark:bg-rose-950/20 shadow-sm hover:shadow-2xl transition-all duration-200 cursor-pointer group"
                 onClick={card.onEdit}
               >
                 <CardContent className="p-4">

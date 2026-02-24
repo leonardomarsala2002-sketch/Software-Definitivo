@@ -4,10 +4,10 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 
 export function AppShell() {
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden gradient-bg">
       <AppSidebar />
-      <main className="flex flex-1 flex-col overflow-hidden bg-zinc-200 dark:bg-zinc-900">
-        <div className="flex-1 overflow-hidden px-4 py-4 pb-20 md:px-6 md:py-4 md:pb-4">
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-hidden px-4 py-3 pb-20 md:px-5 md:py-3 md:pb-3">
           <Outlet />
         </div>
       </main>

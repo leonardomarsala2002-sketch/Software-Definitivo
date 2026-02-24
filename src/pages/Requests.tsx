@@ -70,7 +70,7 @@ const Requests = () => {
       </PageHeader>
 
       {showForm && storeId && (
-        <Card className="mb-6 border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/30 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-lg">
+        <Card className="mb-6 border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/30 shadow-sm transition-all duration-200 hover:shadow-2xl">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Nuova richiesta</CardTitle>
           </CardHeader>
