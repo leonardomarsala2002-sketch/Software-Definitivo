@@ -106,7 +106,7 @@
     position: relative;
   }
 
-  /* Watermark logo in background */
+  /* Watermark logo in background – full color, no blur */
   body::before {
     content: '';
     position: fixed;
@@ -120,6 +120,8 @@
     opacity: 0.14;
     pointer-events: none;
     z-index: 0;
+    filter: none;
+    -webkit-filter: none;
   }
 
   #root {

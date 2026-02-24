@@ -26,7 +26,7 @@ export function AppShell() {
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-hidden scrollbar-hide px-4 py-3 pb-20 md:px-6 md:py-4 md:pb-4">
+        <div className="flex-1 min-h-0 overflow-hidden scrollbar-hide px-4 py-3 pb-20 md:px-6 md:py-4 md:pb-4">
           <Outlet />
         </div>
       </main>

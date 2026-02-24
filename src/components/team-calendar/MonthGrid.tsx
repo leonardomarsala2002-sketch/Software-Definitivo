@@ -86,7 +86,7 @@ export function MonthGrid({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-[18px] mb-1 flex-shrink-0 px-5">
+      <div className="grid grid-cols-7 gap-3 mb-1 flex-shrink-0 px-3">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
@@ -98,7 +98,7 @@ export function MonthGrid({
       </div>
 
       {/* Days grid */}
-      <div className="grid grid-cols-7 gap-[18px] flex-1 auto-rows-fr px-5 pb-5">
+      <div className="grid grid-cols-7 gap-3 flex-1 auto-rows-fr px-3 pb-3">
         {cells.map((day, i) => {
           if (day === null) {
             return <div key={`e-${i}`} className="min-h-[60px]" />;
