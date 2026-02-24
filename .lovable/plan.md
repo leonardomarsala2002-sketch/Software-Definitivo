@@ -1,87 +1,120 @@
 
-# Refactoring totale del layout Dashboard
 
-## Nuova griglia
+# UI Redesign: Corporate Green Glass System
 
-Il layout attuale e una griglia 4 colonne x 2 righe con tutte le card nella riga 1 della stessa dimensione. Il nuovo layout richiede una disposizione completamente diversa, simile a quadranti.
+## Overview
 
-### Struttura della griglia
+Complete visual overhaul from the current white/transparent background to a **Corporate Green Glass** system with 3 clear visual hierarchy levels. This affects the global background, the AppShell layout structure, the sidebar, and all card components.
+
+## Visual Hierarchy (3 Levels)
 
 ```text
-+------------------+----------+-----------------------------+
-|  Profilo (small) | Richieste|                             |
-+------------------+ (vertical)|   Calendario Mensile       |
-|  Ferie (small)   |          |   (grande, quadrante DX)    |
-+------------------+----------+-----------------------------+
-|                  Agenda Settimanale                        |
-|                  (intera larghezza, altezza ridotta)       |
-+-----------------------------------------------------------+
+Level 1: Green gradient background (full screen)
+Level 2: Main Card (content wrapper) + Sidebar Base Card
+Level 3: Inner Cards (dashboard cards) + Icon Cards (sidebar icons)
 ```
 
-La griglia CSS sara definita con `grid-template-columns` e `grid-template-rows` espliciti e `grid-template-areas` per posizionare ogni card nella sua area:
-- **Colonne**: `auto auto 1fr` (Profilo/Ferie stretti, Richieste stretto, Calendario occupa tutto il resto)
-- **Righe**: `1fr auto` (riga superiore flessibile, agenda in basso compatta)
-- **Areas**:
-  - `"profile requests calendar"`
-  - `"vacation requests calendar"`
-  - `"agenda agenda agenda"`
+## Files to Modify
 
-### Gap e padding
-- `gap-3.5` (14px) tra tutte le card
-- `p-3.5` (14px) padding del contenitore per mostrare lo sfondo su tutti i bordi
+### 1. `src/index.css` - Global Background + Glass Classes
 
-## Modifiche per card
+**Background**: Replace `body { background: #FFFFFF }` with a soft green gradient:
+- `background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 30%, #a5d6a7 70%, #e8f5e9 100%)`
+- Subtle, corporate, no neon, no acid tones
+- Remove the `body::before` watermark logo (it won't be visible through the new system)
 
-### File: `src/pages/Dashboard.tsx`
+**New utility classes** (replace current glass utilities):
+- `.glass-main-card` (Level 2): `bg-white/72`, `backdrop-blur-[16px]`, `border: 1px solid rgba(255,255,255,0.4)`, `shadow: 0 8px 32px rgba(0,0,0,0.06)`, `rounded-[20px]`
+- `.glass-sidebar-base` (Level 2): `bg-white/70`, `backdrop-blur-[14px]`, `border: 1px solid rgba(255,255,255,0.4)`, `shadow: 0 4px 20px rgba(0,0,0,0.05)`, `rounded-[20px]`
+- `.glass-card` (Level 3 - inner cards): `bg-white/80`, `backdrop-blur-[10px]`, `border: 1px solid rgba(255,255,255,0.35)`, lighter shadow, `rounded-[16px]`
+- `.glass-icon-card` (Level 3 - sidebar icons): `bg-white/82`, `backdrop-blur-[8px]`, `border: 1px solid rgba(255,255,255,0.35)`, micro shadow, `rounded-[12px]`
 
-**Card Profilo** (alto-sinistra, piccola)
-- Area: `profile`
-- Dimensioni ridotte, si adatta al contenuto (`h-fit` o `self-start` non serve perche la griglia con areas gestisce tutto)
-- Rimane compatta come adesso
+**Hover effect** (corporate, all card levels):
+- `transform: scale(1.015)` with `transition: all 200ms ease`
+- No glow, no luminous effects
+- `overflow: hidden` on all cards
 
-**Card Ferie** (sotto Profilo, piccola)
-- Area: `vacation`
-- Stessa colonna del profilo, sotto di esso
-- Rimane compatta, adattata al contenuto
+**Remove** `.gradient-bg` (replaced by body gradient).
 
-**Card Richieste** (centro, verticale)
-- Area: `requests` (si estende su 2 righe: profile e vacation)
-- `grid-row: 1 / 3` per occupare entrambe le righe della colonna centrale
-- Layout verticale con lista scrollabile se necessario
+### 2. `src/components/ui/card.tsx` - Base Card Component
 
-**Card Calendario** (quadrante destro intero)
-- Area: `calendar` (si estende su 2 righe)
-- `grid-row: 1 / 3` per occupare tutto il quadrante superiore destro
-- Celle del calendario piu grandi per riempire lo spazio
-- Font e padding aumentati proporzionalmente rispetto alla versione mini
+Update the default `Card` class to use Level 3 glass style:
+- `rounded-[16px]`
+- `bg-[rgba(255,255,255,0.80)]`
+- `backdrop-blur-[10px]`
+- `border border-[rgba(255,255,255,0.35)]`
+- Lighter shadow than current
+- Hover: subtle scale(1.015), `overflow-hidden`, transition 200ms
+- No translate/shift effects
 
-**Card Agenda** (intera larghezza, bassa)
-- Area: `agenda`
-- `min-h-[80px]` rimosso, altezza ridotta al minimo necessario
-- Empty state compatto
+### 3. `src/components/AppShell.tsx` - Main Card Wrapper
 
-### Stile visivo
+The `<main>` area currently has no container card. Wrap the `<Outlet />` area in a **Main Card** (Level 2):
 
-**glass-card aggiornato** in `src/index.css`:
-- Cambiare `border: 1px solid rgba(0, 200, 83, 0.22)` a `border: 1px solid rgba(255, 255, 255, 0.20)` (no verde)
-- Cambiare `background: rgba(255, 255, 255, 0.58)` a `rgba(255, 255, 255, 0.40)` per piu trasparenza
-- Aggiungere `backdrop-filter: blur(24px)` (da 16px a 24px) per effetto opalescente
+**Before**:
+```text
+[Sidebar] [Content area (no card)]
+```
 
-**Badge ruolo**: rimuovere colori verdi, usare sfondo neutro `bg-foreground/10 text-foreground/70 border-foreground/20`
+**After**:
+```text
+[Green BG] -> [Sidebar Base Card] | [Main Card wrapping all content]
+```
 
-**Hover card**: la classe `glass-card` non deve avere effetti di scala/traslazione. Solo una leggera variazione di ombra se presente.
+Changes:
+- Outer `div`: remove `gradient-bg`, the body gradient handles the background
+- Add padding around the main area so the green background is visible as a frame
+- Wrap content in a `div` with class `glass-main-card` that fills the available space
+- The main card gets `rounded-[20px]`, proper padding, and `overflow-hidden`
 
-**Cerchio progresso ferie**: cambiare `text-[#111]` a `text-foreground` (gia nero, ma coerente)
+### 4. `src/components/AppSidebar.tsx` - Sidebar Double Layer
 
-**Pulsante "today" nel calendario e selezione**: `bg-primary` resta perche primary e gia definito nel tema, ma il badge ruolo perde il verde esplicito.
+**Sidebar Base Card** (Level 2):
+- Wrap the entire sidebar content in a vertical card with `glass-sidebar-base`
+- Full height, `rounded-[20px]`, proper margin from screen edges
 
-## Fix tecnici
+**Icon Cards** (Level 3):
+- Each navigation icon currently uses inline classes (`bg-white/50 shadow-md rounded-full`)
+- Replace with `glass-icon-card` class: `rounded-[12px]` (square-ish, not round), `bg-white/82`, `backdrop-blur-[8px]`, micro shadow
+- Active state: slightly more opaque + green icon color (keep `text-[#00C853]`)
+- Hover: scale(1.015), 200ms ease, no glow
 
-1. **No clipping**: tutte le card usano `overflow-hidden` dove necessario, nessun effetto hover che sposta elementi
-2. **No scroll**: il contenitore resta `h-full overflow-hidden` con griglia flessibile
-3. **Hover minimo**: nessun transform/scale sulle card, solo variazione ombra/bordo gia gestita dalle regole esistenti (gia conformi)
+**Structural changes**:
+- `aside` padding adjusted to show green background around the sidebar base card
+- Logo container: stays as-is (round white circle), positioned inside the sidebar base card
+- Icon shape: change from `rounded-full` to `rounded-[12px]` for the glass-icon-card look
+- Size stays `h-11 w-11`
 
-## File modificati
+### 5. `src/pages/Dashboard.tsx` - Inner Cards Styling
 
-1. `src/pages/Dashboard.tsx` - Riscrittura della griglia e riposizionamento card
-2. `src/index.css` - Aggiornamento `.glass-card` (bordo bianco invece di verde, bg piu trasparente)
+- The `cardBase` constant changes from `"glass-card rounded-[12px] p-1"` to `"glass-card rounded-[16px] p-2"` (Level 3 style is now applied by the updated `.glass-card` class)
+- All inner cards inherit the Level 3 glass properties automatically
+- Add `overflow-hidden` to each card
+- Hover effect handled by the CSS class (scale 1.015, 200ms)
+
+## Spacing Rules
+
+- Green background visible around all Level 2 elements (sidebar base card, main card)
+- `p-3` (12px) around the outer shell to show green background as frame
+- `gap-3.5` (14px) between inner cards (maintained from current)
+- `p-3.5` (14px) inside the main card around the inner cards
+
+## Color Palette Summary
+
+| Element | Background | Blur | Border | Shadow |
+|---------|-----------|------|--------|--------|
+| Body BG | Green gradient | -- | -- | -- |
+| Main Card (L2) | white/72 | 16px | white/40 | soft diffused |
+| Sidebar Base (L2) | white/70 | 14px | white/40 | light visible |
+| Inner Cards (L3) | white/80 | 10px | white/35 | lighter |
+| Icon Cards (L3) | white/82 | 8px | white/35 | micro |
+
+## What Does NOT Change
+
+- Navigation structure and routing
+- Dashboard grid layout (quadrant system with grid-template-areas)
+- Functional logic (requests, calendar, agenda)
+- Mobile bottom nav
+- Button gradient (green gradient stays for primary buttons)
+- Typography sizes (already scaled from previous work)
+
