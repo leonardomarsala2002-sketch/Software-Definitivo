@@ -63,14 +63,14 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-8 text-center">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#111] text-white shadow-lg">
             <UtensilsCrossed className="h-8 w-8" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Shift Scheduler
             </h1>
-            <p className="mt-1 text-sm text-white/50">
+            <p className="mt-1 text-sm text-muted-foreground">
               Gestione turni per la tua catena di ristoranti
             </p>
           </div>
@@ -135,7 +135,7 @@ export default function Login() {
               <span className="w-full border-t border-border/60" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-transparent px-3 text-white/40">oppure</span>
+              <span className="bg-transparent px-3 text-muted-foreground">oppure</span>
             </div>
           </div>
 
@@ -168,7 +168,7 @@ export default function Login() {
           </Button>
         </div>
 
-        <p className="text-[10px] text-white/30">
+        <p className="text-[10px] text-muted-foreground/50">
           © 2026 Shift Scheduler
         </p>
       </div>

@@ -71,7 +71,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "glass-card rounded-[24px] p-3 transition-all duration-200 hover:scale-[1.01] hover:shadow-md";
+  "glass-card rounded-[20px] p-3 transition-all duration-200 hover:scale-[1.01]";
 
 /* all card variants use same soft glass style */
 const cardProfile = cardBase;
@@ -233,15 +233,15 @@ const Dashboard = () => {
 
         {/* Ferie Card (Vacation counter) */}
         <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 mb-2">
-            <Palmtree className="h-4 w-4 text-emerald-600" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent mb-2">
+            <Palmtree className="h-4 w-4 text-[#666]" />
           </div>
           <div className="relative flex h-16 w-16 items-center justify-center">
             <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
-                className="text-emerald-500"
+                className="text-[#111]"
                 strokeWidth="4" strokeLinecap="round"
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
@@ -294,7 +294,7 @@ const Dashboard = () => {
                   >
                     {day}
                     {isToday && day !== null && (
-                      <span className="block h-1 w-1 rounded-full bg-emerald-500 -mt-px" />
+                      <span className="block h-1 w-1 rounded-full bg-[#111] -mt-px" />
                     )}
                   </button>
                 );
@@ -306,11 +306,11 @@ const Dashboard = () => {
         {/* Richieste / Avvisi Card */}
         <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-2 mb-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent">
               {isAdmin ? (
-                <Inbox className="h-4 w-4 text-violet-500" />
+                <Inbox className="h-4 w-4 text-[#666]" />
               ) : (
-                <Bell className="h-4 w-4 text-amber-500" />
+                <Bell className="h-4 w-4 text-[#666]" />
               )}
             </div>
             <p className="text-xs font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
@@ -318,7 +318,7 @@ const Dashboard = () => {
           {isAdmin && pendingRequests.length > 0 ? (
             <div className="flex-1 space-y-1.5 overflow-hidden">
               <div className="flex items-center gap-2 mb-1">
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1.5">
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#111] text-white text-[10px] font-bold px-1.5">
                   {pendingRequests.length}
                 </span>
                 <span className="text-[11px] text-muted-foreground">richieste in attesa</span>
@@ -331,14 +331,14 @@ const Dashboard = () => {
                   </div>
                   <div className="flex gap-1 ml-2">
                     <button
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 focus-visible:ring-2 focus-visible:ring-primary"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-foreground hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Approva richiesta di ${r.name}`}
                       onClick={() => setConfirmAction({ type: "approve", request: r })}
                     >
                       <Check className="h-4 w-4" />
                     </button>
                     <button
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 focus-visible:ring-2 focus-visible:ring-primary"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Rifiuta richiesta di ${r.name}`}
                       onClick={() => setConfirmAction({ type: "reject", request: r })}
                     >
