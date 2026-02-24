@@ -162,6 +162,20 @@ Deno.serve(async (req) => {
         } catch (emailErr) {
           console.error(`Failed to email ${profile.email}:`, emailErr);
         }
+
+        // In-app notification
+        try {
+          await adminClient.from("notifications").insert({
+            user_id: profile.id,
+            store_id: store_id,
+            type: "shift_updated",
+            title: "Turno aggiornato",
+            message: `Il tuo turno su ${store?.name ?? "Store"} è stato modificato per coprire un'assenza. Controlla il calendario.`,
+            link: "/team-calendar",
+          });
+        } catch (notifErr) {
+          console.error(`Notification insert failed for ${profile.id}:`, notifErr);
+        }
       }
     }
 

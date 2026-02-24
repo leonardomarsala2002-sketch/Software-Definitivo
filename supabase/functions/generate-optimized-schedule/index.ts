@@ -1292,6 +1292,20 @@ I turni proposti sono in stato <strong>Draft</strong> e richiedono la tua approv
               } catch (emailErr) {
                 console.error(`Failed to email admin ${admin.email}:`, emailErr);
               }
+
+              // In-app notification
+              try {
+                await adminClient.from("notifications").insert({
+                  user_id: admin.id,
+                  store_id,
+                  type: "coverage_problem",
+                  title: "Proposta copertura malattia",
+                  message: `${affectedName} è assente. L'AI ha generato una proposta con ${totalShifts} turni. Approva nel Calendario Team.`,
+                  link: "/team-calendar",
+                });
+              } catch (notifErr) {
+                console.error(`Notification insert failed for admin ${admin.id}:`, notifErr);
+              }
             }
           }
         }
