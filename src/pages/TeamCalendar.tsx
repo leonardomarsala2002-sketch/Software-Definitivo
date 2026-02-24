@@ -71,10 +71,18 @@ const TeamCalendar = () => {
 
   const { data: generationRuns = [] } = useWeekGenerationRuns(storeId, currentWeekStart);
 
-  // Fetch suggestions from generation_runs (server-side computed)
-  const runIds = useMemo(() => generationRuns.map(r => r.id), [generationRuns]);
-  const { suggestions } = useOptimizationSuggestions(runIds);
-  const { data: dbLendingSuggestions = [] } = useLendingSuggestions(runIds);
+  // Fetch suggestions only from the LATEST completed run per department
+  const latestRunIds = useMemo(() => {
+    const latest = new Map<string, string>(); // dept -> run id
+    for (const r of generationRuns) {
+      if (r.status === "completed" && !latest.has(r.department)) {
+        latest.set(r.department, r.id); // already sorted desc by created_at
+      }
+    }
+    return Array.from(latest.values());
+  }, [generationRuns]);
+  const { suggestions } = useOptimizationSuggestions(latestRunIds);
+  const { data: dbLendingSuggestions = [] } = useLendingSuggestions(latestRunIds);
 
   const generateShifts = useGenerateShifts();
   const publishWeek = usePublishWeek();
