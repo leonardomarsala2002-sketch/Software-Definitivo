@@ -23,14 +23,13 @@ interface MonthGridProps {
   uncoveredDates?: Map<string, Set<number>>;
   balances?: EmployeeBalance[];
   currentStoreId?: string;
-  storeLookup?: Map<string, string>; // store_id → store name
+  storeLookup?: Map<string, string>;
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
 function getMonthDays(year: number, month: number) {
   const firstDay = new Date(year, month - 1, 1);
-  // getDay() 0=Sun, adjust to Mon=0
   let startDow = firstDay.getDay() - 1;
   if (startDow < 0) startDow = 6;
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -40,12 +39,6 @@ function getMonthDays(year: number, month: number) {
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
-}
-
-function getWeekOfDay(day: number, year: number, month: number): number {
-  const cells = getMonthDays(year, month);
-  const idx = cells.indexOf(day);
-  return Math.floor(idx / 7);
 }
 
 function formatShiftTime(s: ShiftRow): string {
@@ -93,19 +86,19 @@ export function MonthGrid({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-3 mb-1 flex-shrink-0">
+      <div className="grid grid-cols-7 gap-[18px] mb-1 flex-shrink-0 px-5">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
-            className="text-center text-[11px] font-semibold text-white/40 py-1.5 uppercase tracking-wider"
+            className="text-center text-[11px] font-semibold text-[#444] py-2 uppercase tracking-[0.6px]"
           >
             {d}
           </div>
         ))}
       </div>
 
-      {/* Days - brick card grid with gap-3 (12px) */}
-      <div className="grid grid-cols-7 gap-3 flex-1 auto-rows-fr">
+      {/* Days grid */}
+      <div className="grid grid-cols-7 gap-[18px] flex-1 auto-rows-fr px-5 pb-5">
         {cells.map((day, i) => {
           if (day === null) {
             return <div key={`e-${i}`} className="min-h-[60px]" />;
@@ -125,10 +118,10 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "glass-card rounded-2xl p-1.5 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:shadow-2xl hover:-translate-y-0.5 flex flex-col",
+                "glass-card rounded-[18px] p-1.5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(0,0,0,0.11)] flex flex-col",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)]",
-                isUncovered && !isArchived && !isToday && "ring-1 ring-red-400/40",
+                isToday && "ring-2 ring-[#00C853] shadow-[0_0_16px_rgba(0,200,83,0.3)]",
+                isUncovered && !isArchived && !isToday && "ring-1 ring-[#FF3D00]/40",
                 hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-amber-400/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
               )}
@@ -139,8 +132,8 @@ export function MonthGrid({
                 className={cn(
                   "text-xs font-medium mb-1",
                   isToday
-                    ? "bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
-                    : "text-white/80"
+                    ? "bg-[#00C853] text-white w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
+                    : "text-[#222] font-medium"
                 )}
               >
                 {day}
@@ -161,17 +154,17 @@ export function MonthGrid({
                       className={cn(
                         "text-[9px] leading-tight truncate rounded px-1 py-0.5 flex items-center gap-0.5",
                         s.is_day_off
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                          ? "bg-red-50 text-[#FF3D00]"
                           : s.status === "archived"
                             ? "bg-muted text-muted-foreground"
                             : s.status === "draft"
-                              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-[#00C853]/10 text-[#009624]"
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
                       {isLent && (
-                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-[#2962FF]/10 text-[#2962FF]">
                           Prestito{lentFromName ? ` da ${lentFromName}` : ""}
                         </span>
                       )}
@@ -179,8 +172,8 @@ export function MonthGrid({
                         <span className={cn(
                           "text-[7px] font-bold shrink-0 px-0.5 rounded",
                           bal!.current_balance > 0
-                            ? "text-amber-700 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30"
-                            : "text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
+                            ? "text-amber-700 bg-amber-50"
+                            : "text-[#2962FF] bg-[#2962FF]/10"
                         )}>
                           {balLabel}
                         </span>

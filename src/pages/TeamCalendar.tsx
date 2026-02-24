@@ -408,13 +408,13 @@ const TeamCalendar = () => {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex flex-col" style={{ height: "calc(100vh - 140px)" }}>
       {/* Compact header with controls */}
       <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
         {/* Title */}
         <div className="mr-auto">
-          <h1 className="text-lg font-bold tracking-tight text-white">Calendario Team</h1>
-          <p className="text-[11px] text-white/50">
+          <h1 className="text-lg font-bold tracking-tight text-[#111]">Calendario Team</h1>
+          <p className="text-[11px] text-[#444]">
             {activeStore?.name ?? "Store"} · {department === "sala" ? "Sala" : "Cucina"}
           </p>
         </div>
@@ -463,7 +463,7 @@ const TeamCalendar = () => {
                 variant="default"
                 onClick={() => setShowApproveConfirm(true)}
                 disabled={approvePatch.isPending}
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-[32px]"
+                className="gap-1.5 rounded-[32px]"
               >
                 {approvePatch.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
