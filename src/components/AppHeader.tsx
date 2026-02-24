@@ -11,6 +11,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChevronDown, LogOut, Store, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function AppHeader() {
   const { user, role, stores, activeStore, setActiveStore, signOut } = useAuth();
@@ -75,6 +76,8 @@ export function AppHeader() {
       ) : null}
 
       <div className="flex-1" />
+
+      <NotificationBell />
 
       {/* User menu */}
       <DropdownMenu>
