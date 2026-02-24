@@ -30,28 +30,28 @@ export function KpiCards({ shifts, employeeCount, year, month }: KpiCardsProps) 
       label: "Ferie / Riposi",
       value: `${totalDaysOff}`,
       sub: "nel mese",
-      color: "text-emerald-600 bg-emerald-500/10",
+      color: "text-[#666] bg-accent",
     },
     {
       icon: Clock,
       label: "Turni assegnati",
       value: `${totalShifts}`,
       sub: `su ${employeeCount} dipendenti`,
-      color: "text-primary bg-primary/10",
+      color: "text-[#666] bg-accent",
     },
     {
       icon: Hourglass,
       label: "Ore coperte",
       value: `${coveredHours}h`,
       sub: "totale mese",
-      color: "text-amber-600 bg-amber-500/10",
+      color: "text-[#666] bg-accent",
     },
     {
       icon: Thermometer,
       label: "Malattie",
       value: "0",
       sub: "questo mese",
-      color: "text-rose-600 bg-rose-500/10",
+      color: "text-[#666] bg-accent",
     },
   ];
 

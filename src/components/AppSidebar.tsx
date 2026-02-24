@@ -29,11 +29,11 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center">
+    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center glass-sidebar">
       <div className="flex flex-col h-full items-center">
         {/* Logo */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg text-primary mb-6">
-          <UtensilsCrossed className="h-5 w-5" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
+          <UtensilsCrossed className="h-5 w-5 text-[#333]" />
         </div>
 
         {/* Main Navigation */}
@@ -51,8 +51,8 @@ export function AppSidebar() {
                     <div
                       className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                         ${active
-                          ? "bg-white shadow-lg text-primary"
-                          : "bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80"
+                          ? "bg-white shadow-lg text-[#111]"
+                          : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
                         }`}
                     >
                       <item.icon className="h-5 w-5" />
@@ -82,8 +82,8 @@ export function AppSidebar() {
                         <div
                           className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                             ${active
-                              ? "bg-white shadow-lg text-primary"
-                              : "bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80"
+                              ? "bg-white shadow-lg text-[#111]"
+                              : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
                             }`}
                         >
                           <item.icon className="h-5 w-5" />
@@ -108,7 +108,7 @@ export function AppSidebar() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80 transition-all duration-200">
+                    <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333] transition-all duration-200">
                       <Store className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
@@ -136,7 +136,7 @@ export function AppSidebar() {
           ) : activeStore ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-foreground/50">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666]">
                   <Store className="h-5 w-5" />
                 </div>
               </TooltipTrigger>
@@ -151,7 +151,7 @@ export function AppSidebar() {
             <TooltipTrigger asChild>
               <button
                 onClick={signOut}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-destructive/70 hover:bg-white hover:shadow-lg hover:text-destructive transition-all duration-200"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-destructive transition-all duration-200"
                 aria-label="Esci"
               >
                 <LogOut className="h-5 w-5" />
