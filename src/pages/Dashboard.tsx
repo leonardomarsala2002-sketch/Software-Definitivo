@@ -69,7 +69,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[16px] p-2";
+const cardBase = "glass-card rounded-[20px] p-6";
 
 const cardProfile = cardBase;
 const cardFerie = cardBase;
@@ -192,7 +192,7 @@ const Dashboard = () => {
 
       {/* Quadrant Grid – fills viewport, no scroll */}
       <div
-        className="flex-1 gap-3.5 p-3.5 min-h-0 overflow-hidden"
+        className="flex-1 gap-5 min-h-0 overflow-hidden"
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto auto 1fr',
@@ -206,43 +206,25 @@ const Dashboard = () => {
       >
 
         {/* ── Profile Card (top-left, compact) ── */}
-        <Card className={`${cardProfile} flex flex-col`} style={{ gridArea: 'profile' }}>
-          <div className="flex items-center gap-1.5">
-            <Avatar className="h-8 w-8 shadow-md flex-shrink-0">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
-              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-foreground">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">{displayName}</p>
-              {role && (
-                <Badge className="mt-0.5 text-[9px] px-1 py-0 bg-foreground/10 text-foreground/70 border border-foreground/20 hover:bg-foreground/15">
-                  {roleLabelMap[role] || role}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="mt-auto pt-1.5 flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Nuova richiesta</span>
-            <Button
-              size="icon"
-              variant="outline"
-              className="h-6 w-6 rounded-full border-border text-foreground/60 hover:text-foreground hover:border-foreground/30"
-              onClick={() => setShowRequestPopup(true)}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+        <Card className={`${cardProfile} flex flex-col items-center justify-center`} style={{ gridArea: 'profile' }}>
+          <Avatar className="h-10 w-10 shadow-md">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
+            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <p className="mt-2 text-xs font-bold text-foreground truncate">{displayName}</p>
+          {role && (
+            <Badge className="mt-1 text-[9px] px-1.5 py-0 bg-foreground/10 text-foreground/70 border border-foreground/20 hover:bg-foreground/15">
+              {roleLabelMap[role] || role}
+            </Badge>
+          )}
         </Card>
 
         {/* ── Vacation Card (below profile, compact) ── */}
         <Card className={`${cardFerie} flex flex-col items-center justify-center`} style={{ gridArea: 'vacation' }}>
-          <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent mb-0.5">
-            <Palmtree className="h-3 w-3 text-muted-foreground" />
-          </div>
-          <div className="relative flex h-11 w-11 items-center justify-center">
-            <svg className="h-11 w-11 -rotate-90" viewBox="0 0 64 64">
+          <div className="relative flex h-14 w-14 items-center justify-center">
+            <svg className="h-14 w-14 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
@@ -251,9 +233,8 @@ const Dashboard = () => {
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
             </svg>
-            <span className="absolute text-sm font-bold text-foreground">{remainingVacation}</span>
+            <span className="absolute text-base font-bold text-foreground">{remainingVacation}</span>
           </div>
-          <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Ferie rimaste</p>
         </Card>
 
         {/* ── Requests Card (center, vertical, spans 2 rows) ── */}
