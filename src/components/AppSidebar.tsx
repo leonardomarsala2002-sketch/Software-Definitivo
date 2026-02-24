@@ -50,6 +50,7 @@ export function AppSidebar() {
               <TooltipTrigger asChild>
                 <Link
                   to={item.url}
+                  aria-label={item.title}
                   className="flex items-center justify-center p-1"
                 >
                   <div
@@ -80,6 +81,7 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <Link
                       to={item.url}
+                      aria-label={item.title}
                       className="flex items-center justify-center p-1"
                     >
                       <div
@@ -156,14 +158,14 @@ export function AppSidebar() {
           <TooltipTrigger asChild>
             <button
               onClick={signOut}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-white/50 hover:text-white/80 hover:shadow-[0_0_12px_rgba(255,255,255,0.15)] transition-all duration-200"
-              aria-label="Logout"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-red-400 hover:text-red-300 hover:shadow-[0_0_12px_rgba(248,113,113,0.25)] transition-all duration-200"
+              aria-label="Esci"
             >
               <LogOut className="h-5 w-5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="font-medium">
-            Logout
+            Esci
           </TooltipContent>
         </Tooltip>
       </div>
