@@ -86,6 +86,8 @@ const StoreSettings = () => {
     return `Sala ${r.max_team_hours_sala_per_week ?? "–"}h · Cucina ${r.max_team_hours_cucina_per_week ?? "–"}h / sett.`;
   }, [rules]);
 
+  const genEnabled = rules?.generation_enabled ?? false;
+
   const cards = [
     {
       title: "Regole Team",
@@ -93,6 +95,7 @@ const StoreSettings = () => {
       summary: rulesSummary,
       configured: hasConfig,
       onEdit: () => setRulesOpen(true),
+      extraBadge: hasConfig ? (genEnabled ? { label: "Auto ✓", variant: "default" as const, className: "bg-success text-success-foreground" } : { label: "Manuale", variant: "secondary" as const, className: "" }) : undefined,
     },
     {
       title: "Orari Apertura",
@@ -175,8 +178,13 @@ const StoreSettings = () => {
                       <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      {"extraBadge" in card && card.extraBadge && (
+                        <Badge variant={card.extraBadge.variant} className={`text-[10px] px-1.5 py-0 ${card.extraBadge.className}`}>
+                          {card.extraBadge.label}
+                        </Badge>
+                      )}
                       <Badge variant={card.configured ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
-                        {card.configured ? "✓" : card.optional ? "Opzionale" : "Da fare"}
+                        {card.configured ? "✓" : ("optional" in card && card.optional) ? "Opzionale" : "Da fare"}
                       </Badge>
                       {!readOnly && (
                         <Button
