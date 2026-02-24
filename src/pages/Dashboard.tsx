@@ -68,8 +68,10 @@ const cardProfile =
 const cardFerie =
   `${cardBase} bg-emerald-50/40 dark:bg-emerald-900/10`;
 const cardCalendar = cardBase;
-const cardRichieste =
-  `${cardBase}`;
+const cardRichiesteAdmin =
+  `${cardBase} bg-violet-50/40 dark:bg-violet-900/10`;
+const cardRichiesteUser =
+  `${cardBase} bg-amber-50/40 dark:bg-amber-900/10`;
 const cardAgenda = cardBase;
 
 /* ── component ───────────────────────────────────────── */
@@ -275,7 +277,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Richieste / Avvisi Card */}
-        <Card className={`${cardRichieste} col-span-1 flex flex-col ${isAdmin ? "bg-violet-50/40 dark:bg-violet-900/10" : "bg-amber-50/40 dark:bg-amber-900/10"}`}>
+        <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-2 mb-2">
             <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${isAdmin ? "bg-violet-100 dark:bg-violet-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
               {isAdmin ? (
