@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, LogOut, Eye, EyeOff, Settings } from "lucide-react";
+import { Store, LogOut, Eye, EyeOff, Settings } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 
 export function AppSidebar() {
@@ -43,10 +43,8 @@ export function AppSidebar() {
   return (
     <aside className="hidden md:flex w-20 flex-col h-full">
       <div className="flex flex-col h-full items-center py-4">
-        {/* Logo */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
-          <UtensilsCrossed className="h-5 w-5 text-[#333]" />
-        </div>
+        {/* Logo placeholder */}
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6" />
 
         {/* View as Employee indicator */}
         {isViewingAsEmployee && (

@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 
 /* ── helpers ─────────────────────────────────────────── */
 
+const DAYS_FULL_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
 const DAYS_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 const MONTHS_IT = [
   "Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
@@ -65,7 +66,7 @@ function getWeekDates(base: Date) {
   });
 }
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
+const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7); // 07–23
 
 /* ── card style ──────────────────────────────────────── */
 
@@ -168,8 +169,28 @@ const Dashboard = () => {
       ]
     : [];
 
-  /* agenda events (placeholder) */
-  const agendaEvents: { id: string; day: number; hour: number; label: string }[] = [];
+  /* agenda: fetch user shifts for the selected week */
+  const weekStart = weekDates[0];
+  const weekEnd = weekDates[6];
+  const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+  const weekEndStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+
+  const { data: weekShifts = [] } = useQuery({
+    queryKey: ["my-week-shifts", user?.id, weekStartStr, weekEndStr],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("user_id", user!.id)
+        .gte("date", weekStartStr)
+        .lte("date", weekEndStr)
+        .order("date")
+        .order("start_time");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id,
+  });
 
   /* dynamic subtitle */
   const subtitle = isAdmin && pendingRequests.length > 0
@@ -347,9 +368,9 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* ── Agenda Card (full width, compact height) ── */}
+        {/* ── Weekly Timeline Card (full width, like DayDetail) ── */}
         <Card className={`${cardAgenda} flex flex-col min-h-0 overflow-hidden`} style={{ gridArea: 'agenda' }}>
-          <CardHeader className="p-0 pb-0.5 flex-shrink-0">
+          <CardHeader className="p-0 pb-1 flex-shrink-0">
             <CardTitle className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground">
               <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-primary/10">
                 <CalendarIcon className="h-2.5 w-2.5 text-primary" />
@@ -361,44 +382,90 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
-            {agendaEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-1 py-2">
-                <CalendarIcon className="h-5 w-5 text-muted-foreground/30" />
-                <p className="text-[10px] font-medium text-muted-foreground">Nessun evento in programma questa settimana</p>
-              </div>
-            ) : (
-              <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
-                style={{ gridTemplateColumns: `3.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
-                <div className="bg-transparent" />
-                {HOURS.map((hour) => (
+            {/* Timeline header row */}
+            <div className="flex mb-0.5">
+              <div className="w-20 shrink-0" />
+              <div className="flex-1 flex">
+                {TIMELINE_HOURS.map((h) => (
                   <div
-                    key={hour}
-                    className="bg-transparent text-center pb-0.5 font-medium text-muted-foreground text-[9px]"
+                    key={h}
+                    className="text-[9px] text-muted-foreground font-medium text-center"
+                    style={{ width: `${100 / TIMELINE_HOURS.length}%` }}
                   >
-                    {String(hour).padStart(2, "0")}
+                    {String(h).padStart(2, "0")}
                   </div>
                 ))}
-                {weekDates.map((d, i) => {
-                  const isDayToday = d.toDateString() === today.toDateString();
-                  return (
-                    <div key={i} className="contents">
-                      <div
-                        className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-border/50 py-0.5
-                          ${isDayToday ? "text-primary font-bold" : "text-muted-foreground"}`}
-                      >
-                        <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
-                          ${isDayToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
-                          {DAYS_IT[i]} {d.getDate()}
-                        </span>
-                      </div>
-                      {HOURS.map((hour) => (
-                        <div key={hour} className="border-t border-border/30 py-0.5 min-h-[1rem]" />
-                      ))}
-                    </div>
-                  );
-                })}
               </div>
-            )}
+            </div>
+
+            {/* Day rows */}
+            <div className="space-y-0.5 flex-1">
+              {weekDates.map((d, i) => {
+                const isDayToday = d.toDateString() === today.toDateString();
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                const dayShifts = weekShifts.filter((s) => s.date === dateStr);
+                const isDayOff = dayShifts.some((s) => s.is_day_off);
+
+                return (
+                  <div key={i} className="flex items-center min-h-[28px]">
+                    {/* Day label */}
+                    <div className={`w-20 shrink-0 pr-2 text-right text-[10px] font-medium ${isDayToday ? "text-primary font-bold" : "text-muted-foreground"}`}>
+                      <span className={isDayToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}>
+                        {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
+                      </span>
+                    </div>
+
+                    {/* Timeline bar */}
+                    <div className="flex-1 relative h-6 bg-muted/30 rounded-md overflow-hidden border border-border/40">
+                      {/* Hour grid lines */}
+                      {TIMELINE_HOURS.map((h, hi) => (
+                        <div
+                          key={h}
+                          className="absolute top-0 bottom-0 border-l border-border/20"
+                          style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }}
+                        />
+                      ))}
+
+                      {isDayOff ? (
+                        <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                          <span className="text-[9px] font-semibold text-destructive">RIPOSO</span>
+                        </div>
+                      ) : (
+                        dayShifts
+                          .filter((s) => !s.is_day_off && s.start_time && s.end_time)
+                          .map((s) => {
+                            const sH = parseInt(s.start_time!.split(":")[0]);
+                            let eH = parseInt(s.end_time!.split(":")[0]);
+                            if (eH === 0) eH = 24;
+                            const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                            const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                            const width = ((eH - sH) / totalSpan) * 100;
+
+                            const startH = sH;
+                            let bg = "bg-muted"; let border = "border-border";
+                            if (startH === 9) { bg = "bg-blue-500/20"; border = "border-blue-500/40"; }
+                            else if (startH === 11) { bg = "bg-orange-500/20"; border = "border-orange-500/40"; }
+                            else if (startH === 19) { bg = "bg-yellow-500/20"; border = "border-yellow-500/40"; }
+                            else if (eH === 17 || eH === 19) { bg = "bg-emerald-500/20"; border = "border-emerald-500/40"; }
+
+                            return (
+                              <div
+                                key={s.id}
+                                className={`absolute top-0.5 bottom-0.5 rounded border flex items-center justify-center ${bg} ${border}`}
+                                style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                              >
+                                <span className="text-[9px] font-semibold text-foreground/80">
+                                  {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
+                                </span>
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       </div>
