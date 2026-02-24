@@ -23,7 +23,7 @@ import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenera
 import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion, type CorrectionAction } from "@/hooks/useOptimizationSuggestions";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
-import { OptimizationPanel } from "@/components/team-calendar/OptimizationPanel";
+import { SuggestionWizardDialog } from "@/components/team-calendar/SuggestionWizardDialog";
 import EmptyState from "@/components/EmptyState";
 import { toast } from "sonner";
 
@@ -384,14 +384,8 @@ const TeamCalendar = () => {
     }
   };
 
-  const handleApplyAll = () => {
-    const actionable = suggestions.filter(s => s.type !== "uncovered");
-    let applied = 0;
-    for (const s of actionable) {
-      handleAcceptSuggestion(s);
-      applied++;
-    }
-    toast.success(`${applied} soluzioni AI applicate`);
+  const handleDeclineSuggestion = (id: string) => {
+    // No-op for wizard (handled internally)
   };
 
   if (!storeId) {
@@ -557,62 +551,25 @@ const TeamCalendar = () => {
         />
       )}
 
-      {/* Blocking Optimization Errors Popup */}
-      {canEdit && suggestions.length > 0 && showOptimizationErrors && (
-        <Dialog open={showOptimizationErrors} onOpenChange={(open) => { if (!open) return; }}>
-          <DialogContent
-            className="rounded-[32px] max-w-2xl max-h-[85vh] overflow-hidden [&>button.absolute]:hidden"
-            onPointerDownOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-            onInteractOutside={(e) => e.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-destructive">
-                <AlertTriangle className="h-5 w-5" />
-                Problemi Rilevati nell'Orario
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                L'algoritmo ha rilevato problemi che devono essere risolti prima di poter procedere. Seleziona una soluzione per ogni problema.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="overflow-auto max-h-[60vh]">
-              <OptimizationPanel
-                suggestions={suggestions}
-                onAccept={(s, action) => {
-                  handleAcceptSuggestion(s, action);
-                  // Close popup when all suggestions are resolved
-                  const remaining = suggestions.filter(sg => sg.id !== s.id);
-                  if (remaining.length === 0) {
-                    setShowOptimizationErrors(false);
-                  }
-                }}
-                onDecline={(id) => {
-                  // Only close the popup when there are no more critical suggestions
-                  // (critical/uncovered items cycle infinitely via OptimizationPanel,
-                  //  so onDecline is only called for non-critical dismissals)
-                  const remaining = suggestions.filter(s => s.id !== id && (s.severity === "critical" || s.type === "uncovered"));
-                  if (remaining.length === 0) {
-                    setShowOptimizationErrors(false);
-                  }
-                }}
-                onApplyAll={() => {
-                  handleApplyAll();
-                  setShowOptimizationErrors(false);
-                }}
-                onNavigateToDay={(date) => {
-                  const d = new Date(date + "T00:00:00");
-                  const targetMonth = d.getMonth() + 1;
-                  const targetYear = d.getFullYear();
-                  if (targetMonth !== month || targetYear !== year) {
-                    setMonth(targetMonth);
-                    setYear(targetYear);
-                  }
-                  setSelectedDate(date);
-                }}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Step-by-step Suggestion Wizard */}
+      {canEdit && (
+        <SuggestionWizardDialog
+          open={showOptimizationErrors && suggestions.length > 0}
+          suggestions={suggestions}
+          onAccept={handleAcceptSuggestion}
+          onDecline={handleDeclineSuggestion}
+          onClose={() => setShowOptimizationErrors(false)}
+          onNavigateToDay={(date) => {
+            const d = new Date(date + "T00:00:00");
+            const targetMonth = d.getMonth() + 1;
+            const targetYear = d.getFullYear();
+            if (targetMonth !== month || targetYear !== year) {
+              setMonth(targetMonth);
+              setYear(targetYear);
+            }
+            setSelectedDate(date);
+          }}
+        />
       )}
 
       {/* Generate confirmation dialog */}
