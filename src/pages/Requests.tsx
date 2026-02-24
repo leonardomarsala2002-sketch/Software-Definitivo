@@ -59,9 +59,9 @@ const Requests = () => {
     <div>
       <PageHeader
         title="Richieste"
-        subtitle="Ferie, permessi, cambi turno e malattie"
+        subtitle={isAdmin ? "Gestisci le richieste del team" : "Ferie, permessi, cambi turno e malattie"}
       >
-        {!showForm && (
+        {!isAdmin && !showForm && (
           <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4" />
             Nuova richiesta
@@ -69,7 +69,7 @@ const Requests = () => {
         )}
       </PageHeader>
 
-      {showForm && storeId && (
+      {!isAdmin && showForm && storeId && (
         <Card className="mb-6 border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/30 shadow-sm transition-all duration-200 hover:shadow-2xl">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Nuova richiesta</CardTitle>
