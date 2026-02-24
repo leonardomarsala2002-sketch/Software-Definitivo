@@ -1,6 +1,5 @@
 import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
@@ -14,38 +13,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UtensilsCrossed, Store, Moon, Sun } from "lucide-react";
+import { UtensilsCrossed, Store, LogOut } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
-
-// Type for section color configuration
-interface SectionColorConfig {
-  bg: string;
-  bgHover: string;
-  text: string;
-  darkBg: string;
-  darkBgHover: string;
-  darkText: string;
-  ring: string;
-  darkRing: string;
-}
-
-// Dynamic color themes for each navigation section
-const sectionColors: Record<string, SectionColorConfig> = {
-  "/": { bg: "bg-blue-200/80", bgHover: "hover:bg-blue-50", text: "text-blue-700", darkBg: "dark:bg-blue-800/50", darkBgHover: "dark:hover:bg-blue-900/30", darkText: "dark:text-blue-300", ring: "ring-blue-500", darkRing: "dark:ring-blue-400" },
-  "/team-calendar": { bg: "bg-green-200/80", bgHover: "hover:bg-green-50", text: "text-green-700", darkBg: "dark:bg-green-800/50", darkBgHover: "dark:hover:bg-green-900/30", darkText: "dark:text-green-300", ring: "ring-green-500", darkRing: "dark:ring-green-400" },
-  "/requests": { bg: "bg-amber-200/80", bgHover: "hover:bg-amber-50", text: "text-amber-700", darkBg: "dark:bg-amber-800/50", darkBgHover: "dark:hover:bg-amber-900/30", darkText: "dark:text-amber-300", ring: "ring-amber-500", darkRing: "dark:ring-amber-400" },
-  "/employees": { bg: "bg-purple-200/80", bgHover: "hover:bg-purple-50", text: "text-purple-700", darkBg: "dark:bg-purple-800/50", darkBgHover: "dark:hover:bg-purple-900/30", darkText: "dark:text-purple-300", ring: "ring-purple-500", darkRing: "dark:ring-purple-400" },
-  "/store-settings": { bg: "bg-rose-200/80", bgHover: "hover:bg-rose-50", text: "text-rose-700", darkBg: "dark:bg-rose-800/50", darkBgHover: "dark:hover:bg-rose-900/30", darkText: "dark:text-rose-300", ring: "ring-rose-500", darkRing: "dark:ring-rose-400" },
-  "/audit-log": { bg: "bg-slate-200/80", bgHover: "hover:bg-slate-50", text: "text-slate-700", darkBg: "dark:bg-slate-700/50", darkBgHover: "dark:hover:bg-slate-800/30", darkText: "dark:text-slate-300", ring: "ring-slate-500", darkRing: "dark:ring-slate-400" },
-};
-
-const getColorForPath = (url: string): SectionColorConfig => {
-  return sectionColors[url] || sectionColors["/"];
-};
 
 export function AppSidebar() {
   const { role, stores, activeStore, setActiveStore, signOut } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const filtered = filterNavByRole(navItems, role);
   const mainItems = filtered.filter((i) => i.section === "main");
@@ -58,22 +30,21 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden md:flex w-20 flex-col h-screen py-3 pl-3">
-      <div className="flex flex-col h-full glass-sidebar rounded-3xl shadow-lg">
+      <div className="flex flex-col h-full">
       {/* Top Section: Logo + Navigation */}
       <div className="flex flex-col items-center pt-4 pb-2">
         {/* Logo */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md mb-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 shadow-[0_0_20px_rgba(255,255,255,0.08)] mb-4">
           <UtensilsCrossed className="h-5 w-5" />
         </div>
       </div>
 
-      <Separator className="mx-4 w-auto opacity-30" />
+      <Separator className="mx-4 w-auto opacity-10" />
 
       {/* Main Navigation */}
       <nav className="flex-1 flex flex-col items-center py-4 space-y-2 overflow-y-auto">
         {mainItems.map((item) => {
           const active = isActive(item.url);
-          const colors = getColorForPath(item.url);
           return (
             <Tooltip key={item.url}>
               <TooltipTrigger asChild>
@@ -83,9 +54,9 @@ export function AppSidebar() {
                 >
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                      ${active 
-                        ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg shadow-current/20 ring-2 ${colors.ring} ${colors.darkRing}` 
-                        : `text-sidebar-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/10`
+                      ${active
+                        ? "text-white shadow-[0_0_16px_rgba(255,255,255,0.25)]"
+                        : "text-white/50 hover:text-white/80"
                       }`}
                   >
                     <item.icon className="h-5 w-5" />
@@ -101,10 +72,9 @@ export function AppSidebar() {
 
         {secondaryItems.length > 0 && (
           <>
-            <Separator className="mx-2 my-2 w-10 opacity-30" />
+            <Separator className="mx-2 my-2 w-10 opacity-10" />
             {secondaryItems.map((item) => {
               const active = isActive(item.url);
-              const colors = getColorForPath(item.url);
               return (
                 <Tooltip key={item.url}>
                   <TooltipTrigger asChild>
@@ -114,9 +84,9 @@ export function AppSidebar() {
                     >
                       <div
                         className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                          ${active 
-                            ? `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} shadow-lg shadow-current/20 ring-2 ${colors.ring} ${colors.darkRing}` 
-                            : `text-sidebar-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/10`
+                          ${active
+                            ? "text-white shadow-[0_0_16px_rgba(255,255,255,0.25)]"
+                            : "text-white/50 hover:text-white/80"
                           }`}
                       >
                         <item.icon className="h-5 w-5" />
@@ -133,34 +103,9 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Bottom Section: Theme Toggle, Store, Profile */}
+      {/* Bottom Section: Store + Logout */}
       <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-        {/* Theme Toggle - Switch Style */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleTheme}
-              className="relative flex h-7 w-12 items-center rounded-full bg-white/30 dark:bg-white/10 transition-all duration-300"
-              aria-label={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
-            >
-              <span
-                className={`absolute flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300 dark:bg-slate-700
-                  ${theme === "dark" ? "left-6" : "left-1"}`}
-              >
-                {theme === "dark" ? (
-                  <Moon className="h-3 w-3 text-blue-300" />
-                ) : (
-                  <Sun className="h-3 w-3 text-amber-500" />
-                )}
-              </span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">
-            {theme === "dark" ? "Modalità chiara" : "Modalità scura"}
-          </TooltipContent>
-        </Tooltip>
-
-        <Separator className="mx-4 w-10 opacity-30" />
+        <Separator className="mx-4 w-10 opacity-10" />
 
         {/* Store Selector */}
         {stores.length > 1 ? (
@@ -168,7 +113,7 @@ export function AppSidebar() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200">
+                  <button className="flex h-11 w-11 items-center justify-center rounded-full text-white/50 hover:text-white/80 transition-all duration-200">
                     <Store className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
@@ -196,7 +141,7 @@ export function AppSidebar() {
         ) : activeStore ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full text-white/50">
                 <Store className="h-5 w-5" />
               </div>
             </TooltipTrigger>
@@ -206,15 +151,15 @@ export function AppSidebar() {
           </Tooltip>
         ) : null}
 
-        {/* Logout */}
+        {/* Logout - round floating icon */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={signOut}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-sidebar-foreground hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-white/50 hover:text-white/80 hover:shadow-[0_0_12px_rgba(255,255,255,0.15)] transition-all duration-200"
               aria-label="Logout"
             >
-              <span className="text-xl leading-none">🚪</span>
+              <LogOut className="h-5 w-5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="font-medium">

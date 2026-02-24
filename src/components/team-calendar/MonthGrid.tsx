@@ -97,7 +97,7 @@ export function MonthGrid({
         {DOW_LABELS.map((d) => (
           <div
             key={d}
-            className="text-center text-[11px] font-semibold text-muted-foreground py-1.5 uppercase tracking-wider"
+            className="text-center text-[11px] font-semibold text-white/40 py-1.5 uppercase tracking-wider"
           >
             {d}
           </div>
@@ -125,11 +125,11 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "glass-card rounded-2xl p-1.5 cursor-pointer transition-all duration-200 hover:bg-white/80 dark:hover:bg-white/10 hover:shadow-2xl flex flex-col",
+                "glass-card rounded-2xl p-1.5 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:shadow-2xl hover:-translate-y-0.5 flex flex-col",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)] bg-emerald-50/70 dark:bg-emerald-950/20",
-                isUncovered && !isArchived && !isToday && "bg-red-50/60 dark:bg-red-950/20 ring-1 ring-red-400/40 border-red-300 dark:border-red-800/40",
-                hasDraft && !isUncovered && !isArchived && !isToday && "bg-amber-50/60 dark:bg-amber-950/20 ring-1 ring-amber-400/40 border-amber-300 dark:border-amber-800/40",
+                isToday && "ring-2 ring-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)]",
+                isUncovered && !isArchived && !isToday && "ring-1 ring-red-400/40",
+                hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-amber-400/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
               )}
               onClick={() => onDayClick(dateStr)}
@@ -140,7 +140,7 @@ export function MonthGrid({
                   "text-xs font-medium mb-1",
                   isToday
                     ? "bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
-                    : "text-foreground"
+                    : "text-white/80"
                 )}
               >
                 {day}

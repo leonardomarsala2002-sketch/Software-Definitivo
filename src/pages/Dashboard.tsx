@@ -60,18 +60,14 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "glass-card rounded-[32px] p-3 transition-all duration-300 hover:bg-white/80 dark:hover:bg-white/10 hover:shadow-2xl";
+  "glass-card rounded-[32px] p-3 transition-all duration-300 hover:bg-white/10 hover:shadow-2xl hover:-translate-y-0.5";
 
-/* tinted card variants for icon-colored backgrounds */
-const cardProfile =
-  `${cardBase} bg-blue-50/40 dark:bg-blue-900/10`;
-const cardFerie =
-  `${cardBase} bg-emerald-50/40 dark:bg-emerald-900/10`;
+/* all card variants use same transparent glass style */
+const cardProfile = cardBase;
+const cardFerie = cardBase;
 const cardCalendar = cardBase;
-const cardRichiesteAdmin =
-  `${cardBase} bg-violet-50/40 dark:bg-violet-900/10`;
-const cardRichiesteUser =
-  `${cardBase} bg-amber-50/40 dark:bg-amber-900/10`;
+const cardRichiesteAdmin = cardBase;
+const cardRichiesteUser = cardBase;
 const cardAgenda = cardBase;
 
 /* ── component ───────────────────────────────────────── */
@@ -163,10 +159,10 @@ const Dashboard = () => {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header – greeting */}
       <div className="mb-2 flex-shrink-0">
-        <h1 className="text-lg font-bold tracking-tight text-foreground">
+        <h1 className="text-lg font-bold tracking-tight text-white">
           Benvenuto {displayName} 👋
         </h1>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
+        <p className="mt-0.5 text-[11px] text-white/50">
           Panoramica generale di tutti gli store e del team
         </p>
       </div>
@@ -180,13 +176,13 @@ const Dashboard = () => {
         <Card className={`${cardProfile} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12 shadow-md flex-shrink-0">
-              <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
+              <AvatarFallback className="bg-white/10 text-base font-semibold text-white">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-foreground truncate">{displayName}</p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-sm font-bold text-white truncate">{displayName}</p>
+              <p className="text-[11px] text-white/50">
                 {role ? roleLabelMap[role] || role : ""}
               </p>
             </div>
@@ -194,11 +190,11 @@ const Dashboard = () => {
 
           {/* Action: new request */}
           <div className="mt-auto pt-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Nuova richiesta</span>
+            <span className="text-xs text-white/50">Nuova richiesta</span>
             <Button
               size="icon"
               variant="outline"
-              className="h-7 w-7 rounded-full"
+              className="h-7 w-7 rounded-full border-white/20 text-white/70 hover:text-white hover:border-white/40"
               onClick={() => setShowRequestPopup(true)}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -208,8 +204,8 @@ const Dashboard = () => {
 
         {/* Ferie Card (Vacation counter) */}
         <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40 mb-2">
-            <Palmtree className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 mb-2">
+            <Palmtree className="h-4 w-4 text-emerald-400" />
           </div>
           <div className="relative flex h-16 w-16 items-center justify-center">
             <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
@@ -221,15 +217,15 @@ const Dashboard = () => {
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
             </svg>
-            <span className="absolute text-lg font-bold text-foreground">{remainingVacation}</span>
+            <span className="absolute text-lg font-bold text-white">{remainingVacation}</span>
           </div>
-          <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">Ferie rimaste</p>
+          <p className="mt-1.5 text-[11px] font-medium text-white/50">Ferie rimaste</p>
         </Card>
 
         {/* Mini-Month Calendar Card */}
         <Card className={`${cardCalendar} col-span-1 flex flex-col`}>
           <CardHeader className="p-0 pb-2">
-            <CardTitle className="flex items-center justify-between text-xs font-semibold text-foreground tracking-wide">
+            <CardTitle className="flex items-center justify-between text-xs font-semibold text-white tracking-wide">
               <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
               <div className="flex gap-0.5">
                 <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
@@ -245,7 +241,7 @@ const Dashboard = () => {
             {/* Day headers */}
             <div className="grid grid-cols-7 mb-1">
               {DAYS_IT.map((d) => (
-                <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">{d}</span>
+                <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-wider text-white/40">{d}</span>
               ))}
             </div>
             {/* Day cells */}
@@ -261,8 +257,8 @@ const Dashboard = () => {
                     className={`mx-auto flex flex-col items-center justify-center h-7 w-7 rounded-full text-[10px] transition-colors
                       ${day === null ? "invisible" : ""}
                       ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
-                      ${isToday && !isSelected ? "bg-accent text-accent-foreground font-bold" : ""}
-                      ${!isToday && !isSelected && day !== null ? "hover:bg-accent/60 font-medium" : ""}
+                      ${isToday && !isSelected ? "bg-white/10 text-white font-bold" : ""}
+                      ${!isToday && !isSelected && day !== null ? "hover:bg-white/10 font-medium text-white/70" : ""}
                     `}
                   >
                     {day}
@@ -279,14 +275,14 @@ const Dashboard = () => {
         {/* Richieste / Avvisi Card */}
         <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
           <div className="flex items-center gap-2 mb-2">
-            <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${isAdmin ? "bg-violet-100 dark:bg-violet-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10">
               {isAdmin ? (
-                <Inbox className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                <Inbox className="h-4 w-4 text-violet-400" />
               ) : (
-                <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <Bell className="h-4 w-4 text-amber-400" />
               )}
             </div>
-            <p className="text-xs font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
+            <p className="text-xs font-bold text-white">{isAdmin ? "Richieste" : "Avvisi"}</p>
           </div>
           {isAdmin && pendingRequests.length > 0 ? (
             <div className="flex-1 space-y-1.5 overflow-hidden">
@@ -294,13 +290,13 @@ const Dashboard = () => {
                 <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1.5">
                   {pendingRequests.length}
                 </span>
-                <span className="text-[11px] text-muted-foreground">richieste in attesa</span>
+                <span className="text-[11px] text-white/50">richieste in attesa</span>
               </div>
               {pendingRequests.map((r) => (
                 <div key={r.id} className="flex items-center justify-between text-xs">
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium text-foreground">{r.name}</span>
-                    <span className="ml-1 text-muted-foreground text-[10px]">· {r.type}</span>
+                    <span className="font-medium text-white">{r.name}</span>
+                    <span className="ml-1 text-white/40 text-[10px]">· {r.type}</span>
                   </div>
                   <div className="flex gap-1 ml-2">
                     <button className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" aria-label="Approva richiesta">
@@ -315,7 +311,7 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-[11px] text-muted-foreground">Nessuna richiesta pendente</p>
+              <p className="text-[11px] text-white/40">Nessuna richiesta pendente</p>
             </div>
           )}
         </Card>
@@ -323,12 +319,12 @@ const Dashboard = () => {
         {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
         <Card className={`${cardAgenda} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
           <CardHeader className="p-0 pb-0.5 flex-shrink-0">
-            <CardTitle className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40">
-                <CalendarIcon className="h-3 w-3 text-teal-600 dark:text-teal-400" />
+            <CardTitle className="flex items-center gap-2 text-xs font-semibold text-white">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10">
+                <CalendarIcon className="h-3 w-3 text-teal-400" />
               </div>
               Agenda Settimanale
-              <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+              <span className="ml-auto text-[10px] font-normal text-white/40">
                 {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
               </span>
             </CardTitle>
@@ -342,7 +338,7 @@ const Dashboard = () => {
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="bg-transparent text-center pb-0.5 font-medium text-muted-foreground text-[9px]"
+                  className="bg-transparent text-center pb-0.5 font-medium text-white/40 text-[9px]"
                 >
                   {String(hour).padStart(2, "0")}
                 </div>
@@ -353,8 +349,8 @@ const Dashboard = () => {
                 return (
                   <div key={i} className="contents">
                     <div
-                      className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-white/20 dark:border-white/5 py-0.5
-                        ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}
+                      className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-white/10 py-0.5
+                        ${isToday ? "text-primary font-bold" : "text-white/40"}`}
                     >
                       <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
                         ${isToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
@@ -362,7 +358,7 @@ const Dashboard = () => {
                       </span>
                     </div>
                     {HOURS.map((hour) => (
-                      <div key={hour} className="border-t border-white/20 dark:border-white/5 py-0.5 min-h-[1rem]" />
+                      <div key={hour} className="border-t border-white/10 py-0.5 min-h-[1rem]" />
                     ))}
                   </div>
                 );

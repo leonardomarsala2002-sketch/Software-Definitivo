@@ -369,8 +369,8 @@ const TeamCalendar = () => {
       <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
         {/* Title */}
         <div className="mr-auto">
-          <h1 className="text-lg font-bold tracking-tight text-foreground">Calendario Team</h1>
-          <p className="text-[11px] text-muted-foreground">
+          <h1 className="text-lg font-bold tracking-tight text-white">Calendario Team</h1>
+          <p className="text-[11px] text-white/50">
             {activeStore?.name ?? "Store"} · {department === "sala" ? "Sala" : "Cucina"}
           </p>
         </div>

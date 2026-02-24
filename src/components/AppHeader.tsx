@@ -32,7 +32,7 @@ export function AppHeader() {
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border/60 bg-card/80 px-5 backdrop-blur-sm md:px-8">
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-white/10 bg-transparent px-5 backdrop-blur-sm md:px-8">
       <SidebarTrigger className="hidden md:flex" />
 
       {/* Store selector */}
