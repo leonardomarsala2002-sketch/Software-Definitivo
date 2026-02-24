@@ -1,156 +1,53 @@
 
+# Calendario: celle responsive che si adattano alla viewport
 
-# Piano: Struttura Dati Gestione Dipendenti Multi-Store
+## Problema
+Le celle del calendario hanno altezze minime fisse (`min-h-[60px]`) e contenuto testuale che non si riduce. Quando il mese ha 5-6 righe, le ultime escono dalla viewport.
 
-## Panoramica
+## Soluzione
 
-Il sistema attuale ha gia' `profiles` (dati Google), `user_roles` (ruolo globale) e `user_store_assignments` (associazione utente-store). Per la gestione operativa dei dipendenti servono tre nuove tabelle che estendono questo modello senza duplicarlo.
+### 1. Rimuovere altezze minime fisse
+- Eliminare `min-h-[60px]` dalle celle vuote
+- Le righe devono occupare esattamente `1fr` dello spazio disponibile, senza forzare dimensioni
 
----
+### 2. Contenere ogni cella nel suo spazio
+- Aggiungere `overflow: hidden` su ogni cella del giorno
+- Il contenuto che non entra viene semplicemente nascosto (non spinge la cella)
 
-## 1. Nuovi Enum
+### 3. Nascondere i testi quando lo spazio e troppo piccolo
+Usare un approccio CSS con container queries o un semplice calcolo basato sul numero di righe:
+- Se il mese ha 6 righe: mostrare solo il numero del giorno e al massimo 1-2 turni
+- Se ha 5 righe: mostrare fino a 3 turni
+- Se ha 4 righe: mostrare fino a 4 turni (comportamento attuale)
 
-### `department`
-```text
-sala | cucina
-```
+Questo viene calcolato nel componente (`totalWeeks` e passato come prop da `TeamCalendar`) per decidere quanti turni mostrare.
 
-### `availability_type`
-```text
-available | unavailable
-```
-
-### `exception_type`
-```text
-ferie | permesso | malattia | modifica_orario | altro
-```
-
----
-
-## 2. Nuove Tabelle
-
-### 2.1 `employee_details`
-
-Dati operativi del dipendente, separati da `profiles` (che resta per dati Google). Relazione 1:1 con `profiles.id`.
-
-| Colonna | Tipo | Note |
-|---------|------|------|
-| id | uuid PK | default gen_random_uuid() |
-| user_id | uuid NOT NULL UNIQUE | FK -> profiles(id) ON DELETE CASCADE |
-| department | department NOT NULL | sala o cucina |
-| weekly_contract_hours | integer NOT NULL | default 40 |
-| phone | text | nullable |
-| is_active | boolean NOT NULL | default true |
-| created_at | timestamptz | default now() |
-| updated_at | timestamptz | default now() |
-
-**Perche' tabella separata e non estensione di `profiles`?**
-- `profiles` e' auto-popolata dal trigger Google OAuth e contiene solo dati identita'
-- I dati operativi (reparto, ore contratto) sono gestiti da admin, non dall'utente
-- Separazione netta: dati identita' vs dati lavorativi
-- Lo `store_id` primario e' gia' in `user_store_assignments.is_primary`, non va duplicato
-
-### 2.2 `employee_availability`
-
-Disponibilita' ricorrente settimanale del dipendente.
-
-| Colonna | Tipo | Note |
-|---------|------|------|
-| id | uuid PK | default gen_random_uuid() |
-| user_id | uuid NOT NULL | FK -> profiles(id) ON DELETE CASCADE |
-| store_id | uuid NOT NULL | FK -> stores(id) ON DELETE CASCADE |
-| day_of_week | smallint NOT NULL | 0=lunedi' ... 6=domenica |
-| start_time | time NOT NULL | es. 09:00 |
-| end_time | time NOT NULL | es. 18:00 |
-| availability_type | availability_type NOT NULL | default 'available' |
-| created_at | timestamptz | default now() |
-
-Vincolo UNIQUE su (user_id, store_id, day_of_week, start_time).
-Vincolo CHECK: day_of_week tra 0 e 6.
-Vincolo CHECK: end_time > start_time.
-
-### 2.3 `employee_exceptions`
-
-Eccezioni temporanee (ferie, permessi, malattia, modifiche orario).
-
-| Colonna | Tipo | Note |
-|---------|------|------|
-| id | uuid PK | default gen_random_uuid() |
-| user_id | uuid NOT NULL | FK -> profiles(id) ON DELETE CASCADE |
-| store_id | uuid NOT NULL | FK -> stores(id) ON DELETE CASCADE |
-| exception_type | exception_type NOT NULL | |
-| start_date | date NOT NULL | |
-| end_date | date NOT NULL | |
-| notes | text | nullable |
-| created_by | uuid | FK -> profiles(id), chi ha creato l'eccezione |
-| created_at | timestamptz | default now() |
-
-Vincolo: end_date >= start_date (via trigger di validazione, non CHECK con now()).
+### 4. Numero giorno compatto
+- Ridurre padding e margini del numero del giorno
+- Il cerchio verde del "oggi" diventa piu piccolo (w-5 h-5, text-[10px])
 
 ---
 
-## 3. Relazioni
+## Dettagli tecnici
 
-```text
-profiles (1) --- (1) employee_details
-    |                    
-    +--- (N) employee_availability
-    |                    
-    +--- (N) employee_exceptions
-    |
-    +--- (N) user_store_assignments --- stores
-```
+### File: `src/components/team-calendar/MonthGrid.tsx`
 
-- `employee_details.user_id` -> `profiles.id`
-- `employee_availability.user_id` -> `profiles.id`, `.store_id` -> `stores.id`
-- `employee_exceptions.user_id` -> `profiles.id`, `.store_id` -> `stores.id`
-- Lo store primario si ricava da `user_store_assignments WHERE is_primary = true`
+**Props nuova:** `totalWeeks: number` (numero di righe nel mese)
 
----
+**Celle vuote:** da `min-h-[60px]` a nessuna altezza minima
 
-## 4. Policy RLS
+**Celle giorno:**
+- Aggiungere `overflow-hidden` e `min-h-0`
+- Calcolare `maxVisibleShifts` in base a `totalWeeks`:
+  - 6 righe: max 1 turno visibile
+  - 5 righe: max 2 turni
+  - 4 righe: max 4 turni
+- Il contatore "+N altri" appare solo se c'e spazio
 
-Tutte le tabelle usano le funzioni Security Definer gia' esistenti: `has_role()` e `is_store_member()`.
+**Numero giorno:**
+- `mb-0.5` invece di `mb-1`
+- Cerchio oggi: `w-5 h-5 text-[10px]`
 
-### 4.1 `employee_details`
+### File: `src/pages/TeamCalendar.tsx`
 
-| Operazione | Regola |
-|------------|--------|
-| SELECT | super_admin: tutto; admin: utenti dei propri store (join con user_store_assignments); employee: solo il proprio record (user_id = auth.uid()) |
-| INSERT | super_admin: tutto; admin: solo per utenti nei propri store |
-| UPDATE | super_admin: tutto; admin: solo per utenti nei propri store |
-| DELETE | solo super_admin |
-
-### 4.2 `employee_availability`
-
-| Operazione | Regola |
-|------------|--------|
-| SELECT | super_admin: tutto; admin: dove is_store_member(uid, store_id); employee: solo propri record |
-| INSERT | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
-| UPDATE | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
-| DELETE | super_admin: tutto; admin: dove is_store_member(uid, store_id) |
-
-### 4.3 `employee_exceptions`
-
-Stesse regole di `employee_availability`, con l'aggiunta che l'employee puo' fare INSERT delle proprie eccezioni (per richiedere ferie/permessi).
-
----
-
-## 5. Trigger e Automazioni
-
-1. **update_updated_at**: riutilizzare il trigger esistente `update_updated_at_column()` su `employee_details`
-2. **Validazione date**: trigger BEFORE INSERT/UPDATE su `employee_exceptions` per verificare `end_date >= start_date`
-
----
-
-## 6. Riepilogo Tecnico - Ordine Migrazione
-
-1. Creare enum `department`, `availability_type`, `exception_type`
-2. Creare tabella `employee_details` con FK, UNIQUE, trigger updated_at
-3. Creare tabella `employee_availability` con FK, UNIQUE, CHECK
-4. Creare tabella `employee_exceptions` con FK, trigger validazione
-5. Abilitare RLS su tutte e tre le tabelle
-6. Creare policy RLS per ciascuna tabella seguendo lo schema sopra
-
-Nessuna modifica al frontend in questa fase.
-
+- Passare `totalWeeks` come prop a `MonthGrid` (gia calcolato alla riga 213)
