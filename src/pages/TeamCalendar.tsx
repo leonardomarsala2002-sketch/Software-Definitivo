@@ -175,7 +175,7 @@ const TeamCalendar = () => {
   }, [coverageReqs, shifts, department, year, month]);
 
   const hasCriticalConflicts = useMemo(() => {
-    return suggestions.some(s => s.severity === "critical");
+    return suggestions.some(s => s.severity === "critical" || s.type === "uncovered");
   }, [suggestions]);
 
   // Auto-show blocking optimization errors popup when generation completes with critical issues
@@ -470,8 +470,14 @@ const TeamCalendar = () => {
               <Button
                 size="sm"
                 variant="default"
-                onClick={() => setShowPublishConfirm(true)}
-                disabled={publishWeek.isPending || hasCriticalConflicts}
+                onClick={() => {
+                  if (hasCriticalConflicts) {
+                    setShowOptimizationErrors(true);
+                  } else {
+                    setShowPublishConfirm(true);
+                  }
+                }}
+                disabled={publishWeek.isPending}
                 className="gap-1.5 rounded-[32px]"
                 title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
@@ -572,8 +578,10 @@ const TeamCalendar = () => {
                   }
                 }}
                 onDecline={(id) => {
-                  // Check remaining critical suggestions
-                  const remaining = suggestions.filter(s => s.id !== id && s.severity === "critical");
+                  // Only close the popup when there are no more critical suggestions
+                  // (critical/uncovered items cycle infinitely via OptimizationPanel,
+                  //  so onDecline is only called for non-critical dismissals)
+                  const remaining = suggestions.filter(s => s.id !== id && (s.severity === "critical" || s.type === "uncovered"));
                   if (remaining.length === 0) {
                     setShowOptimizationErrors(false);
                   }
