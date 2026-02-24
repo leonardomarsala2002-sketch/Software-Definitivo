@@ -46,7 +46,6 @@ const MONTHS_IT = [
 function buildCalendarGrid(year: number, month: number) {
   const first = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0).getDate();
-  // 0=Sun → we want Mon=0
   let startIdx = first.getDay() - 1;
   if (startIdx < 0) startIdx = 6;
   const cells: (number | null)[] = Array(startIdx).fill(null);
@@ -66,13 +65,12 @@ function getWeekDates(base: Date) {
   });
 }
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase = "glass-card rounded-[12px] p-1";
 
-/* all card variants use same soft glass style */
 const cardProfile = cardBase;
 const cardFerie = cardBase;
 const cardCalendar = cardBase;
@@ -142,7 +140,7 @@ const Dashboard = () => {
     employee: "Dipendente",
   };
 
-  const remainingVacation = 14; // placeholder
+  const remainingVacation = 14;
 
   /* seed (dev) */
   const handleSeed = async () => {
@@ -192,13 +190,23 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-3.5 p-3.5 min-h-0 overflow-hidden">
+      {/* Quadrant Grid – fills viewport, no scroll */}
+      <div
+        className="flex-1 gap-3.5 p-3.5 min-h-0 overflow-hidden"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'auto auto 1fr',
+          gridTemplateRows: 'auto auto 1fr',
+          gridTemplateAreas: `
+            "profile requests calendar"
+            "vacation requests calendar"
+            "agenda agenda agenda"
+          `,
+        }}
+      >
 
-        {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
-
-        {/* User Profile Card */}
-        <Card className={`${cardProfile} col-span-1 flex flex-col`}>
+        {/* ── Profile Card (top-left, compact) ── */}
+        <Card className={`${cardProfile} flex flex-col`} style={{ gridArea: 'profile' }}>
           <div className="flex items-center gap-1.5">
             <Avatar className="h-8 w-8 shadow-md flex-shrink-0">
               {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
@@ -209,14 +217,12 @@ const Dashboard = () => {
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-foreground truncate">{displayName}</p>
               {role && (
-                <Badge className="mt-0.5 text-[9px] px-1 py-0 bg-[rgba(0,200,83,0.14)] text-[#009624] border border-[rgba(0,200,83,0.35)] hover:bg-[rgba(0,200,83,0.2)]">
+                <Badge className="mt-0.5 text-[9px] px-1 py-0 bg-foreground/10 text-foreground/70 border border-foreground/20 hover:bg-foreground/15">
                   {roleLabelMap[role] || role}
                 </Badge>
               )}
             </div>
           </div>
-
-          {/* Action: new request */}
           <div className="mt-auto pt-1.5 flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">Nuova richiesta</span>
             <Button
@@ -230,17 +236,17 @@ const Dashboard = () => {
           </div>
         </Card>
 
-        {/* Ferie Card (Vacation counter) */}
-        <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
+        {/* ── Vacation Card (below profile, compact) ── */}
+        <Card className={`${cardFerie} flex flex-col items-center justify-center`} style={{ gridArea: 'vacation' }}>
           <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent mb-0.5">
-            <Palmtree className="h-3 w-3 text-[#666]" />
+            <Palmtree className="h-3 w-3 text-muted-foreground" />
           </div>
           <div className="relative flex h-11 w-11 items-center justify-center">
             <svg className="h-11 w-11 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
-                className="text-[#111]"
+                className="text-foreground"
                 strokeWidth="4" strokeLinecap="round"
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
@@ -250,74 +256,22 @@ const Dashboard = () => {
           <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Ferie rimaste</p>
         </Card>
 
-        {/* Mini-Month Calendar Card */}
-        <Card className={`${cardCalendar} col-span-1 flex flex-col`}>
-          <CardHeader className="p-0 pb-0.5">
-            <CardTitle className="flex items-center justify-between text-[10px] font-semibold text-foreground tracking-wide">
-              <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
-              <div className="flex gap-0.5">
-                <button onClick={prevMonth} className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
-                  <ChevronLeft className="h-2.5 w-2.5" />
-                </button>
-                <button onClick={nextMonth} className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
-                  <ChevronRight className="h-2.5 w-2.5" />
-                </button>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-0">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 mb-0.5">
-              {DAYS_IT.map((d, i) => (
-                <span key={d} className={`text-center text-[8px] font-semibold uppercase tracking-wider text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
-              ))}
-            </div>
-            {/* Day cells */}
-            <div className="grid grid-cols-7 gap-y-0.5 flex-1 content-start">
-              {calendarCells.map((day, idx) => {
-                const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
-                const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
-                const isWeekend = idx % 7 >= 5;
-                return (
-                  <button
-                    key={idx}
-                    disabled={day === null}
-                    onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex flex-col items-center justify-center h-5 w-5 rounded-full text-[9px] transition-colors
-                      ${day === null ? "invisible" : ""}
-                      ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
-                      ${isToday && !isSelected ? "bg-primary/10 text-foreground font-bold" : ""}
-                      ${!isToday && !isSelected && day !== null ? "hover:bg-muted font-medium text-foreground/70" : ""}
-                      ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
-                    `}
-                  >
-                    {day}
-                    {isToday && day !== null && (
-                      <span className="block h-0.5 w-0.5 rounded-full bg-[#111] -mt-px" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Richieste / Avvisi Card */}
-        <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
+        {/* ── Requests Card (center, vertical, spans 2 rows) ── */}
+        <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} flex flex-col overflow-hidden`} style={{ gridArea: 'requests' }}>
           <div className="flex items-center gap-1 mb-1">
             <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent">
               {isAdmin ? (
-                <Inbox className="h-3 w-3 text-[#666]" />
+                <Inbox className="h-3 w-3 text-muted-foreground" />
               ) : (
-                <Bell className="h-3 w-3 text-[#666]" />
+                <Bell className="h-3 w-3 text-muted-foreground" />
               )}
             </div>
             <p className="text-[10px] font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
           </div>
           {isAdmin && pendingRequests.length > 0 ? (
-            <div className="flex-1 space-y-1 overflow-hidden">
+            <div className="flex-1 space-y-1 overflow-auto scrollbar-hide">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#111] text-white text-[9px] font-bold px-1">
+                <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-foreground text-background text-[9px] font-bold px-1">
                   {pendingRequests.length}
                 </span>
                 <span className="text-[10px] text-muted-foreground">richieste in attesa</span>
@@ -362,8 +316,58 @@ const Dashboard = () => {
           )}
         </Card>
 
-        {/* ── Row 2: Weekly Agenda (full width) — Inverted Axes ── */}
-        <Card className={`${cardAgenda} col-span-4 flex flex-col min-h-0 overflow-hidden`}>
+        {/* ── Calendar Card (right quadrant, spans 2 rows) ── */}
+        <Card className={`${cardCalendar} flex flex-col overflow-hidden`} style={{ gridArea: 'calendar' }}>
+          <CardHeader className="p-0 pb-1">
+            <CardTitle className="flex items-center justify-between text-sm font-semibold text-foreground tracking-wide">
+              <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
+              <div className="flex gap-1">
+                <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={nextMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col p-0 min-h-0">
+            <div className="grid grid-cols-7 mb-1">
+              {DAYS_IT.map((d, i) => (
+                <span key={d} className={`text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 flex-1 content-stretch">
+              {calendarCells.map((day, idx) => {
+                const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+                const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
+                const isWeekend = idx % 7 >= 5;
+                return (
+                  <button
+                    key={idx}
+                    disabled={day === null}
+                    onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
+                    className={`mx-auto flex flex-col items-center justify-center w-full aspect-square max-h-10 rounded-full text-sm transition-colors
+                      ${day === null ? "invisible" : ""}
+                      ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
+                      ${isToday && !isSelected ? "bg-primary/10 text-foreground font-bold" : ""}
+                      ${!isToday && !isSelected && day !== null ? "hover:bg-muted font-medium text-foreground/70" : ""}
+                      ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
+                    `}
+                  >
+                    {day}
+                    {isToday && day !== null && (
+                      <span className="block h-1 w-1 rounded-full bg-foreground -mt-0.5" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Agenda Card (full width, compact height) ── */}
+        <Card className={`${cardAgenda} flex flex-col min-h-0 overflow-hidden`} style={{ gridArea: 'agenda' }}>
           <CardHeader className="p-0 pb-0.5 flex-shrink-0">
             <CardTitle className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground">
               <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-primary/10">
@@ -375,18 +379,15 @@ const Dashboard = () => {
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className={`flex-1 min-h-0 overflow-hidden p-0 ${agendaEvents.length === 0 ? "min-h-[80px]" : ""}`}>
+          <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
             {agendaEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[80px] gap-1.5 py-4">
-                <CalendarIcon className="h-6 w-6 text-muted-foreground/30" />
+              <div className="flex flex-col items-center justify-center h-full gap-1 py-2">
+                <CalendarIcon className="h-5 w-5 text-muted-foreground/30" />
                 <p className="text-[10px] font-medium text-muted-foreground">Nessun evento in programma questa settimana</p>
-                <p className="text-[9px] text-muted-foreground/60">Gli eventi appariranno qui quando saranno pianificati</p>
               </div>
             ) : (
-              /* Inverted axes: days as rows (vertical), hours as columns (horizontal) */
               <div className="grid grid-rows-[auto_repeat(7,1fr)] text-[9px] h-full"
                 style={{ gridTemplateColumns: `3.5rem repeat(${HOURS.length}, minmax(0, 1fr))` }}>
-                {/* Column headers: hours across the top */}
                 <div className="bg-transparent" />
                 {HOURS.map((hour) => (
                   <div
@@ -396,17 +397,16 @@ const Dashboard = () => {
                     {String(hour).padStart(2, "0")}
                   </div>
                 ))}
-                {/* Day rows — day number next to name (e.g. Mar 24) */}
                 {weekDates.map((d, i) => {
-                  const isToday = d.toDateString() === today.toDateString();
+                  const isDayToday = d.toDateString() === today.toDateString();
                   return (
                     <div key={i} className="contents">
                       <div
                         className={`flex flex-row items-center justify-end gap-0.5 pr-1 border-t border-border/50 py-0.5
-                          ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}
+                          ${isDayToday ? "text-primary font-bold" : "text-muted-foreground"}`}
                       >
                         <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium leading-tight
-                          ${isToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
+                          ${isDayToday ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5" : ""}`}>
                           {DAYS_IT[i]} {d.getDate()}
                         </span>
                       </div>
