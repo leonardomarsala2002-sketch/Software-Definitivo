@@ -30,7 +30,7 @@ export function MobileBottomNav() {
               <div
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
-                  isActive && "bg-[#00C853]/10 shadow-sm"
+                  isActive && "border-2 border-[#00C853]"
                 )}
               >
                 <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-[#00C853]")} />

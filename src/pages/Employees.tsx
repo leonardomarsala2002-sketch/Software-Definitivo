@@ -81,18 +81,14 @@ const Employees = () => {
     return (
       <div
         onClick={() => handleRowClick(emp)}
-        className={`flex items-center gap-3 rounded-2xl border p-3 cursor-pointer transition-all duration-200 hover:shadow-2xl ${
-          isSala
-            ? "border-orange-400/30 bg-white/10 hover:bg-white/15"
-            : "border-emerald-400/30 bg-white/10 hover:bg-white/15"
-        }`}
+        className="glass-card flex items-center gap-3 p-3 cursor-pointer"
       >
         <Avatar className="h-9 w-9 flex-shrink-0">
           <AvatarImage src={emp.avatar_url ?? undefined} />
           <AvatarFallback className={`text-[11px] font-semibold ${
             isSala
-              ? "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
-              : "bg-emerald-200 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+              ? "bg-orange-200 text-orange-800"
+              : "bg-[#00C853]/20 text-[#00C853]"
           }`}>
             {getInitials(emp.full_name)}
           </AvatarFallback>
@@ -107,9 +103,9 @@ const Employees = () => {
               <TooltipTrigger asChild>
                 <span>
                   {ready ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <CheckCircle2 className="h-4 w-4 text-[#00C853]" />
                   ) : (
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <AlertTriangle className="h-4 w-4 text-[hsl(0,100%,50%)]" />
                   )}
                 </span>
               </TooltipTrigger>
@@ -137,22 +133,13 @@ const Employees = () => {
           subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
         />
         {(role === "super_admin" || role === "admin") && (
-          <Tooltip>
-            <TooltipProvider>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => navigate("/invitations")}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-600 text-white shadow-lg hover:bg-purple-700 transition-all duration-200"
-                  aria-label="Nuovo invito"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="left" className="font-medium">
-                Nuovo invito
-              </TooltipContent>
-            </TooltipProvider>
-          </Tooltip>
+          <button
+            onClick={() => navigate("/invitations")}
+            className="glass-icon-card !rounded-full flex h-10 w-10 items-center justify-center text-[#00C853] shadow-lg hover:border-2 hover:border-[#00C853] transition-all duration-200"
+            aria-label="Nuovo invito"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
         )}
       </div>
 
@@ -202,13 +189,13 @@ const Employees = () => {
           {/* Dual Card System: SALA | CUCINA */}
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0 overflow-hidden">
             {/* SALA Column */}
-            <div className="rounded-[32px] border border-orange-400/20 bg-white/[0.06] shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+            <div className="glass-card p-4 flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-200 dark:bg-orange-900/50">
-                  <Users className="h-4 w-4 text-orange-700 dark:text-orange-400" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-200">
+                  <Users className="h-4 w-4 text-orange-700" />
                 </div>
-                <h2 className="text-sm font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wide">Sala</h2>
-                <Badge variant="secondary" className="ml-auto text-[10px] bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+                <h2 className="text-sm font-bold text-orange-700 uppercase tracking-wide">Sala</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px]">
                   {salaEmployees.length}
                 </Badge>
               </div>
@@ -224,13 +211,13 @@ const Employees = () => {
             </div>
 
             {/* CUCINA Column */}
-            <div className="rounded-[32px] border border-emerald-400/20 bg-white/[0.06] shadow-lg p-4 flex flex-col min-h-0 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+            <div className="glass-card p-4 flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-200 dark:bg-emerald-900/50">
-                  <Users className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00C853]/20">
+                  <Users className="h-4 w-4 text-[#00C853]" />
                 </div>
-                <h2 className="text-sm font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Cucina</h2>
-                <Badge variant="secondary" className="ml-auto text-[10px] bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                <h2 className="text-sm font-bold text-[#00C853] uppercase tracking-wide">Cucina</h2>
+                <Badge variant="secondary" className="ml-auto text-[10px]">
                   {cucinaEmployees.length}
                 </Badge>
               </div>
