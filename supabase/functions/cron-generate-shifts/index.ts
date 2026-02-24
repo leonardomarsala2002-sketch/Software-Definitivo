@@ -54,32 +54,34 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Generate for both departments
-      for (const dept of ["sala", "cucina"] as const) {
-        try {
-          const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-shifts`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${serviceRoleKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              store_id: store.id,
-              department: dept,
-              week_start: weekStart,
-            }),
-          });
-          const genBody = await genRes.json();
-          results.push({
-            store: store.name,
-            department: dept,
-            status: genRes.ok ? "success" : "failed",
-            error: genRes.ok ? undefined : genBody.error,
-          });
-        } catch (e) {
-          results.push({ store: store.name, department: dept, status: "failed", error: (e as Error).message });
+      // Generate for both departments in a single call
+      let deptResults: { department: string; shifts: number; uncovered: number; fitness?: number }[] = [];
+      try {
+        const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-optimized-schedule`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            store_id: store.id,
+            week_start_date: weekStart,
+          }),
+        });
+        const genBody = await genRes.json();
+        if (genRes.ok && genBody.departments) {
+          deptResults = genBody.departments;
+          for (const d of deptResults) {
+            results.push({ store: store.name, department: d.department, status: "success" });
+          }
+        } else {
+          results.push({ store: store.name, department: "all", status: "failed", error: genBody.error ?? "Unknown error" });
         }
+      } catch (e) {
+        results.push({ store: store.name, department: "all", status: "failed", error: (e as Error).message });
       }
+
+      const totalUncovered = deptResults.reduce((sum, d) => sum + (d.uncovered ?? 0), 0);
 
       // Send notification email to store admins
       if (resendKey && publicAppUrl) {
@@ -108,6 +110,26 @@ Deno.serve(async (req) => {
               .select("id, email, full_name")
               .in("id", adminIds);
 
+            const emailSubject = totalUncovered > 0
+              ? `⚠️ Draft turni con problemi – ${store.name}`
+              : `Draft turni generato – ${store.name}`;
+
+            const warningBanner = totalUncovered > 0
+              ? `<tr><td style="padding:12px 36px;background:#fef2f2;border-left:4px solid #ef4444;">
+<p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">⚠️ Attenzione: ${totalUncovered} fascia/e oraria/e non coperta/e</p>
+</td></tr>`
+              : "";
+
+            const deptRows = deptResults.map(d =>
+              `<tr><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;color:#18181b;text-transform:capitalize;">${d.department}</td><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;color:#18181b;text-align:center;">${d.shifts ?? 0}</td><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;text-align:center;color:${(d.uncovered ?? 0) > 0 ? "#dc2626" : "#16a34a"};font-weight:600;">${d.uncovered ?? 0}</td></tr>`
+            ).join("");
+
+            const deptTable = deptResults.length > 0
+              ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;margin:12px 0;">
+<thead><tr style="background:#f4f4f5;"><th style="padding:8px 12px;font-size:11px;color:#71717a;text-align:left;font-weight:600;">Reparto</th><th style="padding:8px 12px;font-size:11px;color:#71717a;text-align:center;font-weight:600;">Turni</th><th style="padding:8px 12px;font-size:11px;color:#71717a;text-align:center;font-weight:600;">Non coperti</th></tr></thead>
+<tbody>${deptRows}</tbody></table>`
+              : "";
+
              for (const p of profiles ?? []) {
               if (!p.email) continue;
               try {
@@ -120,7 +142,7 @@ Deno.serve(async (req) => {
                   body: JSON.stringify({
                     from: "Shift Scheduler <onboarding@resend.dev>",
                     to: [p.email],
-                    subject: `Draft turni generato – ${store.name}`,
+                    subject: emailSubject,
                     html: `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
@@ -130,8 +152,10 @@ Deno.serve(async (req) => {
 <p style="margin:0;font-size:14px;color:#71717a;">${store.name}</p>
 <p style="margin:8px 0 0;font-size:13px;color:#a1a1aa;">Settimana dal ${weekStart}</p>
 </td></tr>
-<tr><td style="padding:24px 36px;text-align:center;">
-<p style="font-size:14px;color:#52525b;">La generazione automatica dei turni è stata completata. Controlla il draft e pubblica quando sei pronto.</p>
+${warningBanner}
+<tr><td style="padding:24px 36px;">
+<p style="font-size:14px;color:#52525b;margin:0 0 12px;">La generazione automatica dei turni è stata completata. Controlla il draft e pubblica quando sei pronto.</p>
+${deptTable}
 </td></tr>
 <tr><td style="padding:16px 36px 32px;text-align:center;">
 <a href="${publicAppUrl}team-calendar" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 36px;border-radius:10px;text-decoration:none;">Rivedi turni</a>
