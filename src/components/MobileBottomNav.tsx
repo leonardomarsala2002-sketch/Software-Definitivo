@@ -9,7 +9,7 @@ export function MobileBottomNav() {
   const visibleItems = filterNavByRole(bottomNavItems, role);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/30 bg-white/60 backdrop-blur-[15px] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[rgba(0,200,83,0.1)] bg-white/70 backdrop-blur-[20px] md:hidden">
       <div className="flex h-[4.25rem] items-center justify-around px-1 pb-1">
         {visibleItems.map((item) => {
           const isActive =
@@ -23,21 +23,21 @@ export function MobileBottomNav() {
               className={cn(
                 "flex flex-col items-center gap-1 rounded-2xl px-3 py-2 transition-all",
                 isActive
-                  ? "text-[#111]"
+                  ? "text-[#00C853]"
                   : "text-[#666]"
               )}
             >
               <div
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
-                  isActive && "bg-accent shadow-sm"
+                  isActive && "bg-[#00C853]/10 shadow-sm"
                 )}
               >
-                <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-accent-foreground")} />
+                <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-[#00C853]")} />
               </div>
               <span className={cn(
                 "text-[10px] leading-none",
-                isActive ? "font-semibold" : "font-medium"
+                isActive ? "font-semibold text-[#00C853]" : "font-medium"
               )}>
                 {item.title.length > 10 ? item.title.split(" ")[0] : item.title}
               </span>

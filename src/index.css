@@ -13,8 +13,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 7%;
 
-    --primary: 228 12% 93%;
-    --primary-foreground: 0 0% 7%;
+    --primary: 145 100% 39%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 228 12% 95%;
     --secondary-foreground: 0 0% 40%;
@@ -22,28 +22,28 @@
     --muted: 228 10% 95%;
     --muted-foreground: 0 0% 40%;
 
-    --accent: 228 12% 93%;
+    --accent: 228 30% 96%;
     --accent-foreground: 0 0% 7%;
 
-    --destructive: 0 72% 50%;
+    --destructive: 14 100% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 228 10% 90%;
     --input: 228 10% 90%;
-    --ring: 228 12% 70%;
+    --ring: 145 100% 39%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 0 0% 40%;
-    --sidebar-primary: 228 12% 93%;
-    --sidebar-primary-foreground: 0 0% 7%;
-    --sidebar-accent: 228 12% 95%;
+    --sidebar-primary: 145 100% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 30% 96%;
     --sidebar-accent-foreground: 0 0% 7%;
     --sidebar-border: 228 10% 92%;
-    --sidebar-ring: 228 12% 70%;
+    --sidebar-ring: 145 100% 39%;
 
-    --success: 152 60% 42%;
+    --success: 145 100% 39%;
     --success-foreground: 0 0% 100%;
     --warning: 38 90% 50%;
     --warning-foreground: 0 0% 100%;
@@ -56,28 +56,28 @@
     --card-foreground: 0 0% 7%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 7%;
-    --primary: 228 12% 93%;
-    --primary-foreground: 0 0% 7%;
+    --primary: 145 100% 39%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 228 12% 95%;
     --secondary-foreground: 0 0% 40%;
     --muted: 228 10% 95%;
     --muted-foreground: 0 0% 40%;
-    --accent: 228 12% 93%;
+    --accent: 228 30% 96%;
     --accent-foreground: 0 0% 7%;
-    --destructive: 0 72% 50%;
+    --destructive: 14 100% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 228 10% 90%;
     --input: 228 10% 90%;
-    --ring: 228 12% 70%;
+    --ring: 145 100% 39%;
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 0 0% 40%;
-    --sidebar-primary: 228 12% 93%;
-    --sidebar-primary-foreground: 0 0% 7%;
-    --sidebar-accent: 228 12% 95%;
+    --sidebar-primary: 145 100% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 30% 96%;
     --sidebar-accent-foreground: 0 0% 7%;
     --sidebar-border: 228 10% 92%;
-    --sidebar-ring: 228 12% 70%;
-    --success: 152 60% 42%;
+    --sidebar-ring: 145 100% 39%;
+    --success: 145 100% 39%;
     --success-foreground: 0 0% 100%;
     --warning: 38 90% 50%;
     --warning-foreground: 0 0% 100%;
@@ -110,9 +110,14 @@
   body::before {
     content: '';
     position: fixed;
-    inset: 0;
-    background: url('/panino-giusto-logo.png') center center / 50% no-repeat;
-    opacity: 0.045;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 65vw;
+    max-width: 1000px;
+    aspect-ratio: 1;
+    background: url('/panino-giusto-logo.png') center center / contain no-repeat;
+    opacity: 0.09;
     pointer-events: none;
     z-index: 0;
   }
@@ -126,11 +131,11 @@
 /* ── Glassmorphism utilities ────────────────────────── */
 @layer utilities {
   .glass-card {
-    background: rgba(255, 255, 255, 0.65);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid rgba(0, 200, 83, 0.18);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
   }
   .glass-sidebar {
     background: rgba(255, 255, 255, 0.6);

@@ -29,7 +29,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center glass-sidebar">
+    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center glass-sidebar border-r border-[rgba(0,200,83,0.08)]">
       <div className="flex flex-col h-full items-center">
         {/* Logo */}
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
@@ -51,7 +51,7 @@ export function AppSidebar() {
                     <div
                       className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                         ${active
-                          ? "bg-white shadow-lg text-[#111]"
+                          ? "bg-white shadow-lg text-[#00C853]"
                           : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
                         }`}
                     >
@@ -82,7 +82,7 @@ export function AppSidebar() {
                         <div
                           className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
                             ${active
-                              ? "bg-white shadow-lg text-[#111]"
+                              ? "bg-white shadow-lg text-[#00C853]"
                               : "bg-white/50 shadow-md text-[#666] hover:bg-white hover:shadow-lg hover:text-[#333]"
                             }`}
                         >
@@ -102,7 +102,6 @@ export function AppSidebar() {
 
         {/* Bottom Section: Store + Logout */}
         <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-          {/* Store Selector */}
           {stores.length > 1 ? (
             <DropdownMenu>
               <Tooltip>
@@ -146,7 +145,6 @@ export function AppSidebar() {
             </Tooltip>
           ) : null}
 
-          {/* Logout */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
