@@ -1,120 +1,73 @@
 
 
-# UI Redesign: Corporate Green Glass System
+# UI Polish: Stato Attivo, Spaziatura e Arrotondamenti
 
-## Overview
+## Modifiche richieste
 
-Complete visual overhaul from the current white/transparent background to a **Corporate Green Glass** system with 3 clear visual hierarchy levels. This affects the global background, the AppShell layout structure, the sidebar, and all card components.
+### 1. Sfondo piu scuro (gradiente verde)
+**File: `src/index.css`**
+- Scurire il gradiente body da `#e8f5e9 / #c8e6c9 / #a5d6a7` a toni piu profondi: `#c8e6c9 0%, #a5d6a7 30%, #81c784 70%, #c8e6c9 100%`
+- Aumenta il contrasto tra sfondo e card glassmorphism
 
-## Visual Hierarchy (3 Levels)
+### 2. Piu contrasto tra livelli glass
+**File: `src/index.css`**
+- `.glass-main-card`: background da `white/72` a `white/78`, shadow piu marcata `0 8px 32px rgba(0,0,0,0.10)`
+- `.glass-sidebar-base`: background da `white/70` a `white/76`, shadow `0 4px 20px rgba(0,0,0,0.08)`
+- `.glass-card`: background da `white/80` a `white/88`, shadow `0 2px 12px rgba(0,0,0,0.06)`
+- `.glass-icon-card`: background da `white/82` a `white/90`
 
-```text
-Level 1: Green gradient background (full screen)
-Level 2: Main Card (content wrapper) + Sidebar Base Card
-Level 3: Inner Cards (dashboard cards) + Icon Cards (sidebar icons)
-```
+### 3. Tutto piu rotondo
+**File: `src/index.css`**
+- `.glass-main-card`: `border-radius: 24px` (da 20px)
+- `.glass-sidebar-base`: `border-radius: 24px` (da 20px)
+- `.glass-card`: `border-radius: 20px` aggiunto esplicitamente
+- `.glass-icon-card`: `border-radius: 16px` (da 12px)
 
-## Files to Modify
+**File: `src/components/ui/card.tsx`**
+- Card base: `rounded-[20px]` (da `rounded-[16px]`)
 
-### 1. `src/index.css` - Global Background + Glass Classes
+### 4. Icone sidebar completamente circolari
+**File: `src/components/AppSidebar.tsx`**
+- `.glass-icon-card` nella sidebar: override con `rounded-full` (rimangono `h-11 w-11`)
+- La classe `.glass-icon-card` globale resta `rounded-[16px]`, ma nella sidebar si aggiunge `!rounded-full`
 
-**Background**: Replace `body { background: #FFFFFF }` with a soft green gradient:
-- `background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 30%, #a5d6a7 70%, #e8f5e9 100%)`
-- Subtle, corporate, no neon, no acid tones
-- Remove the `body::before` watermark logo (it won't be visible through the new system)
+### 5. Giorno calendario: selezione circolare gia presente
+Il calendario usa gia `rounded-full` per le celle. Confermato, nessuna modifica necessaria.
 
-**New utility classes** (replace current glass utilities):
-- `.glass-main-card` (Level 2): `bg-white/72`, `backdrop-blur-[16px]`, `border: 1px solid rgba(255,255,255,0.4)`, `shadow: 0 8px 32px rgba(0,0,0,0.06)`, `rounded-[20px]`
-- `.glass-sidebar-base` (Level 2): `bg-white/70`, `backdrop-blur-[14px]`, `border: 1px solid rgba(255,255,255,0.4)`, `shadow: 0 4px 20px rgba(0,0,0,0.05)`, `rounded-[20px]`
-- `.glass-card` (Level 3 - inner cards): `bg-white/80`, `backdrop-blur-[10px]`, `border: 1px solid rgba(255,255,255,0.35)`, lighter shadow, `rounded-[16px]`
-- `.glass-icon-card` (Level 3 - sidebar icons): `bg-white/82`, `backdrop-blur-[8px]`, `border: 1px solid rgba(255,255,255,0.35)`, micro shadow, `rounded-[12px]`
+### 6. Card Profilo e Ferie: solo contenuto centrale
+**File: `src/pages/Dashboard.tsx`**
+- Card Profilo: rimuovere la riga "Nuova richiesta" con il pulsante `+` in basso. Tenere solo Avatar + Nome + Badge ruolo, centrati verticalmente
+- Card Ferie: rimuovere l'icona Palmtree in alto e il testo "Ferie rimaste" in basso. Tenere solo il cerchio SVG con il numero, centrato
 
-**Hover effect** (corporate, all card levels):
-- `transform: scale(1.015)` with `transition: all 200ms ease`
-- No glow, no luminous effects
-- `overflow: hidden` on all cards
+### 7. Hover piu evidente
+**File: `src/index.css`**
+- `.glass-card:hover`: aggiungere `transform: scale(1.015)` e shadow piu marcata `0 6px 24px rgba(0,0,0,0.10)`
+- `.glass-icon-card:hover`: aggiungere `transform: scale(1.015)` e shadow `0 4px 16px rgba(0,0,0,0.09)`
+- Aggiungere `transition: all 200ms ease` (gia presente come `transition: box-shadow`, estendere a `all`)
 
-**Remove** `.gradient-bg` (replaced by body gradient).
+### 8. Stato attivo con bordo verde persistente
+**File: `src/components/AppSidebar.tsx`**
+- Icona attiva: aggiungere `border: 2px solid #00C853` (verde corporate)
+- Rimuovere il cambio di background drastico, mantenere solo il bordo verde + colore icona verde
+- Classe attiva: `border-2 border-[#00C853] text-[#00C853]` senza cambiare drasticamente il bg
 
-### 2. `src/components/ui/card.tsx` - Base Card Component
+**File: `src/pages/Dashboard.tsx`**
+- Giorno selezionato nel calendario: gia usa `bg-primary` che e verde. Confermato OK.
 
-Update the default `Card` class to use Level 3 glass style:
-- `rounded-[16px]`
-- `bg-[rgba(255,255,255,0.80)]`
-- `backdrop-blur-[10px]`
-- `border border-[rgba(255,255,255,0.35)]`
-- Lighter shadow than current
-- Hover: subtle scale(1.015), `overflow-hidden`, transition 200ms
-- No translate/shift effects
+### 9. Spaziatura globale aumentata
+**File: `src/components/AppShell.tsx`**
+- Main Card padding interno: da `px-4 py-3 md:px-5 md:py-4` a `px-8 py-8 md:px-8 md:py-8` (32px)
 
-### 3. `src/components/AppShell.tsx` - Main Card Wrapper
+**File: `src/pages/Dashboard.tsx`**
+- `cardBase`: padding da `p-2` a `p-6` (24px)
+- Gap griglia: da `gap-3.5` a `gap-5` (20px)
+- Padding griglia: da `p-3.5` a `p-0` (il padding e gia nella Main Card)
 
-The `<main>` area currently has no container card. Wrap the `<Outlet />` area in a **Main Card** (Level 2):
+## Riepilogo file modificati
 
-**Before**:
-```text
-[Sidebar] [Content area (no card)]
-```
-
-**After**:
-```text
-[Green BG] -> [Sidebar Base Card] | [Main Card wrapping all content]
-```
-
-Changes:
-- Outer `div`: remove `gradient-bg`, the body gradient handles the background
-- Add padding around the main area so the green background is visible as a frame
-- Wrap content in a `div` with class `glass-main-card` that fills the available space
-- The main card gets `rounded-[20px]`, proper padding, and `overflow-hidden`
-
-### 4. `src/components/AppSidebar.tsx` - Sidebar Double Layer
-
-**Sidebar Base Card** (Level 2):
-- Wrap the entire sidebar content in a vertical card with `glass-sidebar-base`
-- Full height, `rounded-[20px]`, proper margin from screen edges
-
-**Icon Cards** (Level 3):
-- Each navigation icon currently uses inline classes (`bg-white/50 shadow-md rounded-full`)
-- Replace with `glass-icon-card` class: `rounded-[12px]` (square-ish, not round), `bg-white/82`, `backdrop-blur-[8px]`, micro shadow
-- Active state: slightly more opaque + green icon color (keep `text-[#00C853]`)
-- Hover: scale(1.015), 200ms ease, no glow
-
-**Structural changes**:
-- `aside` padding adjusted to show green background around the sidebar base card
-- Logo container: stays as-is (round white circle), positioned inside the sidebar base card
-- Icon shape: change from `rounded-full` to `rounded-[12px]` for the glass-icon-card look
-- Size stays `h-11 w-11`
-
-### 5. `src/pages/Dashboard.tsx` - Inner Cards Styling
-
-- The `cardBase` constant changes from `"glass-card rounded-[12px] p-1"` to `"glass-card rounded-[16px] p-2"` (Level 3 style is now applied by the updated `.glass-card` class)
-- All inner cards inherit the Level 3 glass properties automatically
-- Add `overflow-hidden` to each card
-- Hover effect handled by the CSS class (scale 1.015, 200ms)
-
-## Spacing Rules
-
-- Green background visible around all Level 2 elements (sidebar base card, main card)
-- `p-3` (12px) around the outer shell to show green background as frame
-- `gap-3.5` (14px) between inner cards (maintained from current)
-- `p-3.5` (14px) inside the main card around the inner cards
-
-## Color Palette Summary
-
-| Element | Background | Blur | Border | Shadow |
-|---------|-----------|------|--------|--------|
-| Body BG | Green gradient | -- | -- | -- |
-| Main Card (L2) | white/72 | 16px | white/40 | soft diffused |
-| Sidebar Base (L2) | white/70 | 14px | white/40 | light visible |
-| Inner Cards (L3) | white/80 | 10px | white/35 | lighter |
-| Icon Cards (L3) | white/82 | 8px | white/35 | micro |
-
-## What Does NOT Change
-
-- Navigation structure and routing
-- Dashboard grid layout (quadrant system with grid-template-areas)
-- Functional logic (requests, calendar, agenda)
-- Mobile bottom nav
-- Button gradient (green gradient stays for primary buttons)
-- Typography sizes (already scaled from previous work)
+1. `src/index.css` - Gradiente piu scuro, contrasto livelli, bordi piu rotondi, hover piu evidente
+2. `src/components/ui/card.tsx` - `rounded-[20px]`
+3. `src/components/AppSidebar.tsx` - Icone circolari, stato attivo con bordo verde
+4. `src/components/AppShell.tsx` - Padding 32px nella Main Card
+5. `src/pages/Dashboard.tsx` - Card compatte (solo contenuto), padding 24px, gap aumentato
 
