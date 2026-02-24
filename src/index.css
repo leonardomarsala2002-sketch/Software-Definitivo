@@ -99,8 +99,8 @@
   }
 
   body {
-    background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 30%, #81c784 70%, #c8e6c9 100%);
-    background-attachment: fixed;
+    background: url('/bg-green-abstract.png') no-repeat center center fixed;
+    background-size: cover;
     @apply text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     color: #111111;
