@@ -5,13 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, AlertTriangle, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, AlertTriangle, KeyRound, Eye, EyeOff, Plus, Trash2, Check, Clock } from "lucide-react";
 import type { EmployeeRow } from "@/hooks/useEmployees";
-import { isEmployeeReady } from "@/hooks/useEmployees";
+import { isEmployeeReady, useEmployeeAvailability, useBulkCreateAvailability, useDeleteAvailability, DAY_LABELS, DAY_LABELS_SHORT } from "@/hooks/useEmployees";
 import { useUpdateEmployeeDetails } from "@/hooks/useEmployees";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
 
       {!ready && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-          Dati insufficienti per la generazione turni. Verifica: reparto, ore contratto (&gt;0) e almeno 1 fascia di disponibilità.
+          Dati insufficienti per la generazione turni. Verifica: reparto e ore contratto (&gt;0).
         </div>
       )}
 
@@ -155,11 +156,208 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
         </Button>
       )}
 
+      {/* Custom schedule section */}
+      <CustomScheduleSection userId={employee.user_id} storeId={employee.primary_store_id} canEdit={canEdit} />
+
       {canEdit && <AdminResetPasswordButton targetUserId={employee.user_id} />}
     </div>
   );
 }
 
+/* ─── Custom Schedule Section ─── */
+const HOURS_GRID = Array.from({ length: 25 }, (_, i) => i);
+
+function CustomScheduleSection({ userId, storeId, canEdit }: { userId: string; storeId: string | null; canEdit: boolean }) {
+  const { data: availability, isLoading } = useEmployeeAvailability(userId);
+  const createBulk = useBulkCreateAvailability();
+  const deleteAvail = useDeleteAvailability();
+
+  const [showForm, setShowForm] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [startHour, setStartHour] = useState<number | null>(null);
+  const [endHour, setEndHour] = useState<number | null>(null);
+
+  const hasCustomSchedule = (availability?.length ?? 0) > 0;
+
+  const toggleDay = (day: number) => {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const handleApply = () => {
+    if (!storeId) { toast.error("Nessuno store primario assegnato"); return; }
+    if (selectedDays.length === 0) { toast.error("Seleziona almeno un giorno"); return; }
+    if (startHour === null || endHour === null) { toast.error("Seleziona orario di inizio e fine"); return; }
+    if (endHour <= startHour) { toast.error("L'ora di fine deve essere successiva all'ora di inizio"); return; }
+
+    const startStr = `${String(startHour).padStart(2, "0")}:00`;
+    const endStr = endHour === 24 ? "24:00" : `${String(endHour).padStart(2, "0")}:00`;
+
+    createBulk.mutate(
+      selectedDays.map((day) => ({
+        user_id: userId,
+        store_id: storeId,
+        day_of_week: day,
+        start_time: startStr,
+        end_time: endStr,
+        availability_type: "available" as const,
+      })),
+      {
+        onSuccess: () => {
+          setShowForm(false);
+          setSelectedDays([]);
+          setStartHour(null);
+          setEndHour(null);
+        },
+      }
+    );
+  };
+
+  // Group by day
+  const grouped = new Map<number, typeof availability>();
+  availability?.forEach((a) => {
+    const list = grouped.get(a.day_of_week) ?? [];
+    list.push(a);
+    grouped.set(a.day_of_week, list);
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted-foreground" />
+        <Label className="text-muted-foreground text-xs uppercase tracking-wider">Orario personalizzato</Label>
+      </div>
+
+      {!hasCustomSchedule && !showForm && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">
+            Nessun orario personalizzato configurato. Il dipendente è considerato <strong>sempre disponibile</strong> per le ore del suo contratto.
+          </p>
+        </div>
+      )}
+
+      {/* Existing schedule entries */}
+      {[0, 1, 2, 3, 4, 5, 6].map((day) => {
+        const slots = grouped.get(day);
+        if (!slots) return null;
+        return (
+          <div key={day} className="rounded-lg border border-border p-2.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase mb-1.5">
+              {DAY_LABELS[day]}
+            </p>
+            <div className="space-y-1">
+              {slots.map((slot) => (
+                <div key={slot.id} className="flex items-center justify-between">
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                  </Badge>
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                      onClick={() => deleteAvail.mutate({ id: slot.id, userId })}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Add button */}
+      {canEdit && !showForm && (
+        <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => setShowForm(true)}>
+          <Plus className="h-4 w-4" />
+          {hasCustomSchedule ? "Aggiungi fascia" : "Configura orario personalizzato"}
+        </Button>
+      )}
+
+      {/* Inline form */}
+      {showForm && (
+        <div className="rounded-lg border border-border p-3 space-y-3 bg-muted/30">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Giorni</Label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAY_LABELS_SHORT.map((label, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => toggleDay(i)}
+                  className={cn(
+                    "h-8 w-10 rounded-md text-[11px] font-medium border transition-colors",
+                    selectedDays.includes(i)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:bg-accent"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Inizio</Label>
+            <div className="grid grid-cols-6 gap-1">
+              {HOURS_GRID.filter((h) => h < 24).map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setStartHour(h)}
+                  className={cn(
+                    "h-7 rounded text-[11px] font-mono border transition-colors",
+                    startHour === h
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:bg-accent"
+                  )}
+                >
+                  {String(h).padStart(2, "0")}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Fine</Label>
+            <div className="grid grid-cols-6 gap-1">
+              {HOURS_GRID.filter((h) => h > 0).map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setEndHour(h)}
+                  className={cn(
+                    "h-7 rounded text-[11px] font-mono border transition-colors",
+                    endHour === h
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:bg-accent"
+                  )}
+                >
+                  {h === 24 ? "24" : String(h).padStart(2, "0")}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleApply} disabled={createBulk.isPending} className="flex-1">
+              Applica
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setShowForm(false); setSelectedDays([]); setStartHour(null); setEndHour(null); }}>
+              Annulla
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Admin Reset Password ─── */
 function AdminResetPasswordButton({ targetUserId }: { targetUserId: string }) {
   const { role } = useAuth();
   const [open, setOpen] = useState(false);

@@ -44,12 +44,12 @@ const DAY_LABELS_SHORT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
 export { DAY_LABELS, DAY_LABELS_SHORT };
 
-/** Check if an employee is "ready" for shift generation */
+/** Check if an employee is "ready" for shift generation.
+ *  Availability is no longer required — if not configured, employee is always available. */
 export function isEmployeeReady(emp: EmployeeRow): boolean {
   return (
     !!emp.department &&
-    emp.weekly_contract_hours > 0 &&
-    emp.availability_count > 0
+    emp.weekly_contract_hours > 0
   );
 }
 
