@@ -6,7 +6,7 @@ export interface CorrectionAction {
   id: string;
   label: string;
   description: string;
-  actionType: "shift_earlier" | "shift_later" | "add_split" | "extend_shift" | "lending" | "remove_surplus" | "reduce_hours" | "generic";
+  actionType: "shift_earlier" | "shift_later" | "add_split" | "extend_shift" | "lending" | "remove_surplus" | "reduce_hours" | "increase_splits" | "increase_days_off" | "generic";
   userId?: string;
   userName?: string;
   shiftId?: string;

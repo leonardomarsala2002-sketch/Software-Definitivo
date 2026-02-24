@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import {
   ChevronDown, ChevronUp, X, Zap, Stethoscope, Shield,
   Scale, Users, Search, Scissors, Heart, ArrowRightLeft,
-  Clock, UserPlus, FastForward, Check
+  Clock, UserPlus, FastForward, Check, CalendarPlus, SplitSquareHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +80,8 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   lending: ArrowRightLeft,
   remove_surplus: X,
   reduce_hours: Scale,
+  increase_splits: Scissors,
+  increase_days_off: CalendarPlus,
   generic: Check,
 };
 
