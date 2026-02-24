@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
       }
 
       const totalUncovered = deptResults.reduce((sum, d) => sum + (d.uncovered ?? 0), 0);
+      const hasCritical = totalUncovered > 0;
 
       // Send notification email to store admins
       if (resendKey && publicAppUrl) {
@@ -172,8 +173,10 @@ ${deptTable}
                   user_id: p.id,
                   store_id: store.id,
                   type: "draft_ready",
-                  title: "Draft turni pronto",
-                  message: `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Controlla e pubblica quando sei pronto.`,
+                  title: hasCritical ? "⚠️ Draft turni con problemi" : "Draft turni pronto",
+                  message: hasCritical
+                    ? `I turni per la settimana del ${weekStart} sono stati generati per ${store.name} con ${totalUncovered} slot non coperti. Risolvi i problemi prima di pubblicare.`
+                    : `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Controlla e pubblica quando sei pronto.`,
                   link: "/team-calendar",
                 });
               } catch (notifErr) {

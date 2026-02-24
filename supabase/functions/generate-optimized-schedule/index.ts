@@ -1058,7 +1058,7 @@ Deno.serve(async (req) => {
               );
 
               const covForHour = otherCov.find(c => parseInt(c.hour_slot.split(":")[0], 10) === slot.hour);
-              if (!covForHour) continue;
+              const minRequired = covForHour?.min_staff_required ?? 0;
 
               let otherStaffCount = 0;
               const coveringShifts: any[] = [];
@@ -1072,8 +1072,8 @@ Deno.serve(async (req) => {
                 }
               }
 
-              if (otherStaffCount > covForHour.min_staff_required) {
-                const surplusCount = otherStaffCount - covForHour.min_staff_required;
+              if (otherStaffCount > minRequired) {
+                const surplusCount = otherStaffCount - minRequired;
                 const surplusUserIds = coveringShifts.map(s => s.user_id);
                 const [surplusStatsRes, surplusProfilesRes] = await Promise.all([
                   adminClient.from("employee_stats").select("user_id, current_balance")
@@ -1131,7 +1131,7 @@ Deno.serve(async (req) => {
                       uncovSugg.alternatives.push({
                         id: `lending-${candidate.user_id}-${slot.date}-${slot.hour}`,
                         label: `Prestito: ${candidateName} da ${otherStore.name}`,
-                        description: `${candidateName} viene prestato da ${otherStore.name} (${otherStaffCount}/${covForHour.min_staff_required} presenti, surplus di ${surplusCount}). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}, ${dayLabel}. Richiede approvazione di entrambi i locali.`,
+                        description: `${candidateName} viene prestato da ${otherStore.name} (${otherStaffCount}/${minRequired} presenti, surplus di ${surplusCount}). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}, ${dayLabel}. Richiede approvazione di entrambi i locali.`,
                         actionType: "lending",
                         userId: candidate.user_id,
                         userName: candidateName,
