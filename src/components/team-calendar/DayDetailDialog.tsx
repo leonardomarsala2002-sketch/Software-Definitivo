@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
-import { Plus, Trash2, Edit2, X } from "lucide-react";
+import { Plus, Trash2, Edit2, X, ArrowRightLeft } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
+import type { LendingRecord } from "@/hooks/useLendingData";
 import { ShiftEditPopover } from "./ShiftEditPopover";
 import { EmployeeWeekDrawer } from "./EmployeeWeekDrawer";
 
@@ -30,6 +31,8 @@ interface DayDetailDialogProps {
   allowedEntries: number[];
   allowedExits: number[];
   canEdit: boolean;
+  lendings?: LendingRecord[];
+  currentStoreId?: string;
   onCreateShift: (shift: { user_id: string; date: string; start_time: string | null; end_time: string | null; is_day_off: boolean }) => void;
   onUpdateShift: (id: string, updates: Partial<Pick<ShiftRow, "start_time" | "end_time" | "is_day_off">>) => void;
   onDeleteShift: (id: string) => void;
@@ -50,6 +53,7 @@ function getShiftColor(s: ShiftRow): { bg: string; border: string; label?: strin
 export function DayDetailDialog({
   open, onOpenChange, date, department, shifts, employees,
   openingHours, allowedEntries, allowedExits, canEdit,
+  lendings = [], currentStoreId,
   onCreateShift, onUpdateShift, onDeleteShift,
 }: DayDetailDialogProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
@@ -207,6 +211,51 @@ export function DayDetailDialog({
               <p className="text-sm text-muted-foreground text-center py-8">
                 Nessun dipendente nel reparto {department}
               </p>
+            )}
+
+            {/* Lending section */}
+            {lendings.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border/40">
+                <div className="flex items-center gap-2 mb-2">
+                  <ArrowRightLeft className="h-4 w-4 text-blue-600" />
+                  <span className="text-xs font-semibold text-foreground">Prestiti Inter-Store</span>
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-blue-600 border-blue-300">
+                    {lendings.length}
+                  </Badge>
+                </div>
+                <div className="space-y-1.5">
+                  {lendings.map(l => {
+                    const isOutgoing = currentStoreId === l.source_store_id;
+                    const otherStore = isOutgoing ? l.target_store_name : l.source_store_name;
+                    const statusLabel = l.status === "accepted" ? "Confermato" : "In attesa";
+                    const statusColor = l.status === "accepted"
+                      ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                      : "bg-amber-100 text-amber-700 border-amber-300";
+
+                    return (
+                      <div key={l.id} className="glass-card rounded-lg p-2.5 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-foreground">{l.user_name ?? "Dipendente"}</span>
+                            <Badge variant="outline" className={cn("text-[9px] h-3.5 px-1", statusColor)}>
+                              {statusLabel}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {isOutgoing ? "→ Prestato a" : "← Ricevuto da"}{" "}
+                            <span className="font-medium text-foreground">{otherStore}</span>
+                            {" · "}
+                            {l.suggested_start_time?.slice(0, 5)}–{l.suggested_end_time?.slice(0, 5)}
+                          </p>
+                          {l.reason && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{l.reason}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
         </ScrollArea>
