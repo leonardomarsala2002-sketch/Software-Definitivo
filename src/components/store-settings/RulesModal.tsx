@@ -3,6 +3,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Save } from "lucide-react";
 import NumberStepper from "./NumberStepper";
 import type { StoreRules } from "@/hooks/useStoreSettings";
@@ -17,6 +20,7 @@ interface Props {
 }
 
 export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving, readOnly }: Props) {
+  const [generationEnabled, setGenerationEnabled] = useState(rules.generation_enabled ?? false);
   const [form, setForm] = useState({
     max_team_hours_sala_per_week: (rules as any).max_team_hours_sala_per_week ?? 240,
     max_team_hours_cucina_per_week: (rules as any).max_team_hours_cucina_per_week ?? 240,
@@ -25,6 +29,7 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
   });
 
   useEffect(() => {
+    setGenerationEnabled(rules.generation_enabled ?? false);
     setForm({
       max_team_hours_sala_per_week: (rules as any).max_team_hours_sala_per_week ?? 240,
       max_team_hours_cucina_per_week: (rules as any).max_team_hours_cucina_per_week ?? 240,
@@ -32,6 +37,11 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
       mandatory_days_off_per_week: rules.mandatory_days_off_per_week,
     });
   }, [rules]);
+
+  const handleToggleGeneration = (checked: boolean) => {
+    setGenerationEnabled(checked);
+    onSave({ generation_enabled: checked } as any);
+  };
 
   const fields: { key: keyof typeof form; label: string; min: number; max: number }[] = [
     { key: "max_team_hours_sala_per_week", label: "Max ore Sala / sett.", min: 1, max: 999 },
@@ -52,6 +62,27 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
           <DialogTitle className="text-base">Regole Team</DialogTitle>
           <DialogDescription className="text-xs">Limiti settimanali del team.</DialogDescription>
         </DialogHeader>
+
+        {/* Generation toggle */}
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-muted/30 p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="gen-toggle" className="text-[13px] font-medium cursor-pointer">
+              Generazione automatica ogni Giovedì
+            </Label>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Quando attivo, i turni della settimana successiva vengono generati automaticamente ogni giovedì notte
+            </p>
+          </div>
+          <Switch
+            id="gen-toggle"
+            checked={generationEnabled}
+            onCheckedChange={handleToggleGeneration}
+            disabled={readOnly || isSaving}
+          />
+        </div>
+
+        <Separator />
+
         <div className="grid grid-cols-1 gap-3 py-1">
           {fields.map((f) => (
             <div key={f.key} className="flex items-center justify-between gap-3">
