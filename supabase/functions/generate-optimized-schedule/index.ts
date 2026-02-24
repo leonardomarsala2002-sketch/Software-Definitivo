@@ -567,7 +567,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date } = body;
+    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending } = body;
     const isPatchMode = mode === "patch";
     const MAX_ITERATIONS = 40;
 
@@ -987,8 +987,10 @@ Deno.serve(async (req) => {
     }
 
     // ─── Phase 3: Cross-Store Lending Detection ────────────────────────
+    // Skip lending when called from cron phase 1 (will run in phase 2 after all stores generated)
     let lendingSuggestionsCreated = 0;
 
+    if (!skip_lending) {
     // Get current store's city
     const { data: currentStore } = await adminClient
       .from("stores").select("id, city").eq("id", store_id).single();
@@ -1219,6 +1221,7 @@ Deno.serve(async (req) => {
         }
       }
     }
+    } // end if (!skip_lending)
 
     // ─── Phase 4: Patch Mode Notifications ────────────────────────────
     if (isPatchMode && affected_user_id) {

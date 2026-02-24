@@ -39,23 +39,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    const results: { store: string; department: string; status: string; error?: string }[] = [];
-
+    // Filter stores with generation_enabled
+    const enabledStores: { id: string; name: string }[] = [];
     for (const store of stores) {
-      // Check if generation is enabled for this store
       const { data: rules } = await adminClient
         .from("store_rules")
         .select("generation_enabled")
         .eq("store_id", store.id)
         .single();
-
-      if (!rules?.generation_enabled) {
-        results.push({ store: store.name, department: "all", status: "skipped", error: "generation_enabled=false" });
-        continue;
+      if (rules?.generation_enabled) {
+        enabledStores.push(store);
       }
+    }
 
-      // Generate for both departments in a single call
-      let deptResults: { department: string; shifts: number; uncovered: number; fitness?: number }[] = [];
+    if (enabledStores.length === 0) {
+      return new Response(JSON.stringify({ ok: true, message: "No stores with generation enabled" }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const results: { store: string; department: string; status: string; error?: string }[] = [];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 1: Generate shifts for ALL stores (skip lending detection)
+    // This ensures all stores have draft shifts before cross-store
+    // lending analysis runs.
+    // ═══════════════════════════════════════════════════════════════════
+    console.log(`[PHASE 1] Generating shifts for ${enabledStores.length} stores (skip_lending=true)`);
+
+    const phase1Promises = enabledStores.map(async (store) => {
       try {
         const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-optimized-schedule`, {
           method: "POST",
@@ -66,44 +78,237 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             store_id: store.id,
             week_start_date: weekStart,
+            skip_lending: true, // Phase 1: no lending
           }),
         });
         const genBody = await genRes.json();
         if (genRes.ok && genBody.departments) {
-          deptResults = genBody.departments;
-          for (const d of deptResults) {
+          for (const d of genBody.departments) {
             results.push({ store: store.name, department: d.department, status: "success" });
           }
+          return { store, departments: genBody.departments, ok: true };
         } else {
           results.push({ store: store.name, department: "all", status: "failed", error: genBody.error ?? "Unknown error" });
+          return { store, departments: [], ok: false };
         }
       } catch (e) {
         results.push({ store: store.name, department: "all", status: "failed", error: (e as Error).message });
+        return { store, departments: [], ok: false };
+      }
+    });
+
+    const phase1Results = await Promise.all(phase1Promises);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2: Cross-store lending detection
+    // Now that ALL stores have draft shifts, we can accurately detect
+    // surplus in one store and uncovered slots in another.
+    // ═══════════════════════════════════════════════════════════════════
+    console.log(`[PHASE 2] Running cross-store lending detection`);
+
+    let totalLendingSuggestions = 0;
+    const weekEnd = new Date(nextMon);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    const weekEndStr = weekEnd.toISOString().split("T")[0];
+
+    // Get weekDates
+    const weekDates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(nextMon);
+      d.setUTCDate(d.getUTCDate() + i);
+      weekDates.push(d.toISOString().split("T")[0]);
+    }
+
+    // Group stores by city for lending
+    const storeMap = new Map<string, { id: string; name: string; city: string }[]>();
+    const { data: allStoresWithCity } = await adminClient
+      .from("stores").select("id, name, city").eq("is_active", true);
+
+    for (const s of (allStoresWithCity ?? [])) {
+      if (!s.city) continue;
+      const arr = storeMap.get(s.city) ?? [];
+      arr.push(s);
+      storeMap.set(s.city, arr);
+    }
+
+    // Only process cities with 2+ stores
+    for (const [city, cityStores] of storeMap) {
+      if (cityStores.length < 2) continue;
+
+      // For each store, find uncovered slots and surplus
+      const storeAnalysis = new Map<string, {
+        uncovered: { date: string; hour: number; dept: string }[];
+        surplus: { date: string; hour: number; dept: string; userId: string; startTime: string; endTime: string }[];
+      }>();
+
+      for (const store of cityStores) {
+        const uncovered: { date: string; hour: number; dept: string }[] = [];
+        const surplus: { date: string; hour: number; dept: string; userId: string; startTime: string; endTime: string }[] = [];
+
+        for (const dept of ["sala", "cucina"]) {
+          const [covRes, shiftsRes] = await Promise.all([
+            adminClient.from("store_coverage_requirements").select("*")
+              .eq("store_id", store.id).eq("department", dept),
+            adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, date, department")
+              .eq("store_id", store.id).eq("department", dept)
+              .eq("status", "draft").gte("date", weekStart).lte("date", weekEndStr),
+          ]);
+
+          const covData = covRes.data ?? [];
+          const shiftData = (shiftsRes.data ?? []).filter(s => !s.is_day_off && s.start_time && s.end_time);
+
+          for (const dateStr of weekDates) {
+            const dow = (new Date(dateStr + "T00:00:00Z").getUTCDay() + 6) % 7;
+            const dayCov = covData.filter(c => c.day_of_week === dow);
+
+            for (const cov of dayCov) {
+              const h = parseInt(cov.hour_slot.split(":")[0], 10);
+              const covering: typeof shiftData = [];
+
+              for (const s of shiftData) {
+                if (s.date !== dateStr) continue;
+                const sh = parseInt(String(s.start_time).split(":")[0], 10);
+                let eh = parseInt(String(s.end_time).split(":")[0], 10);
+                if (eh === 0) eh = 24;
+                if (h >= sh && h < eh) covering.push(s);
+              }
+
+              const diff = covering.length - cov.min_staff_required;
+              if (diff < 0) {
+                uncovered.push({ date: dateStr, hour: h, dept });
+              } else if (diff > 0) {
+                // Mark surplus employees (take last ones = least priority)
+                for (const s of covering.slice(-diff)) {
+                  surplus.push({
+                    date: dateStr, hour: h, dept,
+                    userId: s.user_id,
+                    startTime: String(s.start_time),
+                    endTime: String(s.end_time),
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        storeAnalysis.set(store.id, { uncovered, surplus });
       }
 
-      const totalUncovered = deptResults.reduce((sum, d) => sum + (d.uncovered ?? 0), 0);
+      // Match: store with uncovered ↔ other store with surplus in same dept/date/hour
+      for (const targetStore of cityStores) {
+        const targetData = storeAnalysis.get(targetStore.id);
+        if (!targetData || targetData.uncovered.length === 0) continue;
+
+        for (const slot of targetData.uncovered) {
+          // Find a source store with surplus for this slot
+          for (const sourceStore of cityStores) {
+            if (sourceStore.id === targetStore.id) continue;
+            const sourceData = storeAnalysis.get(sourceStore.id);
+            if (!sourceData) continue;
+
+            const match = sourceData.surplus.find(
+              s => s.date === slot.date && s.hour === slot.hour && s.dept === slot.dept
+            );
+            if (!match) continue;
+
+            // Find the generation run for target store + dept
+            const { data: targetRun } = await adminClient
+              .from("generation_runs").select("id, suggestions")
+              .eq("store_id", targetStore.id).eq("department", slot.dept)
+              .eq("week_start", weekStart).eq("status", "completed")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!targetRun) continue;
+
+            // Check if lending suggestion already exists
+            const { data: existing } = await adminClient
+              .from("lending_suggestions").select("id")
+              .eq("generation_run_id", targetRun.id)
+              .eq("user_id", match.userId)
+              .eq("suggested_date", slot.date)
+              .maybeSingle();
+
+            if (existing) continue;
+
+            // Get candidate name
+            const { data: profile } = await adminClient
+              .from("profiles").select("full_name").eq("id", match.userId).single();
+            const candidateName = profile?.full_name ?? "Dipendente";
+
+            // Insert lending suggestion
+            await adminClient.from("lending_suggestions").insert({
+              generation_run_id: targetRun.id,
+              user_id: match.userId,
+              source_store_id: sourceStore.id,
+              target_store_id: targetStore.id,
+              department: slot.dept,
+              suggested_date: slot.date,
+              suggested_start_time: match.startTime,
+              suggested_end_time: match.endTime,
+              reason: `${candidateName} da ${sourceStore.name} (surplus alle ${slot.hour}:00). Turno: ${match.startTime.slice(0,5)}-${match.endTime.slice(0,5)}`,
+              status: "pending",
+            } as any);
+
+            totalLendingSuggestions++;
+
+            // Add lending alternative to the uncovered suggestion in generation_runs.suggestions
+            const suggs = (targetRun.suggestions as any[]) ?? [];
+            const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}-${slot.hour}`);
+            if (uncovSugg?.alternatives) {
+              uncovSugg.alternatives.push({
+                id: `lending-${match.userId}-${slot.date}-${slot.hour}`,
+                label: `Prestito: ${candidateName} da ${sourceStore.name}`,
+                description: `${candidateName} viene prestato da ${sourceStore.name}. Turno: ${match.startTime.slice(0,5)}-${match.endTime.slice(0,5)}. Richiede approvazione bilaterale.`,
+                actionType: "lending",
+                userId: match.userId,
+                userName: candidateName,
+                sourceStoreId: sourceStore.id,
+                sourceStoreName: sourceStore.name,
+                targetStoreId: targetStore.id,
+                targetStoreName: targetStore.name,
+              });
+              await adminClient.from("generation_runs").update({
+                suggestions: suggs,
+              } as any).eq("id", targetRun.id);
+            }
+
+            break; // One lending per uncovered slot
+          }
+        }
+      }
+    }
+
+    console.log(`[PHASE 2] Created ${totalLendingSuggestions} lending suggestions`);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 3: Notifications to store admins
+    // ═══════════════════════════════════════════════════════════════════
+    for (const p1 of phase1Results) {
+      if (!p1.ok) continue;
+      const store = p1.store;
+      const deptResults = p1.departments;
+      const totalUncovered = deptResults.reduce((sum: number, d: any) => sum + (d.uncovered ?? 0), 0);
       const hasCritical = totalUncovered > 0;
 
-      // Send notification email to store admins
       if (resendKey && publicAppUrl) {
-        // Get admin users for this store
         const { data: assignments } = await adminClient
           .from("user_store_assignments")
           .select("user_id")
           .eq("store_id", store.id);
 
-        const adminUserIds = (assignments ?? []).map(a => a.user_id);
+        const adminUserIds = (assignments ?? []).map((a: any) => a.user_id);
 
         if (adminUserIds.length > 0) {
-          // Get roles and emails
           const { data: roles } = await adminClient
             .from("user_roles")
             .select("user_id, role")
             .in("user_id", adminUserIds);
 
           const adminIds = (roles ?? [])
-            .filter(r => r.role === "admin" || r.role === "super_admin")
-            .map(r => r.user_id);
+            .filter((r: any) => r.role === "admin" || r.role === "super_admin")
+            .map((r: any) => r.user_id);
 
           if (adminIds.length > 0) {
             const { data: profiles } = await adminClient
@@ -121,7 +326,7 @@ Deno.serve(async (req) => {
 </td></tr>`
               : "";
 
-            const deptRows = deptResults.map(d =>
+            const deptRows = deptResults.map((d: any) =>
               `<tr><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;color:#18181b;text-transform:capitalize;">${d.department}</td><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;color:#18181b;text-align:center;">${d.shifts ?? 0}</td><td style="padding:8px 12px;border-bottom:1px solid #f4f4f5;font-size:13px;text-align:center;color:${(d.uncovered ?? 0) > 0 ? "#dc2626" : "#16a34a"};font-weight:600;">${d.uncovered ?? 0}</td></tr>`
             ).join("");
 
@@ -131,7 +336,7 @@ Deno.serve(async (req) => {
 <tbody>${deptRows}</tbody></table>`
               : "";
 
-             for (const p of profiles ?? []) {
+            for (const p of profiles ?? []) {
               if (!p.email) continue;
               try {
                 await fetch("https://api.resend.com/emails", {
@@ -188,7 +393,7 @@ ${deptTable}
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, results }), {
+    return new Response(JSON.stringify({ ok: true, results, lending_suggestions: totalLendingSuggestions }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
