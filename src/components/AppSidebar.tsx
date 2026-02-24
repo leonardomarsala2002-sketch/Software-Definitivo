@@ -29,146 +29,139 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen py-3 pl-3">
-      <div className="flex flex-col h-full">
-      {/* Top Section: Logo + Navigation */}
-      <div className="flex flex-col items-center pt-4 pb-2">
+    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center">
+      <div className="flex flex-col h-full items-center">
         {/* Logo */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 shadow-[0_0_20px_rgba(255,255,255,0.08)] mb-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg text-primary mb-6">
           <UtensilsCrossed className="h-5 w-5" />
         </div>
-      </div>
 
-      <Separator className="mx-4 w-auto opacity-10" />
-
-      {/* Main Navigation */}
-      <nav className="flex-1 flex flex-col items-center py-4 space-y-2 overflow-y-auto">
-        {mainItems.map((item) => {
-          const active = isActive(item.url);
-          return (
-            <Tooltip key={item.url}>
-              <TooltipTrigger asChild>
-                <Link
-                  to={item.url}
-                  aria-label={item.title}
-                  className="flex items-center justify-center p-1"
-                >
-                  <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                      ${active
-                        ? "text-white shadow-[0_0_16px_rgba(255,255,255,0.25)]"
-                        : "text-white/50 hover:text-white/80"
-                      }`}
+        {/* Main Navigation */}
+        <nav className="flex-1 flex flex-col items-center py-2 space-y-3 overflow-y-auto">
+          {mainItems.map((item) => {
+            const active = isActive(item.url);
+            return (
+              <Tooltip key={item.url}>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={item.url}
+                    aria-label={item.title}
+                    className="flex items-center justify-center"
                   >
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium">
-                {item.title}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-
-        {secondaryItems.length > 0 && (
-          <>
-            <Separator className="mx-2 my-2 w-10 opacity-10" />
-            {secondaryItems.map((item) => {
-              const active = isActive(item.url);
-              return (
-                <Tooltip key={item.url}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={item.url}
-                      aria-label={item.title}
-                      className="flex items-center justify-center p-1"
+                    <div
+                      className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
+                        ${active
+                          ? "bg-white shadow-lg text-primary"
+                          : "bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80"
+                        }`}
                     >
-                      <div
-                        className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
-                          ${active
-                            ? "text-white shadow-[0_0_16px_rgba(255,255,255,0.25)]"
-                            : "text-white/50 hover:text-white/80"
-                          }`}
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {item.title}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+
+          {secondaryItems.length > 0 && (
+            <>
+              <Separator className="mx-2 my-2 w-8 opacity-20" />
+              {secondaryItems.map((item) => {
+                const active = isActive(item.url);
+                return (
+                  <Tooltip key={item.url}>
+                    <TooltipTrigger asChild>
+                      <Link
+                        to={item.url}
+                        aria-label={item.title}
+                        className="flex items-center justify-center"
                       >
-                        <item.icon className="h-5 w-5" />
-                      </div>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="font-medium">
-                    {item.title}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </>
-        )}
-      </nav>
+                        <div
+                          className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200
+                            ${active
+                              ? "bg-white shadow-lg text-primary"
+                              : "bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80"
+                            }`}
+                        >
+                          <item.icon className="h-5 w-5" />
+                        </div>
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="font-medium">
+                      {item.title}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </>
+          )}
+        </nav>
 
-      {/* Bottom Section: Store + Logout */}
-      <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-        <Separator className="mx-4 w-10 opacity-10" />
-
-        {/* Store Selector */}
-        {stores.length > 1 ? (
-          <DropdownMenu>
+        {/* Bottom Section: Store + Logout */}
+        <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
+          {/* Store Selector */}
+          {stores.length > 1 ? (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-foreground/50 hover:bg-white hover:shadow-lg hover:text-foreground/80 transition-all duration-200">
+                      <Store className="h-5 w-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {activeStore?.name ?? "Seleziona store"}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
+                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                  Seleziona Store
+                </DropdownMenuLabel>
+                {stores.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onClick={() => setActiveStore(s)}
+                    className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
+                  >
+                    <Store className="mr-2.5 h-4 w-4" />
+                    {s.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : activeStore ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-full text-white/50 hover:text-white/80 transition-all duration-200">
-                    <Store className="h-5 w-5" />
-                  </button>
-                </DropdownMenuTrigger>
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-foreground/50">
+                  <Store className="h-5 w-5" />
+                </div>
               </TooltipTrigger>
               <TooltipContent side="right" className="font-medium">
-                {activeStore?.name ?? "Seleziona store"}
+                {activeStore.name}
               </TooltipContent>
             </Tooltip>
-            <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
-              <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                Seleziona Store
-              </DropdownMenuLabel>
-              {stores.map((s) => (
-                <DropdownMenuItem
-                  key={s.id}
-                  onClick={() => setActiveStore(s)}
-                  className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
-                >
-                  <Store className="mr-2.5 h-4 w-4" />
-                  {s.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : activeStore ? (
+          ) : null}
+
+          {/* Logout */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex h-11 w-11 items-center justify-center rounded-full text-white/50">
-                <Store className="h-5 w-5" />
-              </div>
+              <button
+                onClick={signOut}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/60 shadow-md text-destructive/70 hover:bg-white hover:shadow-lg hover:text-destructive transition-all duration-200"
+                aria-label="Esci"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
             </TooltipTrigger>
             <TooltipContent side="right" className="font-medium">
-              {activeStore.name}
+              Esci
             </TooltipContent>
           </Tooltip>
-        ) : null}
-
-        {/* Logout - round floating icon */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={signOut}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-red-400 hover:text-red-300 hover:shadow-[0_0_12px_rgba(248,113,113,0.25)] transition-all duration-200"
-              aria-label="Esci"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">
-            Esci
-          </TooltipContent>
-        </Tooltip>
-      </div>
+        </div>
       </div>
     </aside>
   );

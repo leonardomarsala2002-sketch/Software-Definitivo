@@ -58,7 +58,7 @@ export function KpiCards({ shifts, employeeCount, year, month }: KpiCardsProps) 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
       {cards.map((c) => (
-        <Card key={c.label} className="glass-card border-0 shadow-sm transition-all duration-300 hover:bg-white/80 dark:hover:bg-white/10 hover:shadow-2xl">
+        <Card key={c.label} className="border-white/40 shadow-sm transition-all duration-200 hover:scale-[1.01]">
           <CardContent className="p-4 flex items-start gap-3">
             <div className={`rounded-lg p-2 ${c.color}`}>
               <c.icon className="h-4 w-4" />
