@@ -498,6 +498,130 @@ function runIteration(
       }
     }
 
+    // ── SECOND PASS: Split shifts for employees already working this day ──
+    let hasUncoveredAfterFirst = false;
+    for (const [h, needed] of hourCoverage) {
+      if ((staffAssigned.get(h) ?? 0) < needed) { hasUncoveredAfterFirst = true; break; }
+    }
+
+    if (hasUncoveredAfterFirst) {
+      // Get employees who already have a shift today (candidates for a split)
+      const empsWithShiftToday = deptEmployees.filter(emp => {
+        const dayShiftCount = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
+        return dayShiftCount >= 1; // already worked today
+      });
+
+      let splitCandidates = randomize ? shuffle(empsWithShiftToday) : empsWithShiftToday.slice();
+
+      for (const emp of splitCandidates) {
+        const ec = empConstraints.get(emp.user_id);
+        const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+        const balance = hourBalances.get(emp.user_id) ?? 0;
+        const adjustedTarget = emp.weekly_contract_hours - balance;
+        const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+
+        // Calculate hours already worked today
+        const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
+        const dailyHoursUsed = todayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+
+        const maxRemainingDaily = empMaxDaily - dailyHoursUsed;
+        const maxRemainingWeekly = empMaxWeekly - empWeeklyUsed;
+        const maxRemainingTarget = Math.max(adjustedTarget - empWeeklyUsed, 0);
+        const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly, maxRemainingTarget);
+        if (maxRemaining <= 0) continue;
+
+        // Check weekly split limit
+        const empWeeklySplitCount = weeklySplits.get(emp.user_id) ?? 0;
+        const maxSplitsWeek = (ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week) + maxSplitOverride;
+        if (empWeeklySplitCount >= maxSplitsWeek) continue;
+
+        // Check team hour limits
+        if (weeklyTeamHoursUsed >= maxWeeklyTeamHours) break;
+        if (dailyTeamHoursUsed >= maxDailyTeamHours) break;
+
+        // Still uncovered?
+        let stillUncovered = false;
+        for (const [h, needed] of hourCoverage) {
+          if ((staffAssigned.get(h) ?? 0) < needed) { stillUncovered = true; break; }
+        }
+        if (!stillUncovered) break;
+
+        // Find the end hour of the last shift today for this employee (for 2h gap)
+        const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
+
+        // The new split shift must start at least 2h after the last shift ended
+        const earliestSplitStart = lastEndToday + 2;
+
+        const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+        if (empAvail.length === 0) continue;
+
+        let bestStart = -1, bestEnd = -1, bestCoverage = 0;
+
+        for (const entry of effectiveEntries) {
+          if (entry < earliestSplitStart) continue;
+          for (const exit of effectiveExits) {
+            if (exit <= entry) continue;
+            const duration = exit - entry;
+            if (duration > maxRemaining) continue;
+            if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
+
+            const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
+            if (!withinAvail) continue;
+
+            let coverCount = 0;
+            for (let h = entry; h < exit; h++) {
+              const needed = hourCoverage.get(h);
+              if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) coverCount++;
+            }
+
+            if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
+              bestCoverage = coverCount;
+              bestStart = entry;
+              bestEnd = exit;
+            }
+          }
+        }
+
+        if (bestStart >= 0 && bestEnd > bestStart) {
+          const duration = bestEnd - bestStart;
+
+          shifts.push({
+            store_id: storeId,
+            user_id: emp.user_id,
+            date: dateStr,
+            start_time: `${String(bestStart).padStart(2, "0")}:00`,
+            end_time: `${String(bestEnd === 24 ? 0 : bestEnd).padStart(2, "0")}:00`,
+            department,
+            is_day_off: false,
+            status: "draft",
+            generation_run_id: runId,
+          });
+
+          weeklyHours.set(emp.user_id, empWeeklyUsed + duration);
+          dailyTeamHoursUsed += duration;
+          weeklyTeamHoursUsed += duration;
+
+          // Update splits tracking
+          const empDailySplits = dailySplits.get(emp.user_id)!;
+          empDailySplits.set(dateStr, (empDailySplits.get(dateStr) ?? 0) + 1);
+          weeklySplits.set(emp.user_id, (weeklySplits.get(emp.user_id) ?? 0) + 1);
+
+          // Update last shift end
+          const existingEnd = lastShiftEnd.get(emp.user_id);
+          if (!existingEnd || dateStr > existingEnd.date || (dateStr === existingEnd.date && bestEnd > existingEnd.endHour)) {
+            lastShiftEnd.set(emp.user_id, { date: dateStr, endHour: bestEnd === 24 ? 24 : bestEnd });
+          }
+
+          for (let h = bestStart; h < bestEnd; h++) {
+            if (staffAssigned.has(h)) {
+              staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
+            }
+          }
+        }
+      }
+    }
+
     // Assign days off
     for (const emp of deptEmployees) {
       if (!daysWorked.get(emp.user_id)?.has(dateStr)) {
@@ -828,6 +952,36 @@ Deno.serve(async (req) => {
               newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
             });
             if (alts.length >= 5) break;
+          }
+
+          // 4) Employees already working that day who finished early enough for a split
+          for (const s of dayShifts) {
+            if (alts.length >= 5) break;
+            let endH = parseInt(s.end_time!.split(":")[0], 10);
+            if (endH === 0) endH = 24;
+            // Must have 2h gap: endHour + 2 <= uncoveredHour
+            if (endH + 2 > uncoveredHour) continue;
+            const emp = deptEmps.find(e => e.user_id === s.user_id);
+            if (!emp) continue;
+            const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+            if (empWeeklyUsed >= emp.weekly_contract_hours + 5) continue;
+            // Check availability for the uncovered hour
+            const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+            const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+            if (!canCover) continue;
+            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+            const nearestEntry = effectiveEntries_final.reduce((best, e) => (e >= endH + 2 && Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour)) ? e : best, uncoveredHour);
+            const nearestExit = effectiveExits_final.find(e => e > nearestEntry) ?? nearestEntry + 4;
+            alts.push({
+              id: `split-existing-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+              label: `Spezzato ${empName} (${nearestEntry}:00-${nearestExit}:00)`,
+              description: `${empName} (turno finito alle ${endH}:00) torna per spezzato ${nearestEntry}:00-${nearestExit}:00. Ore sett.: ${empWeeklyUsed}/${emp.weekly_contract_hours}h`,
+              actionType: "add_split",
+              userId: emp.user_id,
+              userName: empName,
+              newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+              newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
+            });
           }
 
           return alts.slice(0, 5); // Max 5 alternatives
