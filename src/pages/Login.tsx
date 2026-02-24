@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UtensilsCrossed, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -63,9 +63,8 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-8 text-center">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#111] text-white shadow-lg">
-            <UtensilsCrossed className="h-8 w-8" />
-          </div>
+          {/* Logo placeholder */}
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#111] shadow-lg" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Shift Scheduler
