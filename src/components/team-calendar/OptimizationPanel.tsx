@@ -129,12 +129,13 @@ export function OptimizationPanel({
   const handleDecline = (suggestion: OptimizationSuggestion) => {
     const alts = suggestion.alternatives ?? [];
     const currentIdx = alternativeIndex[suggestion.id] ?? 0;
+    const isCritical = suggestion.type === "uncovered";
     
     if (alts.length > 0 && currentIdx < alts.length - 1) {
       // Show next alternative
       setAlternativeIndex(prev => ({ ...prev, [suggestion.id]: currentIdx + 1 }));
-    } else if (suggestion.type === "uncovered" && alts.length > 0) {
-      // Critical: cycle back to first alternative (infinite loop)
+    } else if (isCritical) {
+      // Critical (uncovered): cycle back to first alternative — user MUST resolve this
       setAlternativeIndex(prev => ({ ...prev, [suggestion.id]: 0 }));
     } else {
       // Non-critical: dismiss
