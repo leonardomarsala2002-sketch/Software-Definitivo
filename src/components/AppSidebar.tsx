@@ -34,10 +34,10 @@ export function AppSidebar() {
   };
 
   const iconClass = (active: boolean) =>
-    `glass-icon-card flex h-11 w-11 items-center justify-center transition-all duration-200 ${
+    `glass-icon-card !rounded-full flex h-11 w-11 items-center justify-center transition-all duration-200 ${
       active
-        ? "bg-[rgba(255,255,255,0.95)] shadow-[0_2px_10px_rgba(0,0,0,0.06)] text-[#00C853]"
-        : "text-[#666] hover:bg-[rgba(255,255,255,0.90)] hover:text-[#333]"
+        ? "border-2 border-[#00C853] text-[#00C853]"
+        : "text-[#666] hover:text-[#333]"
     }`;
 
   return (
