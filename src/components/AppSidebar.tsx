@@ -34,7 +34,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center glass-sidebar border-r border-[rgba(0,200,83,0.08)]">
+    <aside className="hidden md:flex w-20 flex-col h-screen py-4 pl-3 items-center bg-transparent">
       <div className="flex flex-col h-full items-center">
         {/* Logo */}
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">

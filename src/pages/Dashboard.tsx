@@ -70,8 +70,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase =
-  "glass-card rounded-[20px] p-3";
+const cardBase = "glass-card rounded-[16px] p-2";
 
 /* all card variants use same soft glass style */
 const cardProfile = cardBase;
@@ -194,16 +193,16 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid – fills viewport, no scroll */}
-      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-3 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-4 grid-rows-[auto_1fr] gap-2.5 min-h-0 overflow-hidden">
 
         {/* ── Row 1: Profile + Mini-Month + Ferie + Avvisi ── */}
 
         {/* User Profile Card */}
         <Card className={`${cardProfile} col-span-1 flex flex-col`}>
-          <div className="flex items-center gap-3">
-            <Avatar className="h-12 w-12 shadow-md flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Avatar className="h-10 w-10 shadow-md flex-shrink-0">
               {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
-              <AvatarFallback className="bg-primary/10 text-base font-semibold text-foreground">
+              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-foreground">
                 {initials}
               </AvatarFallback>
             </Avatar>
@@ -233,11 +232,11 @@ const Dashboard = () => {
 
         {/* Ferie Card (Vacation counter) */}
         <Card className={`${cardFerie} col-span-1 flex flex-col items-center justify-center`}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent mb-2">
-            <Palmtree className="h-4 w-4 text-[#666]" />
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent mb-1">
+            <Palmtree className="h-3.5 w-3.5 text-[#666]" />
           </div>
-          <div className="relative flex h-16 w-16 items-center justify-center">
-            <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+          <div className="relative flex h-14 w-14 items-center justify-center">
+            <svg className="h-14 w-14 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
@@ -246,22 +245,22 @@ const Dashboard = () => {
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
             </svg>
-            <span className="absolute text-lg font-bold text-foreground">{remainingVacation}</span>
+            <span className="absolute text-base font-bold text-foreground">{remainingVacation}</span>
           </div>
-          <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">Ferie rimaste</p>
+          <p className="mt-1 text-[10px] font-medium text-muted-foreground">Ferie rimaste</p>
         </Card>
 
         {/* Mini-Month Calendar Card */}
         <Card className={`${cardCalendar} col-span-1 flex flex-col`}>
-          <CardHeader className="p-0 pb-2">
-            <CardTitle className="flex items-center justify-between text-xs font-semibold text-foreground tracking-wide">
+          <CardHeader className="p-0 pb-1">
+            <CardTitle className="flex items-center justify-between text-[11px] font-semibold text-foreground tracking-wide">
               <span className="font-bold">{MONTHS_IT[calMonth]} {calYear}</span>
               <div className="flex gap-0.5">
-                <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                <button onClick={prevMonth} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese precedente">
+                  <ChevronLeft className="h-3 w-3" />
                 </button>
-                <button onClick={nextMonth} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
-                  <ChevronRight className="h-3.5 w-3.5" />
+                <button onClick={nextMonth} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-accent transition-colors" aria-label="Mese successivo">
+                  <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
             </CardTitle>
@@ -284,7 +283,7 @@ const Dashboard = () => {
                     key={idx}
                     disabled={day === null}
                     onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex flex-col items-center justify-center h-7 w-7 rounded-full text-[11px] transition-colors
+                    className={`mx-auto flex flex-col items-center justify-center h-6 w-6 rounded-full text-[10px] transition-colors
                       ${day === null ? "invisible" : ""}
                       ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
                       ${isToday && !isSelected ? "bg-primary/10 text-foreground font-bold" : ""}
@@ -305,15 +304,15 @@ const Dashboard = () => {
 
         {/* Richieste / Avvisi Card */}
         <Card className={`${isAdmin ? cardRichiesteAdmin : cardRichiesteUser} col-span-1 flex flex-col`}>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent">
               {isAdmin ? (
-                <Inbox className="h-4 w-4 text-[#666]" />
+                <Inbox className="h-3.5 w-3.5 text-[#666]" />
               ) : (
-                <Bell className="h-4 w-4 text-[#666]" />
+                <Bell className="h-3.5 w-3.5 text-[#666]" />
               )}
             </div>
-            <p className="text-xs font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
+            <p className="text-[11px] font-bold text-foreground">{isAdmin ? "Richieste" : "Avvisi"}</p>
           </div>
           {isAdmin && pendingRequests.length > 0 ? (
             <div className="flex-1 space-y-1.5 overflow-hidden">
