@@ -8,7 +8,7 @@ export function AppShell() {
   const { isViewingAsEmployee, toggleViewAsEmployee } = useAuth();
 
   return (
-    <div className="flex h-screen w-full overflow-hidden p-3 gap-3">
+    <div className="flex h-screen w-full overflow-hidden p-3 gap-1.5">
       <AppSidebar />
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* View as Employee banner */}
