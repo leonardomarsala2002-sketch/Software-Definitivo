@@ -1,73 +1,61 @@
 
 
-# UI Polish: Stato Attivo, Spaziatura e Arrotondamenti
+# UI Consistency: Stato Attivo, Card Uniformi, Colori Accesi
 
-## Modifiche richieste
+## Problemi identificati
 
-### 1. Sfondo piu scuro (gradiente verde)
-**File: `src/index.css`**
-- Scurire il gradiente body da `#e8f5e9 / #c8e6c9 / #a5d6a7` a toni piu profondi: `#c8e6c9 0%, #a5d6a7 30%, #81c784 70%, #c8e6c9 100%`
-- Aumenta il contrasto tra sfondo e card glassmorphism
+1. **Employees page**: le card Sala e Cucina usano `bg-white/[0.06]` con bordi colorati (`border-orange-400/20`, `border-emerald-400/20`) -- completamente diversi dal sistema `glass-card`
+2. **Employee row cards**: usano `bg-white/10` con bordi colorati, non il glass system
+3. **Pulsante "Nuovo invito"**: `bg-purple-600` invece del sistema glass con bordo verde attivo
+4. **Bordi colorati**: varie card hanno bordi arancioni/verdi/ambra che devono essere neutralizzati
+5. **Verdi e rossi poco accesi**: colori come `emerald-500`, `amber-500`, `destructive` vanno intensificati
 
-### 2. Piu contrasto tra livelli glass
-**File: `src/index.css`**
-- `.glass-main-card`: background da `white/72` a `white/78`, shadow piu marcata `0 8px 32px rgba(0,0,0,0.10)`
-- `.glass-sidebar-base`: background da `white/70` a `white/76`, shadow `0 4px 20px rgba(0,0,0,0.08)`
-- `.glass-card`: background da `white/80` a `white/88`, shadow `0 2px 12px rgba(0,0,0,0.06)`
-- `.glass-icon-card`: background da `white/82` a `white/90`
+## Modifiche
 
-### 3. Tutto piu rotondo
-**File: `src/index.css`**
-- `.glass-main-card`: `border-radius: 24px` (da 20px)
-- `.glass-sidebar-base`: `border-radius: 24px` (da 20px)
-- `.glass-card`: `border-radius: 20px` aggiunto esplicitamente
-- `.glass-icon-card`: `border-radius: 16px` (da 12px)
+### 1. `src/pages/Employees.tsx` -- Card Sala/Cucina uniformi al glass system
 
-**File: `src/components/ui/card.tsx`**
-- Card base: `rounded-[20px]` (da `rounded-[16px]`)
+**Card contenitore Sala**: da `rounded-[32px] border border-orange-400/20 bg-white/[0.06]` a `glass-card` (stesse proprietà di tutte le inner card: `white/88`, `backdrop-blur-[10px]`, bordo `white/0.35`, `rounded-[20px]`)
 
-### 4. Icone sidebar completamente circolari
-**File: `src/components/AppSidebar.tsx`**
-- `.glass-icon-card` nella sidebar: override con `rounded-full` (rimangono `h-11 w-11`)
-- La classe `.glass-icon-card` globale resta `rounded-[16px]`, ma nella sidebar si aggiunge `!rounded-full`
+**Card contenitore Cucina**: identico, usa `glass-card`
 
-### 5. Giorno calendario: selezione circolare gia presente
-Il calendario usa gia `rounded-full` per le celle. Confermato, nessuna modifica necessaria.
+**Employee row card**: da `border-orange-400/30 bg-white/10` a `glass-card` con padding ridotto (`p-3`), bordo neutro (nessun colore), stessa opacità `white/88`
 
-### 6. Card Profilo e Ferie: solo contenuto centrale
-**File: `src/pages/Dashboard.tsx`**
-- Card Profilo: rimuovere la riga "Nuova richiesta" con il pulsante `+` in basso. Tenere solo Avatar + Nome + Badge ruolo, centrati verticalmente
-- Card Ferie: rimuovere l'icona Palmtree in alto e il testo "Ferie rimaste" in basso. Tenere solo il cerchio SVG con il numero, centrato
+**Pulsante "Nuovo invito"**: da `bg-purple-600 rounded-full` a `glass-icon-card !rounded-full` con stato default bianco. Al click/attivo: `border-2 border-[#00C853]` (stesso pattern della sidebar)
 
-### 7. Hover piu evidente
-**File: `src/index.css`**
-- `.glass-card:hover`: aggiungere `transform: scale(1.015)` e shadow piu marcata `0 6px 24px rgba(0,0,0,0.10)`
-- `.glass-icon-card:hover`: aggiungere `transform: scale(1.015)` e shadow `0 4px 16px rgba(0,0,0,0.09)`
-- Aggiungere `transition: all 200ms ease` (gia presente come `transition: box-shadow`, estendere a `all`)
+### 2. `src/index.css` -- Colori piu accesi
 
-### 8. Stato attivo con bordo verde persistente
-**File: `src/components/AppSidebar.tsx`**
-- Icona attiva: aggiungere `border: 2px solid #00C853` (verde corporate)
-- Rimuovere il cambio di background drastico, mantenere solo il bordo verde + colore icona verde
-- Classe attiva: `border-2 border-[#00C853] text-[#00C853]` senza cambiare drasticamente il bg
+**Verde acceso**: CSS variable `--success` e `.text-emerald-*` dove usati, saranno intensificati tramite l'uso diretto di `#00C853` (verde brillante) al posto di `emerald-500`
 
-**File: `src/pages/Dashboard.tsx`**
-- Giorno selezionato nel calendario: gia usa `bg-primary` che e verde. Confermato OK.
+**Rosso acceso**: CSS variable `--destructive` da `14 100% 50%` a `0 100% 50%` (rosso puro, piu intenso). Gli indicatori "giorno libero" e "inattivo" useranno questo rosso piu vivido.
 
-### 9. Spaziatura globale aumentata
-**File: `src/components/AppShell.tsx`**
-- Main Card padding interno: da `px-4 py-3 md:px-5 md:py-4` a `px-8 py-8 md:px-8 md:py-8` (32px)
+**Bordi card neutri**: conferma che `.glass-card` ha `border: 1px solid rgba(255,255,255,0.35)` -- nessun bordo colorato.
 
-**File: `src/pages/Dashboard.tsx`**
-- `cardBase`: padding da `p-2` a `p-6` (24px)
-- Gap griglia: da `gap-3.5` a `gap-5` (20px)
-- Padding griglia: da `p-3.5` a `p-0` (il padding e gia nella Main Card)
+### 3. `src/components/AppSidebar.tsx` -- Conferma stato attivo
 
-## Riepilogo file modificati
+Lo stato attivo e gia corretto: `border-2 border-[#00C853] text-[#00C853]` su sfondo bianco (glass-icon-card). Nessuna modifica necessaria.
 
-1. `src/index.css` - Gradiente piu scuro, contrasto livelli, bordi piu rotondi, hover piu evidente
-2. `src/components/ui/card.tsx` - `rounded-[20px]`
-3. `src/components/AppSidebar.tsx` - Icone circolari, stato attivo con bordo verde
-4. `src/components/AppShell.tsx` - Padding 32px nella Main Card
-5. `src/pages/Dashboard.tsx` - Card compatte (solo contenuto), padding 24px, gap aumentato
+### 4. `src/components/MobileBottomNav.tsx` -- Stato attivo coerente
+
+Aggiungere bordo verde all'icona attiva: da `bg-[#00C853]/10 shadow-sm` a `border-2 border-[#00C853]` sull'icona attiva, mantenendo sfondo bianco.
+
+### 5. `src/components/ui/badge.tsx` -- Badge "Attivo/Inattivo"
+
+Badge "Attivo" (variant default): usa `bg-primary` che e il verde corporate. OK ma intensificare: usare `bg-[#00C853]` direttamente.
+
+Badge "Inattivo": usare rosso acceso `bg-destructive`.
+
+## Riepilogo file
+
+1. `src/index.css` -- `--destructive` piu acceso (rosso puro)
+2. `src/pages/Employees.tsx` -- Card Sala/Cucina e employee rows uniformati a `glass-card`, pulsante invito con glass + bordo verde, colori verdi/rossi intensificati
+3. `src/components/MobileBottomNav.tsx` -- Stato attivo con bordo verde
+4. `src/components/ui/badge.tsx` -- Nessuna modifica strutturale (usa gia le CSS variables)
+
+## Regola applicata ovunque
+
+- **Stato attivo/cliccato**: sfondo bianco/glass + `border-2 border-[#00C853]`
+- **Bordi card**: sempre neutri (`rgba(255,255,255,0.35)`), mai colorati
+- **Tutte le inner card**: stesse proprietà `glass-card` (`white/88`, blur 10px, rounded 20px)
+- **Verde**: `#00C853` (brillante)
+- **Rosso**: `hsl(0, 100%, 50%)` (rosso puro intenso)
 
