@@ -532,6 +532,7 @@ const TeamCalendar = () => {
             uncoveredDates={uncoveredSlotsMap}
             balances={[]}
             currentStoreId={storeId}
+            totalWeeks={totalWeeks}
           />
         )}
       </div>
