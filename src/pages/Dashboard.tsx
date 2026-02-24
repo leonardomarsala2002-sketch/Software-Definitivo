@@ -70,14 +70,14 @@ const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7); // 07–23
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[20px] p-6";
+const cardBase = "glass-card rounded-[20px] p-4";
 
 const cardProfile = cardBase;
 const cardFerie = cardBase;
 const cardCalendar = cardBase;
 const cardRichiesteAdmin = cardBase;
 const cardRichiesteUser = cardBase;
-const cardAgenda = cardBase;
+const cardAgenda = "glass-card rounded-[20px] p-3";
 
 /* ── component ───────────────────────────────────────── */
 
@@ -213,11 +213,11 @@ const Dashboard = () => {
 
       {/* Quadrant Grid – fills viewport, no scroll */}
       <div
-        className="flex-1 gap-3 min-h-0 overflow-hidden"
+        className="flex-1 gap-2.5 min-h-0 overflow-hidden"
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto auto 1fr',
-          gridTemplateRows: 'auto auto 1fr',
+          gridTemplateRows: 'auto auto minmax(0, 1fr)',
           gridTemplateAreas: `
             "profile requests calendar"
             "vacation requests calendar"
@@ -228,13 +228,13 @@ const Dashboard = () => {
 
         {/* ── Profile Card (top-left, compact) ── */}
         <Card className={`${cardProfile} flex flex-col items-center justify-center`} style={{ gridArea: 'profile' }}>
-          <Avatar className="h-10 w-10 shadow-md">
+          <Avatar className="h-8 w-8 shadow-md">
             {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-foreground">
+            <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <p className="mt-2 text-xs font-bold text-foreground truncate">{displayName}</p>
+          <p className="mt-1 text-[11px] font-bold text-foreground truncate">{displayName}</p>
           {role && (
             <Badge className="mt-1 text-[9px] px-1.5 py-0 bg-foreground/10 text-foreground/70 border border-foreground/20 hover:bg-foreground/15">
               {roleLabelMap[role] || role}
@@ -244,8 +244,8 @@ const Dashboard = () => {
 
         {/* ── Vacation Card (below profile, compact) ── */}
         <Card className={`${cardFerie} flex flex-col items-center justify-center`} style={{ gridArea: 'vacation' }}>
-          <div className="relative flex h-14 w-14 items-center justify-center">
-            <svg className="h-14 w-14 -rotate-90" viewBox="0 0 64 64">
+          <div className="relative flex h-11 w-11 items-center justify-center">
+            <svg className="h-11 w-11 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="4" />
               <circle
                 cx="32" cy="32" r="27" fill="none" stroke="currentColor"
@@ -254,7 +254,7 @@ const Dashboard = () => {
                 strokeDasharray={`${(remainingVacation / 26) * 169.6} 169.6`}
               />
             </svg>
-            <span className="absolute text-base font-bold text-foreground">{remainingVacation}</span>
+            <span className="absolute text-sm font-bold text-foreground">{remainingVacation}</span>
           </div>
         </Card>
 
