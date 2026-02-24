@@ -42,7 +42,7 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden md:flex w-20 flex-col h-full">
-      <div className="glass-sidebar-base flex flex-col h-full items-center py-4">
+      <div className="flex flex-col h-full items-center py-4">
         {/* Logo */}
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6">
           <UtensilsCrossed className="h-5 w-5 text-[#333]" />
