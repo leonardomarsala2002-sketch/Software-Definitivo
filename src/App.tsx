@@ -15,6 +15,7 @@ import StoreSettings from "@/pages/StoreSettings";
 import AuditLog from "@/pages/AuditLog";
 import Invitations from "@/pages/Invitations";
 import Info from "@/pages/Info";
+import ManageStores from "@/pages/ManageStores";
 import Login from "@/pages/Login";
 import AcceptInvite from "@/pages/AcceptInvite";
 import SetPassword from "@/pages/SetPassword";
@@ -51,6 +52,7 @@ const App = () => (
                 <Route path="/audit-log" element={<AuditLog />} />
                 <Route path="/invitations" element={<Invitations />} />
                 <Route path="/info" element={<Info />} />
+                <Route path="/manage-stores" element={<ManageStores />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
