@@ -21,6 +21,7 @@ import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
 import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
 import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion, type CorrectionAction } from "@/hooks/useOptimizationSuggestions";
+import { useStoreLendings } from "@/hooks/useLendingData";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
 import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
 import { SuggestionWizardDialog } from "@/components/team-calendar/SuggestionWizardDialog";
@@ -58,6 +59,7 @@ const TeamCalendar = () => {
   const { data: shifts = [], isLoading: loadingShifts } = useMonthShifts(storeId, year, month);
   const { data: allEmployees = [], isLoading: loadingEmp } = useEmployeeList();
   const { data: openingHours = [] } = useOpeningHours(storeId);
+  const { data: lendings = [] } = useStoreLendings(storeId, year, month);
   const { data: allowedTimes = [] } = useAllowedTimes(storeId);
   const { data: coverageReqs = [] } = useCoverageRequirements(storeId);
 
@@ -527,6 +529,7 @@ const TeamCalendar = () => {
             balances={[]}
             currentStoreId={storeId}
             totalWeeks={totalWeeks}
+            lendings={lendings}
           />
         )}
       </div>
@@ -543,6 +546,8 @@ const TeamCalendar = () => {
           allowedEntries={allowedEntries}
           allowedExits={allowedExits}
           canEdit={canEdit}
+          lendings={lendings.filter(l => l.suggested_date === selectedDate)}
+          currentStoreId={storeId}
           onCreateShift={(s) =>
             createShift.mutate({ store_id: storeId!, department, ...s })
           }

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { ArrowRightLeft } from "lucide-react";
 import type { ShiftRow } from "@/hooks/useShifts";
+import type { LendingRecord } from "@/hooks/useLendingData";
 
 interface Employee {
   user_id: string;
@@ -25,6 +27,7 @@ interface MonthGridProps {
   currentStoreId?: string;
   storeLookup?: Map<string, string>;
   totalWeeks?: number;
+  lendings?: LendingRecord[];
 }
 
 const DOW_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -62,6 +65,7 @@ export function MonthGrid({
   currentStoreId,
   storeLookup,
   totalWeeks = 5,
+  lendings = [],
 }: MonthGridProps) {
   const today = new Date();
   const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -113,6 +117,7 @@ export function MonthGrid({
           const dimmed = selectedWeek !== null && weekIdx !== selectedWeek;
           const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const dayShifts = shiftsByDate.get(dateStr) ?? [];
+          const dayLendings = lendings.filter(l => l.suggested_date === dateStr && l.department === department);
           const isToday = todayStrForHighlight === String(day);
           const isUncovered = uncoveredDates?.has(dateStr);
           const hasDraft = dayShifts.some((s: any) => s.status === "draft");
@@ -174,6 +179,12 @@ export function MonthGrid({
                 {dayShifts.length > maxVisibleShifts && totalWeeks <= 5 && (
                   <div className="text-[8px] text-muted-foreground leading-tight">
                     +{dayShifts.length - maxVisibleShifts}
+                  </div>
+                )}
+                {dayLendings.length > 0 && (
+                  <div className="flex items-center gap-0.5 mt-px">
+                    <ArrowRightLeft className="h-2.5 w-2.5 text-blue-600" />
+                    <span className="text-[7px] font-bold text-blue-600">{dayLendings.length} prestito</span>
                   </div>
                 )}
               </div>

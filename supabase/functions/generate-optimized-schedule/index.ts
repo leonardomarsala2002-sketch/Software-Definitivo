@@ -926,11 +926,18 @@ Deno.serve(async (req) => {
             }
           }
 
-          // 3) Available employees not working that day — add a split shift
+          // 3) Available employees not working that day — add a shift
+          // IMPORTANT: NEVER propose an employee on their day off
           const workingUserIds = new Set(dayShifts.map(s => s.user_id));
+          const dayOffUserIds = new Set(
+            shifts.filter(s => s.date === dateStr && s.department === dept && s.is_day_off)
+              .map(s => s.user_id)
+          );
           const deptEmps = employees.filter(e => e.department === dept && e.is_active);
           for (const emp of deptEmps) {
             if (workingUserIds.has(emp.user_id)) continue;
+            // Skip employees who have a day off on this date
+            if (dayOffUserIds.has(emp.user_id)) continue;
             if (!isAvailable(emp.user_id, dateStr, availability, allExceptions)) continue;
             const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
             const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
@@ -944,7 +951,7 @@ Deno.serve(async (req) => {
             alts.push({
               id: `split-${emp.user_id}-${dateStr}-${uncoveredHour}`,
               label: `Aggiungi ${empName} (${nearestEntry}:00-${nearestExit}:00)`,
-              description: `${empName} (giorno libero) viene a coprire dalle ${nearestEntry}:00 alle ${nearestExit}:00. Ore settimanali: ${empWeeklyUsed}/${emp.weekly_contract_hours}h`,
+              description: `${empName} (non assegnato) viene a coprire dalle ${nearestEntry}:00 alle ${nearestExit}:00. Ore settimanali: ${empWeeklyUsed}/${emp.weekly_contract_hours}h`,
               actionType: "add_split",
               userId: emp.user_id,
               userName: empName,
@@ -952,6 +959,43 @@ Deno.serve(async (req) => {
               newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
             });
             if (alts.length >= 5) break;
+          }
+
+          // 3b) Propose swapping a day off: employees with day_off TODAY could swap to another day
+          if (alts.length < 5) {
+            for (const dayOffUserId of dayOffUserIds) {
+              if (alts.length >= 5) break;
+              const emp = deptEmps.find(e => e.user_id === dayOffUserId);
+              if (!emp) continue;
+              const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+              const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+              if (!canCover) continue;
+              const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+              if (empWeeklyUsed >= emp.weekly_contract_hours + 5) continue;
+              const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+              // Find another day this week where this employee works and could take off instead
+              const empWorkDays = shifts
+                .filter(s => s.user_id === emp.user_id && s.department === dept && !s.is_day_off && s.start_time && s.end_time)
+                .map(s => s.date);
+              const swapDay = empWorkDays.find(d => {
+                const otherUncovered = uncoveredByDay.get(d);
+                return !otherUncovered || otherUncovered.length === 0;
+              });
+              if (!swapDay) continue;
+              const swapDayLabel = new Date(swapDay + "T00:00:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
+              const nearestEntry = effectiveEntries_final.reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, effectiveEntries_final[0] ?? uncoveredHour);
+              const nearestExit = effectiveExits_final.find(e => e > nearestEntry) ?? nearestEntry + 4;
+              alts.push({
+                id: `swap-dayoff-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `Sposta riposo ${empName} a ${swapDayLabel}`,
+                description: `${empName} sposta il giorno libero da oggi a ${swapDayLabel} e copre ${nearestEntry}:00-${nearestExit}:00. Ore sett.: ${empWeeklyUsed}/${emp.weekly_contract_hours}h`,
+                actionType: "add_split",
+                userId: emp.user_id,
+                userName: empName,
+                newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+                newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
+              });
+            }
           }
 
           // 4) Employees already working that day who finished early enough for a split
