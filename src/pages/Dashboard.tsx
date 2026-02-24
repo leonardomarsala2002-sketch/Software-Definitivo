@@ -71,7 +71,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08-19
 /* ── card style ──────────────────────────────────────── */
 
 const cardBase =
-  "glass-card rounded-[20px] p-3 transition-all duration-200 hover:scale-[1.01]";
+  "glass-card rounded-[20px] p-3";
 
 /* all card variants use same soft glass style */
 const cardProfile = cardBase;
@@ -210,7 +210,7 @@ const Dashboard = () => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-foreground truncate">{displayName}</p>
               {role && (
-                <Badge className="mt-0.5 text-[10px] px-1.5 py-0 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15">
+                <Badge className="mt-0.5 text-[10px] px-1.5 py-0 bg-[rgba(0,200,83,0.14)] text-[#009624] border border-[rgba(0,200,83,0.35)] hover:bg-[rgba(0,200,83,0.2)]">
                   {roleLabelMap[role] || role}
                 </Badge>
               )}
