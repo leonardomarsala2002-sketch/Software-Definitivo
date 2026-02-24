@@ -54,31 +54,29 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Generate for both departments
-      for (const dept of ["sala", "cucina"] as const) {
-        try {
-          const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-shifts`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${serviceRoleKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              store_id: store.id,
-              department: dept,
-              week_start: weekStart,
-            }),
-          });
-          const genBody = await genRes.json();
-          results.push({
-            store: store.name,
-            department: dept,
-            status: genRes.ok ? "success" : "failed",
-            error: genRes.ok ? undefined : genBody.error,
-          });
-        } catch (e) {
-          results.push({ store: store.name, department: dept, status: "failed", error: (e as Error).message });
-        }
+      // Generate for both departments in a single call
+      let genBody: any = null;
+      try {
+        const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-optimized-schedule`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            store_id: store.id,
+            week_start_date: weekStart,
+          }),
+        });
+        genBody = await genRes.json();
+        results.push({
+          store: store.name,
+          department: "all",
+          status: genRes.ok ? "success" : "failed",
+          error: genRes.ok ? undefined : genBody.error,
+        });
+      } catch (e) {
+        results.push({ store: store.name, department: "all", status: "failed", error: (e as Error).message });
       }
 
       // Send notification email to store admins
@@ -108,6 +106,41 @@ Deno.serve(async (req) => {
               .select("id, email, full_name")
               .in("id", adminIds);
 
+            // Build email content from generation response
+            const deptResults: { department: string; shifts: number; uncovered: number }[] =
+              (genBody?.departments ?? []).map((d: any) => ({
+                department: d.department,
+                shifts: d.shifts ?? 0,
+                uncovered: d.uncovered ?? 0,
+              }));
+            const totalShifts = deptResults.reduce((acc, d) => acc + d.shifts, 0);
+            const totalUncovered = deptResults.reduce((acc, d) => acc + d.uncovered, 0);
+            const hasCritical = totalUncovered > 0;
+            const emailSubject = hasCritical
+              ? `⚠️ Draft turni con problemi – ${store.name}`
+              : `Draft turni generato – ${store.name}`;
+
+            const deptSummaryRows = deptResults
+              .map(d => {
+                const deptLabel = d.department === "sala" ? "Sala" : "Cucina";
+                const uncovColor = d.uncovered > 0 ? "#dc2626" : "#16a34a";
+                const uncovText = d.uncovered > 0 ? `${d.uncovered} slot scoperti` : "Copertura completa";
+                return `<tr>
+  <td style="padding:6px 12px;font-size:13px;color:#18181b;">${deptLabel}</td>
+  <td style="padding:6px 12px;font-size:13px;color:#52525b;">${d.shifts} turni</td>
+  <td style="padding:6px 12px;font-size:13px;color:${uncovColor};font-weight:600;">${uncovText}</td>
+</tr>`;
+              })
+              .join("");
+
+            const problemBanner = hasCritical
+              ? `<tr><td style="padding:12px 36px;">
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;">
+<p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">⚠️ Attenzione: ${totalUncovered} slot non coperti rilevati</p>
+<p style="margin:4px 0 0;font-size:12px;color:#b91c1c;">Apri il Pannello Ottimizzazione nel Calendario Team per risolvere i problemi prima di pubblicare.</p>
+</div></td></tr>`
+              : "";
+
             for (const p of profiles ?? []) {
               if (!p.email) continue;
               try {
@@ -120,18 +153,29 @@ Deno.serve(async (req) => {
                   body: JSON.stringify({
                     from: "Shift Scheduler <onboarding@resend.dev>",
                     to: [p.email],
-                    subject: `Draft turni generato – ${store.name}`,
+                    subject: emailSubject,
                     html: `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
 <tr><td style="padding:40px 36px 16px;text-align:center;">
-<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Draft turni pronto</h1>
+<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">${hasCritical ? "⚠️ Draft turni con problemi" : "Draft turni pronto"}</h1>
 <p style="margin:0;font-size:14px;color:#71717a;">${store.name}</p>
 <p style="margin:8px 0 0;font-size:13px;color:#a1a1aa;">Settimana dal ${weekStart}</p>
 </td></tr>
-<tr><td style="padding:24px 36px;text-align:center;">
-<p style="font-size:14px;color:#52525b;">La generazione automatica dei turni è stata completata. Controlla il draft e pubblica quando sei pronto.</p>
+${problemBanner}
+<tr><td style="padding:16px 36px;">
+<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;">
+<tr style="background:#f4f4f5;">
+  <th style="padding:8px 12px;font-size:12px;color:#71717a;text-align:left;font-weight:600;">Dipartimento</th>
+  <th style="padding:8px 12px;font-size:12px;color:#71717a;text-align:left;font-weight:600;">Turni</th>
+  <th style="padding:8px 12px;font-size:12px;color:#71717a;text-align:left;font-weight:600;">Copertura</th>
+</tr>
+${deptSummaryRows}
+</table>
+</td></tr>
+<tr><td style="padding:8px 36px 24px;text-align:center;">
+<p style="font-size:13px;color:#52525b;">Totale: <strong>${totalShifts} turni</strong> generati per Sala e Cucina.</p>
 </td></tr>
 <tr><td style="padding:16px 36px 32px;text-align:center;">
 <a href="${publicAppUrl}team-calendar" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 36px;border-radius:10px;text-decoration:none;">Rivedi turni</a>

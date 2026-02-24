@@ -129,12 +129,16 @@ export function OptimizationPanel({
   const handleDecline = (suggestion: OptimizationSuggestion) => {
     const alts = suggestion.alternatives ?? [];
     const currentIdx = alternativeIndex[suggestion.id] ?? 0;
+    const isCritical = suggestion.type === "uncovered";
     
     if (alts.length > 0 && currentIdx < alts.length - 1) {
       // Show next alternative
       setAlternativeIndex(prev => ({ ...prev, [suggestion.id]: currentIdx + 1 }));
+    } else if (isCritical) {
+      // Critical (uncovered): cycle back to first alternative — user MUST resolve this
+      setAlternativeIndex(prev => ({ ...prev, [suggestion.id]: 0 }));
     } else {
-      // No more alternatives, dismiss
+      // Non-critical: dismiss
       setDismissedIds(prev => new Set(prev).add(suggestion.id));
       onDecline(suggestion.id);
     }
@@ -278,6 +282,11 @@ export function OptimizationPanel({
                           const alts = suggestion.alternatives ?? [];
                           const currentIdx = alternativeIndex[suggestion.id] ?? 0;
                           const hasMoreAlts = alts.length > 0 && currentIdx < alts.length - 1;
+                          const declineLabel = hasMoreAlts
+                            ? "Altra soluzione"
+                            : suggestion.type === "uncovered"
+                            ? "Riparti da capo"
+                            : "Ignora";
 
                           return (
                             <div
@@ -355,7 +364,7 @@ export function OptimizationPanel({
                                       onClick={() => handleDecline(suggestion)}
                                     >
                                       <X className="h-2.5 w-2.5" />
-                                      {hasMoreAlts ? "Altra soluzione" : "Ignora"}
+                                      {declineLabel}
                                     </Button>
                                   </div>
                                 </div>

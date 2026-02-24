@@ -175,7 +175,7 @@ const TeamCalendar = () => {
   }, [coverageReqs, shifts, department, year, month]);
 
   const hasCriticalConflicts = useMemo(() => {
-    return suggestions.some(s => s.severity === "critical");
+    return suggestions.some(s => s.severity === "critical" || s.type === "uncovered");
   }, [suggestions]);
 
   // Auto-show blocking optimization errors popup when generation completes with critical issues
@@ -434,8 +434,14 @@ const TeamCalendar = () => {
               <Button
                 size="sm"
                 variant="default"
-                onClick={() => setShowPublishConfirm(true)}
-                disabled={publishWeek.isPending || hasCriticalConflicts}
+                onClick={() => {
+                  if (hasCriticalConflicts) {
+                    setShowOptimizationErrors(true);
+                  } else {
+                    setShowPublishConfirm(true);
+                  }
+                }}
+                disabled={publishWeek.isPending}
                 className="gap-1.5 rounded-[32px]"
                 title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
