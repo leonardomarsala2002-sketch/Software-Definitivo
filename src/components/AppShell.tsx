@@ -8,12 +8,12 @@ export function AppShell() {
   const { isViewingAsEmployee, toggleViewAsEmployee } = useAuth();
 
   return (
-    <div className="flex h-screen w-full overflow-hidden gradient-bg">
+    <div className="flex h-screen w-full overflow-hidden p-3 gap-3">
       <AppSidebar />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex flex-1 flex-col overflow-hidden glass-main-card">
         {/* View as Employee banner */}
         {isViewingAsEmployee && (
-          <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs font-medium md:px-6">
+          <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50/80 border-b border-amber-200/50 text-amber-800 text-xs font-medium md:px-6">
             <div className="flex items-center gap-2">
               <EyeOff className="h-3.5 w-3.5" />
               <span>Stai visualizzando l'app come un <strong>Dipendente</strong>. Le modifiche non sono possibili in questa modalità.</span>
@@ -26,7 +26,7 @@ export function AppShell() {
             </button>
           </div>
         )}
-        <div className="flex-1 min-h-0 overflow-hidden scrollbar-hide px-4 py-3 pb-20 md:px-6 md:py-4 md:pb-4">
+        <div className="flex-1 min-h-0 overflow-hidden scrollbar-hide px-4 py-3 pb-20 md:px-5 md:py-4 md:pb-4">
           <Outlet />
         </div>
       </main>
