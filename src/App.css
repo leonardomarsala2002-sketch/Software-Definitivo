@@ -33,8 +33,20 @@
   }
 }
 
-.card {
-  padding: 2em;
+.card,
+.dashboard-card,
+.glass-card,
+.MuiCard-root,
+.widget,
+.richiesta-card {
+  background: rgba(255, 255, 255, 0.17);
+  backdrop-filter: blur(10px);
+  border-radius: 22px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.11);
+  border: 1.5px solid rgba(255, 255, 255, 0.11);
+  padding: 24px;
+  margin: 12px 0;
+  /* aggiungi qui qualsiasi proprietà tu voglia uguale per tutte le card! */
 }
 
 .read-the-docs {
