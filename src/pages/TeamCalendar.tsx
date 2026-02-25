@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send, Stethoscope } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import PageHeader from "@/components/PageHeader";
@@ -511,6 +511,25 @@ const TeamCalendar = () => {
           </div>
         )}
       </div>
+
+      {/* Warning banner when suggestions exist but wizard is dismissed */}
+      {canEdit && !showOptimizationErrors && suggestions.length > 0 && hasDraftShifts && (
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-2.5">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-xs text-amber-800 dark:text-amber-300 font-medium flex-1">
+            Ci sono <strong>{suggestions.length}</strong> problemi da risolvere prima di pubblicare i turni.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] px-3 gap-1.5 rounded-[32px] border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
+            onClick={() => setShowOptimizationErrors(true)}
+          >
+            <Stethoscope className="h-3 w-3" />
+            Risolvi ora
+          </Button>
+        </div>
+      )}
 
       {/* Full-view calendar */}
       <div className="flex-1 min-h-0 overflow-hidden">
