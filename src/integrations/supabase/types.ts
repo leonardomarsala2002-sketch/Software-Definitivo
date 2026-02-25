@@ -556,6 +556,45 @@ export type Database = {
           },
         ]
       }
+      lending_request_messages: {
+        Row: {
+          id: string
+          lending_request_id: string
+          message: string
+          sender_user_id: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          lending_request_id: string
+          message: string
+          sender_user_id: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          lending_request_id?: string
+          message?: string
+          sender_user_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lending_request_messages_lending_request_id_fkey"
+            columns: ["lending_request_id"]
+            isOneToOne: false
+            referencedRelation: "lending_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_request_messages_sender_user_id_fkey"
+            columns: ["sender_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lending_requests: {
         Row: {
           created_at: string
