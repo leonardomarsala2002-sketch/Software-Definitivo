@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabaseClient"; // <-- Import corretto
 
 export function useLendingOptions(storeId: string, mode: "surplus" | "buchi") {
   return useQuery({
