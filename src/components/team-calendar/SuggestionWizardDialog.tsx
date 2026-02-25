@@ -265,12 +265,10 @@ export function SuggestionWizardDialog({
   const explanation = getHumanExplanation(current);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) return; }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent
-        className="rounded-[24px] max-w-lg [&>button.absolute]:hidden"
+        className="rounded-[24px] max-w-lg"
         onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
       >
         {/* Progress */}
         <div className="space-y-1.5 mb-1">
@@ -352,21 +350,30 @@ export function SuggestionWizardDialog({
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-3 mt-4">
+        <div className="flex flex-col gap-2 mt-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              className="flex-1 gap-2 text-muted-foreground rounded-xl"
+              onClick={handleDecline}
+            >
+              <X className="h-4 w-4" />
+              {declineLabel}
+            </Button>
+            <Button
+              className="flex-1 gap-2 rounded-xl bg-[#00C853] hover:bg-[#00C853]/90 text-white"
+              onClick={handleAccept}
+            >
+              <Check className="h-4 w-4" />
+              {currentAction ? "Accetta" : "Vai al giorno"}
+            </Button>
+          </div>
           <Button
-            variant="ghost"
-            className="flex-1 gap-2 text-muted-foreground rounded-xl"
-            onClick={handleDecline}
+            variant="link"
+            className="text-[11px] text-muted-foreground h-auto py-1"
+            onClick={handleClose}
           >
-            <X className="h-4 w-4" />
-            {declineLabel}
-          </Button>
-          <Button
-            className="flex-1 gap-2 rounded-xl bg-[#00C853] hover:bg-[#00C853]/90 text-white"
-            onClick={handleAccept}
-          >
-            <Check className="h-4 w-4" />
-            {currentAction ? "Accetta" : "Vai al giorno"}
+            Chiudi e risolvi dopo
           </Button>
         </div>
       </DialogContent>
