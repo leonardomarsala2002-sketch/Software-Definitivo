@@ -556,6 +556,90 @@ export type Database = {
           },
         ]
       }
+      lending_requests: {
+        Row: {
+          created_at: string
+          date: string
+          end_time: string | null
+          id: string
+          last_modified_at: string
+          last_modified_by: string | null
+          proposer_store_id: string
+          proposer_user_id: string
+          reason: string | null
+          receiver_store_id: string
+          start_time: string | null
+          status: string
+          target_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          end_time?: string | null
+          id?: string
+          last_modified_at?: string
+          last_modified_by?: string | null
+          proposer_store_id: string
+          proposer_user_id: string
+          reason?: string | null
+          receiver_store_id: string
+          start_time?: string | null
+          status?: string
+          target_user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          end_time?: string | null
+          id?: string
+          last_modified_at?: string
+          last_modified_by?: string | null
+          proposer_store_id?: string
+          proposer_user_id?: string
+          reason?: string | null
+          receiver_store_id?: string
+          start_time?: string | null
+          status?: string
+          target_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lending_requests_last_modified_by_fkey"
+            columns: ["last_modified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_requests_proposer_store_id_fkey"
+            columns: ["proposer_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_requests_proposer_user_id_fkey"
+            columns: ["proposer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_requests_receiver_store_id_fkey"
+            columns: ["receiver_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lending_requests_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lending_suggestions: {
         Row: {
           created_at: string
