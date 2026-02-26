@@ -1,4 +1,4 @@
-import { serve } from "std/server";
+import { serve } from "jsr:std/server";
 import { supabaseClient as supabase } from "../_shared/supabase.ts";
 
 serve(async (req) => {
