@@ -1122,7 +1122,7 @@ Deno.serve(async (req) => {
           .filter(t => t.department === dept && t.kind === "exit" && t.is_active)
           .map(t => t.hour).sort((a, b) => a - b);
 
-        // Uncovered slot suggestions GROUPED BY DAY (not one per hour)
+        // Uncovered slot suggestions GROUPED BY DAY (single suggestion per day per dept)
         const uncoveredByDay = new Map<string, number[]>();
         for (const slot of uncoveredSlots) {
           const h = parseInt(slot.hour.split(":")[0], 10);
@@ -1155,6 +1155,7 @@ Deno.serve(async (req) => {
             : `${alternatives.length} soluzioni disponibili.`;
 
           deptSuggestions.push({
+            // Canonical ID format for grouped uncovered suggestion: uncov-${dept}-${date}
             id: `uncov-${dept}-${dateStr}`,
             type: "uncovered",
             severity: "critical",
@@ -1544,7 +1545,7 @@ Deno.serve(async (req) => {
 
           // Append lending alternative to uncovered suggestion in memory
           const suggs = runSuggestionsCache.get(runId) ?? [];
-          const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}-${slot.hour}`);
+          const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}`);
           if (uncovSugg && uncovSugg.alternatives) {
             const dayD = new Date(slot.date + "T00:00:00");
             const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
