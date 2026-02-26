@@ -253,9 +253,9 @@ Deno.serve(async (req) => {
 
             totalLendingSuggestions++;
 
-            // Add lending alternative to the uncovered suggestion in generation_runs.suggestions
+            // Add lending alternative to the grouped uncovered suggestion in generation_runs.suggestions
             const suggs = (targetRun.suggestions as any[]) ?? [];
-            const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}-${slot.hour}`);
+            const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}`);
             if (uncovSugg?.alternatives) {
               uncovSugg.alternatives.push({
                 id: `lending-${match.userId}-${slot.date}-${slot.hour}`,
