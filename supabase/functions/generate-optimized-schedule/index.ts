@@ -1335,42 +1335,82 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── Phase 3: Cross-Store Lending Detection ────────────────────────
-    // Skip lending when called from cron phase 1 (will run in phase 2 after all stores generated)
+    // ─── Phase 3: Cross-Store Lending Detection (OPTIMIZED) ────────────
+    // Pre-fetches ALL data for same-city stores in batch, then processes in-memory.
+    // Previous: N×M serial queries (uncovered_slots × other_stores). Now: O(1) batch queries.
     let lendingSuggestionsCreated = 0;
 
     if (!skip_lending) {
-    // Get current store's city
     const { data: currentStore } = await adminClient
       .from("stores").select("id, city").eq("id", store_id).single();
     const storeCity = currentStore?.city;
 
     if (storeCity) {
-      // Find all same-city stores (excluding current)
       const { data: sameCityStores } = await adminClient
         .from("stores").select("id, name, city")
         .eq("city", storeCity).eq("is_active", true).neq("id", store_id);
 
       if (sameCityStores && sameCityStores.length > 0) {
-        // Collect all uncovered slots from ALL department results
+        const otherStoreIds = sameCityStores.map(s => s.id);
+        const storeNameMap = new Map(sameCityStores.map(s => [s.id, s.name]));
+
+        // ── BATCH PRE-FETCH: all coverage + shifts for all same-city stores ──
+        const [batchCovRes, batchShiftsRes] = await Promise.all([
+          adminClient.from("store_coverage_requirements").select("*")
+            .in("store_id", otherStoreIds),
+          adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, department, date, store_id")
+            .in("store_id", otherStoreIds)
+            .in("status", ["draft", "published"])
+            .gte("date", week_start_date).lte("date", weekEnd)
+            .eq("is_day_off", false),
+        ]);
+
+        const allOtherCoverage = batchCovRes.data ?? [];
+        const allOtherShifts = (batchShiftsRes.data ?? []).filter(s => s.start_time && s.end_time);
+
+        // Build in-memory indexes: storeId+dept+dow -> coverage[], storeId+dept+date -> shifts[]
+        const covIndex = new Map<string, typeof allOtherCoverage>();
+        for (const c of allOtherCoverage) {
+          const key = `${c.store_id}|${c.department}|${c.day_of_week}`;
+          const arr = covIndex.get(key) ?? [];
+          arr.push(c);
+          covIndex.set(key, arr);
+        }
+        const shiftIndex = new Map<string, typeof allOtherShifts>();
+        for (const s of allOtherShifts) {
+          const key = `${s.store_id}|${s.department}|${s.date}`;
+          const arr = shiftIndex.get(key) ?? [];
+          arr.push(s);
+          shiftIndex.set(key, arr);
+        }
+
+        // Helper: count staff at a given hour from pre-indexed shifts
+        const countStaffAtHour = (shifts: typeof allOtherShifts, hour: number) => {
+          let count = 0;
+          const covering: typeof allOtherShifts = [];
+          for (const s of shifts) {
+            const sh = parseInt(String(s.start_time).split(":")[0], 10);
+            let eh = parseInt(String(s.end_time).split(":")[0], 10);
+            if (eh === 0) eh = 24;
+            if (hour >= sh && hour < eh) { count++; covering.push(s); }
+          }
+          return { count, covering };
+        };
+
+        // ── Collect all uncovered slots (same logic, in-memory) ──
         const allUncoveredByDept = new Map<string, { date: string; hour: number; dept: "sala" | "cucina" }[]>();
-        
         for (const res of results) {
           const dept = res.department as "sala" | "cucina";
-          // Re-derive uncovered from the generation run notes (or re-query shifts)
-          // More reliable: query the draft shifts we just inserted and compare to coverage
           const { data: draftShifts } = await adminClient
             .from("shifts").select("*")
             .eq("store_id", store_id).eq("department", dept)
             .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
 
           const deptCoverage = coverageData.filter(c => c.department === dept);
-
           for (const dateStr of weekDates) {
             const dow = getDayOfWeek(dateStr);
             const dayCov = deptCoverage.filter(c => c.day_of_week === dow);
             const dayShifts = (draftShifts ?? []).filter(s => s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
-
             for (const cov of dayCov) {
               const h = parseInt(cov.hour_slot.split(":")[0], 10);
               let staffCount = 0;
@@ -1389,161 +1429,187 @@ Deno.serve(async (req) => {
           }
         }
 
-        // For each uncovered slot, check same-city stores for surplus
+        // ── Process uncovered slots against pre-fetched data (NO more N×M queries) ──
+        // Collect all candidate user IDs for batch profile/stats fetch
+        const candidateUserIds = new Set<string>();
+        type LendingCandidate = {
+          slot: { date: string; hour: number; dept: string };
+          otherStoreId: string;
+          candidate: typeof allOtherShifts[0];
+          surplusCount: number;
+          minRequired: number;
+          otherStaffCount: number;
+        };
+        const lendingCandidates: LendingCandidate[] = [];
+
         for (const [dept, uncoveredSlots] of allUncoveredByDept) {
           for (const slot of uncoveredSlots) {
             const dow = getDayOfWeek(slot.date);
-
             for (const otherStore of sameCityStores) {
-              const [otherCovRes, otherShiftsRes] = await Promise.all([
-                adminClient.from("store_coverage_requirements").select("*")
-                  .eq("store_id", otherStore.id).eq("department", dept).eq("day_of_week", dow),
-                adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, department, date, store_id")
-                  .eq("store_id", otherStore.id).eq("department", dept).eq("date", slot.date)
-                  .in("status", ["draft", "published"]),
-              ]);
-
-              const otherCov = otherCovRes.data ?? [];
-              const otherShifts = (otherShiftsRes.data ?? []).filter(
-                s => !s.is_day_off && s.start_time && s.end_time
-              );
+              const covKey = `${otherStore.id}|${dept}|${dow}`;
+              const shiftKey = `${otherStore.id}|${dept}|${slot.date}`;
+              const otherCov = covIndex.get(covKey) ?? [];
+              const otherShifts = shiftIndex.get(shiftKey) ?? [];
 
               const covForHour = otherCov.find(c => parseInt(c.hour_slot.split(":")[0], 10) === slot.hour);
               const minRequired = covForHour?.min_staff_required ?? 0;
-
-              let otherStaffCount = 0;
-              const coveringShifts: any[] = [];
-              for (const s of otherShifts) {
-                const sh = parseInt(String(s.start_time).split(":")[0], 10);
-                let eh = parseInt(String(s.end_time).split(":")[0], 10);
-                if (eh === 0) eh = 24;
-                if (slot.hour >= sh && slot.hour < eh) {
-                  otherStaffCount++;
-                  coveringShifts.push(s);
-                }
-              }
+              const { count: otherStaffCount, covering } = countStaffAtHour(otherShifts, slot.hour);
 
               if (otherStaffCount > minRequired) {
                 const surplusCount = otherStaffCount - minRequired;
-                const surplusUserIds = coveringShifts.map(s => s.user_id);
-                const [surplusStatsRes, surplusProfilesRes] = await Promise.all([
-                  adminClient.from("employee_stats").select("user_id, current_balance")
-                    .eq("store_id", otherStore.id).in("user_id", surplusUserIds),
-                  adminClient.from("profiles").select("id, full_name")
-                    .in("id", surplusUserIds),
-                ]);
-
-                const balMap = new Map((surplusStatsRes.data ?? []).map(s => [s.user_id, Number(s.current_balance)]));
-                const lendNameMap = new Map((surplusProfilesRes.data ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
-                const sorted = [...coveringShifts].sort((a, b) => (balMap.get(b.user_id) ?? 0) - (balMap.get(a.user_id) ?? 0));
-                const candidate = sorted[0];
-                if (!candidate) continue;
-
-                const candidateName = lendNameMap.get(candidate.user_id) ?? "Dipendente";
-                const runId = results.find(r => r.department === dept)?.runId;
-                if (!runId) continue;
-
-                const { data: existing } = await adminClient
-                  .from("lending_suggestions").select("id")
-                  .eq("generation_run_id", runId)
-                  .eq("user_id", candidate.user_id)
-                  .eq("suggested_date", slot.date)
-                  .maybeSingle();
-
-                if (!existing) {
-                  await adminClient.from("lending_suggestions").insert({
-                    generation_run_id: runId,
-                    user_id: candidate.user_id,
-                    source_store_id: otherStore.id,
-                    target_store_id: store_id,
-                    department: dept,
-                    suggested_date: slot.date,
-                    suggested_start_time: candidate.start_time,
-                    suggested_end_time: candidate.end_time,
-                    reason: `${candidateName} da ${otherStore.name} (surplus ${surplusCount} persona/e alle ${slot.hour}:00). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}`,
-                    status: "pending",
-                  } as any);
-
-                  lendingSuggestionsCreated++;
-
-                  // Also add lending as an alternative to the uncovered suggestion
-                  const dayD = new Date(slot.date + "T00:00:00");
-                  const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
-
-                  // Find the matching uncovered suggestion in results and append lending alternative
-                  for (const res of results) {
-                    if (res.department !== dept) continue;
-                    const { data: runData } = await adminClient
-                      .from("generation_runs").select("suggestions").eq("id", res.runId).single();
-                    if (!runData?.suggestions) continue;
-                    const suggs = runData.suggestions as any[];
-                    const uncovSugg = suggs.find((s: any) => s.id === `uncov-${dept}-${slot.date}-${slot.hour}`);
-                    if (uncovSugg && uncovSugg.alternatives) {
-                      uncovSugg.alternatives.push({
-                        id: `lending-${candidate.user_id}-${slot.date}-${slot.hour}`,
-                        label: `Prestito: ${candidateName} da ${otherStore.name}`,
-                        description: `${candidateName} viene prestato da ${otherStore.name} (${otherStaffCount}/${minRequired} presenti, surplus di ${surplusCount}). Turno: ${candidate.start_time?.slice(0,5)}-${candidate.end_time?.slice(0,5)}, ${dayLabel}. Richiede approvazione di entrambi i locali.`,
-                        actionType: "lending",
-                        userId: candidate.user_id,
-                        userName: candidateName,
-                        sourceStoreId: otherStore.id,
-                        sourceStoreName: otherStore.name,
-                        targetStoreId: store_id,
-                        newStartTime: candidate.start_time,
-                        newEndTime: candidate.end_time,
-                      });
-                      // Update the generation run with the updated suggestions
-                      await adminClient.from("generation_runs").update({
-                        suggestions: suggs,
-                      } as any).eq("id", res.runId);
-                    }
-                  }
-                }
-
-                break;
+                for (const s of covering) candidateUserIds.add(s.user_id);
+                // Pick first covering shift as candidate (will sort by balance later)
+                lendingCandidates.push({
+                  slot: { date: slot.date, hour: slot.hour, dept },
+                  otherStoreId: otherStore.id,
+                  candidate: covering[0],
+                  surplusCount,
+                  minRequired,
+                  otherStaffCount,
+                });
+                break; // found a store with surplus for this slot
               }
             }
           }
         }
 
-        // ─── Surplus detection in OTHER stores (show to admin even if our store is fine) ───
-        for (const otherStore of sameCityStores) {
-          for (const dept of departments) {
-            for (const dateStr of weekDates) {
-              const dow = getDayOfWeek(dateStr);
-              const [otherCovRes, otherShiftsRes] = await Promise.all([
-                adminClient.from("store_coverage_requirements").select("*")
-                  .eq("store_id", otherStore.id).eq("department", dept).eq("day_of_week", dow),
-                adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off")
-                  .eq("store_id", otherStore.id).eq("department", dept).eq("date", dateStr)
-                  .in("status", ["draft", "published"]),
-              ]);
+        // Batch-fetch profiles + stats for ALL candidate users at once
+        const userIdArr = [...candidateUserIds];
+        let balMap = new Map<string, number>();
+        let lendNameMap = new Map<string, string>();
+        if (userIdArr.length > 0) {
+          const [statsRes, profilesRes] = await Promise.all([
+            adminClient.from("employee_stats").select("user_id, current_balance, store_id")
+              .in("user_id", userIdArr),
+            adminClient.from("profiles").select("id, full_name")
+              .in("id", userIdArr),
+          ]);
+          balMap = new Map((statsRes.data ?? []).map(s => [s.user_id, Number(s.current_balance)]));
+          lendNameMap = new Map((profilesRes.data ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
+        }
 
-              const otherCov = otherCovRes.data ?? [];
-              const otherShifts = (otherShiftsRes.data ?? []).filter(s => !s.is_day_off && s.start_time && s.end_time);
+        // Check existing lending suggestions in batch
+        const runIds = results.map(r => r.runId).filter(Boolean);
+        let existingSuggestions = new Set<string>();
+        if (runIds.length > 0 && lendingCandidates.length > 0) {
+          const { data: existing } = await adminClient
+            .from("lending_suggestions").select("generation_run_id, user_id, suggested_date")
+            .in("generation_run_id", runIds);
+          for (const e of (existing ?? [])) {
+            existingSuggestions.add(`${e.generation_run_id}|${e.user_id}|${e.suggested_date}`);
+          }
+        }
 
-              for (const cov of otherCov) {
-                const h = parseInt(cov.hour_slot.split(":")[0], 10);
-                let count = 0;
-                for (const s of otherShifts) {
-                  const sh = parseInt(String(s.start_time).split(":")[0], 10);
-                  let eh = parseInt(String(s.end_time).split(":")[0], 10);
-                  if (eh === 0) eh = 24;
-                  if (h >= sh && h < eh) count++;
-                }
-                const surplus = count - cov.min_staff_required;
-                if (surplus >= 1) {
-                  const dayD = new Date(dateStr + "T00:00:00");
-                  const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
-                  // Add as info-level suggestion for visibility
-                  const runId = results[0]?.runId;
-                  if (runId) {
-                    const { data: runData } = await adminClient
-                      .from("generation_runs").select("suggestions").eq("id", runId).single();
-                    const suggs = (runData?.suggestions as any[]) ?? [];
+        // ── Batch-insert all lending suggestions ──
+        const suggestionsToInsert: any[] = [];
+        // Track suggestion-run updates to batch at the end
+        const runSuggestionUpdates = new Map<string, any[]>(); // runId -> updated suggestions array
+
+        // Pre-load all generation_run suggestions for batch update
+        const runSuggestionsCache = new Map<string, any[]>();
+        if (runIds.length > 0) {
+          const { data: runsData } = await adminClient
+            .from("generation_runs").select("id, suggestions").in("id", runIds);
+          for (const r of (runsData ?? [])) {
+            runSuggestionsCache.set(r.id, (r.suggestions as any[]) ?? []);
+          }
+        }
+
+        for (const lc of lendingCandidates) {
+          const { slot, otherStoreId, candidate, surplusCount, minRequired, otherStaffCount } = lc;
+          if (!candidate) continue;
+
+          const candidateName = lendNameMap.get(candidate.user_id) ?? "Dipendente";
+          const runId = results.find(r => r.department === slot.dept)?.runId;
+          if (!runId) continue;
+
+          const existKey = `${runId}|${candidate.user_id}|${slot.date}`;
+          if (existingSuggestions.has(existKey)) continue;
+          existingSuggestions.add(existKey); // prevent duplicates within batch
+
+          const otherStoreName = storeNameMap.get(otherStoreId) ?? "Store";
+
+          suggestionsToInsert.push({
+            generation_run_id: runId,
+            user_id: candidate.user_id,
+            source_store_id: otherStoreId,
+            target_store_id: store_id,
+            department: slot.dept,
+            suggested_date: slot.date,
+            suggested_start_time: candidate.start_time,
+            suggested_end_time: candidate.end_time,
+            reason: `${candidateName} da ${otherStoreName} (surplus ${surplusCount} persona/e alle ${slot.hour}:00). Turno: ${String(candidate.start_time).slice(0,5)}-${String(candidate.end_time).slice(0,5)}`,
+            status: "pending",
+          });
+
+          // Append lending alternative to uncovered suggestion in memory
+          const suggs = runSuggestionsCache.get(runId) ?? [];
+          const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}-${slot.hour}`);
+          if (uncovSugg && uncovSugg.alternatives) {
+            const dayD = new Date(slot.date + "T00:00:00");
+            const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+            uncovSugg.alternatives.push({
+              id: `lending-${candidate.user_id}-${slot.date}-${slot.hour}`,
+              label: `Prestito: ${candidateName} da ${otherStoreName}`,
+              description: `${candidateName} viene prestato da ${otherStoreName} (${otherStaffCount}/${minRequired} presenti, surplus di ${surplusCount}). Turno: ${String(candidate.start_time).slice(0,5)}-${String(candidate.end_time).slice(0,5)}, ${dayLabel}. Richiede approvazione di entrambi i locali.`,
+              actionType: "lending",
+              userId: candidate.user_id,
+              userName: candidateName,
+              sourceStoreId: otherStoreId,
+              sourceStoreName: otherStoreName,
+              targetStoreId: store_id,
+              newStartTime: candidate.start_time,
+              newEndTime: candidate.end_time,
+            });
+            runSuggestionUpdates.set(runId, suggs);
+          }
+        }
+
+        // Batch insert lending suggestions
+        if (suggestionsToInsert.length > 0) {
+          const batchSize = 100;
+          for (let i = 0; i < suggestionsToInsert.length; i += batchSize) {
+            await adminClient.from("lending_suggestions").insert(suggestionsToInsert.slice(i, i + batchSize));
+          }
+          lendingSuggestionsCreated = suggestionsToInsert.length;
+        }
+
+        // Batch update generation_runs suggestions
+        const updatePromises: Promise<any>[] = [];
+        for (const [runId, suggs] of runSuggestionUpdates) {
+          updatePromises.push(
+            adminClient.from("generation_runs").update({ suggestions: suggs } as any).eq("id", runId)
+          );
+        }
+        if (updatePromises.length > 0) await Promise.all(updatePromises);
+
+        // ── Surplus detection in other stores (OPTIMIZED: in-memory scan) ──
+        const surplusSuggestionsBatch: { runId: string; suggestions: any[] }[] = [];
+        const firstRunId = results[0]?.runId;
+
+        if (firstRunId) {
+          const baseSuggs = runSuggestionsCache.get(firstRunId) ?? [];
+          let modified = false;
+
+          for (const otherStore of sameCityStores) {
+            for (const dept of departments) {
+              for (const dateStr of weekDates) {
+                const dow = getDayOfWeek(dateStr);
+                const covKey = `${otherStore.id}|${dept}|${dow}`;
+                const shiftKey = `${otherStore.id}|${dept}|${dateStr}`;
+                const otherCov = covIndex.get(covKey) ?? [];
+                const otherShifts = shiftIndex.get(shiftKey) ?? [];
+
+                for (const cov of otherCov) {
+                  const h = parseInt(cov.hour_slot.split(":")[0], 10);
+                  const { count } = countStaffAtHour(otherShifts, h);
+                  const surplus = count - cov.min_staff_required;
+                  if (surplus >= 1) {
                     const existsKey = `other-surplus-${dept}-${otherStore.id}-${dateStr}-${h}`;
-                    if (!suggs.find((s: any) => s.id === existsKey)) {
-                      suggs.push({
+                    if (!baseSuggs.find((s: any) => s.id === existsKey)) {
+                      const dayD = new Date(dateStr + "T00:00:00");
+                      const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
+                      baseSuggs.push({
                         id: existsKey,
                         type: "surplus",
                         severity: "info",
@@ -1558,14 +1624,16 @@ Deno.serve(async (req) => {
                         sourceStoreId: otherStore.id,
                         sourceStoreName: otherStore.name,
                       });
-                      await adminClient.from("generation_runs").update({
-                        suggestions: suggs,
-                      } as any).eq("id", runId);
+                      modified = true;
                     }
                   }
                 }
               }
             }
+          }
+
+          if (modified) {
+            await adminClient.from("generation_runs").update({ suggestions: baseSuggs } as any).eq("id", firstRunId);
           }
         }
       }
