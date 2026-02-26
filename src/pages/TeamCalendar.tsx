@@ -338,12 +338,46 @@ const TeamCalendar = () => {
         // Find and remove the surplus shift
         const userShifts = shifts.filter(s => s.user_id === action.userId && s.date === suggestion.date && !s.is_day_off);
         if (userShifts.length > 0) {
-          const removedHours = userShifts[0].start_time && userShifts[0].end_time
+        const removedHours = userShifts[0].start_time && userShifts[0].end_time
             ? parseInt(userShifts[0].end_time.split(":")[0], 10) - parseInt(userShifts[0].start_time.split(":")[0], 10)
             : 0;
           deleteShift.mutate({ id: userShifts[0].id, storeId });
           toast.success(`Turno di ${action.userName} rimosso`);
           if (action.userId) trackAdjustment(action.userId, "remove_surplus", -removedHours, `${action.userName}: turno rimosso`);
+        }
+      } else if (action.actionType === "increase_splits") {
+        // Increase max_split_shifts_per_employee_per_week by 1 in store_rules
+        const { data: currentRules } = await supabase
+          .from("store_rules").select("max_split_shifts_per_employee_per_week").eq("store_id", storeId).single();
+        if (currentRules) {
+          const newVal = (currentRules.max_split_shifts_per_employee_per_week ?? 3) + 1;
+          const { error } = await supabase
+            .from("store_rules")
+            .update({ max_split_shifts_per_employee_per_week: newVal })
+            .eq("store_id", storeId);
+          if (error) {
+            toast.error("Errore aggiornamento regole: " + error.message);
+          } else {
+            toast.success(`Limite spezzati aumentato a ${newVal}/settimana. Rigenera i turni per applicare.`);
+            queryClient.invalidateQueries({ queryKey: ["store-rules"] });
+          }
+        }
+      } else if (action.actionType === "increase_days_off") {
+        // Increase mandatory_days_off_per_week by 1 in store_rules
+        const { data: currentRules } = await supabase
+          .from("store_rules").select("mandatory_days_off_per_week").eq("store_id", storeId).single();
+        if (currentRules) {
+          const newVal = (currentRules.mandatory_days_off_per_week ?? 1) + 1;
+          const { error } = await supabase
+            .from("store_rules")
+            .update({ mandatory_days_off_per_week: newVal })
+            .eq("store_id", storeId);
+          if (error) {
+            toast.error("Errore aggiornamento regole: " + error.message);
+          } else {
+            toast.success(`Giorni liberi obbligatori aumentati a ${newVal}/settimana. Rigenera i turni per applicare.`);
+            queryClient.invalidateQueries({ queryKey: ["store-rules"] });
+          }
         }
       }
       return;
