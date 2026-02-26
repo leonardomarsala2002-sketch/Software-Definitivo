@@ -26,3 +26,12 @@ verify_jwt = false
 
 [functions.approve-patch-shifts]
 verify_jwt = false
+
+[functions.create-lending-request]
+verify_jwt = false
+
+[functions.patch-lending-request-status]
+verify_jwt = false
+
+[functions.send-lending-message]
+verify_jwt = false
