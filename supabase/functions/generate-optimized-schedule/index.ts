@@ -850,6 +850,59 @@ Deno.serve(async (req) => {
     const departments: ("sala" | "cucina")[] = ["sala", "cucina"];
     const results: { department: string; runId: string; shifts: number; daysOff: number; uncovered: number; fitness: number; hourAdjustments: Record<string, number>; fallbackUsed: boolean }[] = [];
 
+    // ═══════════════════════════════════════════════════════════════════
+    // CLEAN REGENERATION: delete ALL previous data for this store+week
+    // before generating new shifts. Only in FULL mode (not patch).
+    // ═══════════════════════════════════════════════════════════════════
+    if (!isPatchMode) {
+      console.log(`[CLEANUP] Deleting previous data for store=${store_id}, week=${week_start_date}..${weekEnd}`);
+
+      // 1) Delete lending_request_messages for lending_requests involving this store+week
+      const { data: oldLendingReqs } = await adminClient
+        .from("lending_requests")
+        .select("id")
+        .or(`proposer_store_id.eq.${store_id},receiver_store_id.eq.${store_id}`)
+        .gte("date", week_start_date)
+        .lte("date", weekEnd);
+
+      const oldLrIds = (oldLendingReqs ?? []).map(r => r.id);
+      if (oldLrIds.length > 0) {
+        await adminClient.from("lending_request_messages").delete().in("lending_request_id", oldLrIds);
+        await adminClient.from("lending_requests").delete().in("id", oldLrIds);
+        console.log(`[CLEANUP] Deleted ${oldLrIds.length} lending_requests + messages`);
+      }
+
+      // 2) Delete old generation_runs, lending_suggestions, generation_adjustments, and draft shifts
+      const { data: oldRuns } = await adminClient
+        .from("generation_runs")
+        .select("id")
+        .eq("store_id", store_id)
+        .eq("week_start", week_start_date);
+
+      const oldRunIds = (oldRuns ?? []).map(r => r.id);
+      if (oldRunIds.length > 0) {
+        await adminClient.from("lending_suggestions").delete().in("generation_run_id", oldRunIds);
+        console.log(`[CLEANUP] Deleted lending_suggestions for ${oldRunIds.length} old runs`);
+      }
+
+      // Delete generation_adjustments for this store+week
+      await adminClient.from("generation_adjustments").delete()
+        .eq("store_id", store_id).eq("week_start", week_start_date);
+
+      // Delete old generation_runs themselves
+      if (oldRunIds.length > 0) {
+        await adminClient.from("generation_runs").delete().in("id", oldRunIds);
+        console.log(`[CLEANUP] Deleted ${oldRunIds.length} old generation_runs`);
+      }
+
+      // Delete ALL draft shifts for this store+week (both depts at once)
+      await adminClient.from("shifts").delete()
+        .eq("store_id", store_id).eq("status", "draft")
+        .gte("date", week_start_date).lte("date", weekEnd);
+
+      console.log(`[CLEANUP] Complete for store=${store_id}, week=${week_start_date}`);
+    }
+
     for (const dept of departments) {
       const deptEmployees = employees.filter(e => e.department === dept && e.is_active);
       if (deptEmployees.length === 0) continue;
@@ -887,12 +940,8 @@ Deno.serve(async (req) => {
             .eq("user_id", affected_user_id)
             .gte("date", patchStartDate).lte("date", patchEndDate)
             .in("status", ["draft", "published"]);
-        } else {
-          // FULL MODE: delete all existing drafts for this dept
-          await adminClient.from("shifts").delete()
-            .eq("store_id", store_id).eq("department", dept)
-            .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
         }
+        // FULL MODE cleanup is already handled above (before the dept loop)
 
         let bestResult: IterationResult | null = null;
         let fallbackUsed = false;

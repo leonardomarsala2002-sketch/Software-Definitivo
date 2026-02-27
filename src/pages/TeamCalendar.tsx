@@ -636,10 +636,11 @@ const TeamCalendar = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
             <AlertDialogDescription>
-              Verranno eseguite <strong>40 iterazioni</strong> dell'algoritmo per trovare la combinazione ottimale
-              dei turni per <strong>Sala e Cucina</strong> a partire
-              da <strong>{currentWeekStart}</strong>. Il sistema terrà conto del monte ore accumulato (Hour Bank)
-              per bilanciare automaticamente le ore tra le settimane. I turni draft esistenti verranno sostituiti.
+              ⚠️ <strong>Rigenerazione pulita:</strong> tutti i dati precedenti per la settimana
+              del <strong>{currentWeekStart}</strong> verranno cancellati (turni draft, suggerimenti,
+              richieste di prestito e messaggi correlati) e sostituiti con una nuova generazione
+              ottimale di <strong>40 iterazioni</strong> per Sala e Cucina.
+              Il sistema terrà conto del monte ore (Hour Bank) per bilanciare le ore tra le settimane.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
