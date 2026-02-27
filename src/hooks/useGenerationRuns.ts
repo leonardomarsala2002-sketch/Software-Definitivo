@@ -18,6 +18,7 @@ export interface GenerationRun {
   iterations_run: number | null;
   hour_adjustments: Record<string, number> | null;
   suggestions: any[] | null;
+  accepted_gaps: string[] | null;
 }
 
 export function useWeekGenerationRuns(storeId: string | undefined, weekStart: string | undefined) {

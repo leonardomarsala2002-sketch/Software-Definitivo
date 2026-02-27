@@ -9,6 +9,7 @@ import {
   AlertTriangle, Check, X, ChevronRight, Stethoscope,
   Shield, Scale, Users, Scissors, Clock, ArrowRightLeft,
   FastForward, Search, CalendarPlus, Lightbulb, CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OptimizationSuggestion, CorrectionAction } from "@/hooks/useOptimizationSuggestions";
@@ -18,6 +19,7 @@ interface SuggestionWizardDialogProps {
   suggestions: OptimizationSuggestion[];
   onAccept: (suggestion: OptimizationSuggestion, action?: CorrectionAction) => void;
   onDecline: (suggestionId: string) => void;
+  onAcceptGap?: (suggestion: OptimizationSuggestion) => void;
   onClose: () => void;
   onNavigateToDay?: (date: string) => void;
 }
@@ -103,6 +105,7 @@ export function SuggestionWizardDialog({
   suggestions,
   onAccept,
   onDecline,
+  onAcceptGap,
   onClose,
   onNavigateToDay,
 }: SuggestionWizardDialogProps) {
@@ -156,14 +159,27 @@ export function SuggestionWizardDialog({
       return;
     }
 
-    if (isCritical) {
-      // Reset alternatives for critical - must resolve
+    if (isCritical && !onAcceptGap) {
+      // Reset alternatives for critical - must resolve (legacy behavior without accept gap)
+      setAlternativeIndex(prev => ({ ...prev, [current.id]: 0 }));
+      return;
+    }
+
+    if (isCritical && onAcceptGap) {
+      // When all alternatives exhausted, reset to show them again
       setAlternativeIndex(prev => ({ ...prev, [current.id]: 0 }));
       return;
     }
 
     // Non-critical: skip
     onDecline(current.id);
+    setResolved(prev => new Set(prev).add(current.id));
+    advanceToNext();
+  };
+
+  const handleAcceptGapClick = () => {
+    if (!current || !onAcceptGap) return;
+    onAcceptGap(current);
     setResolved(prev => new Set(prev).add(current.id));
     advanceToNext();
   };
@@ -368,6 +384,17 @@ export function SuggestionWizardDialog({
               {currentAction ? "Accetta" : "Vai al giorno"}
             </Button>
           </div>
+          {/* Accept gap button — only for uncovered suggestions */}
+          {isCritical && onAcceptGap && (
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/50"
+              onClick={handleAcceptGapClick}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Accetta buco (personale ridotto)
+            </Button>
+          )}
           <Button
             variant="link"
             className="text-[11px] text-muted-foreground h-auto py-1"
