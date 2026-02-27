@@ -83,8 +83,25 @@ const TeamCalendar = () => {
     }
     return Array.from(latest.values());
   }, [generationRuns]);
-  const { suggestions } = useOptimizationSuggestions(latestRunIds);
+  const { suggestions: rawSuggestions } = useOptimizationSuggestions(latestRunIds);
   const { data: dbLendingSuggestions = [] } = useLendingSuggestions(latestRunIds);
+
+  // Collect accepted_gaps from latest generation runs to filter suggestions
+  const acceptedGapIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of generationRuns) {
+      if (!latestRunIds.includes(r.id)) continue;
+      const gaps = r.accepted_gaps;
+      if (Array.isArray(gaps)) gaps.forEach(g => ids.add(g));
+    }
+    return ids;
+  }, [generationRuns, latestRunIds]);
+
+  // Filter out suggestions whose gaps have been accepted
+  const suggestions = useMemo(() => {
+    if (acceptedGapIds.size === 0) return rawSuggestions;
+    return rawSuggestions.filter(s => !acceptedGapIds.has(s.id));
+  }, [rawSuggestions, acceptedGapIds]);
 
   const generateShifts = useGenerateShifts();
   const publishWeek = usePublishWeek();
@@ -424,6 +441,34 @@ const TeamCalendar = () => {
     // No-op for wizard (handled internally)
   };
 
+  // Accept a gap (uncovered slot) — persists in generation_runs.accepted_gaps
+  const handleAcceptGap = async (suggestion: OptimizationSuggestion) => {
+    if (!storeId) return;
+    // Find the generation run that owns this suggestion
+    const targetRun = generationRuns.find(r => {
+      if (!latestRunIds.includes(r.id)) return false;
+      const suggs = (r.suggestions as any[]) ?? [];
+      return suggs.some((s: any) => s.id === suggestion.id);
+    });
+    if (!targetRun) {
+      toast.error("Run di generazione non trovato per questo suggerimento");
+      return;
+    }
+    const currentGaps = targetRun.accepted_gaps ?? [];
+    const updatedGaps = [...currentGaps, suggestion.id];
+    const { error } = await supabase
+      .from("generation_runs")
+      .update({ accepted_gaps: updatedGaps } as any)
+      .eq("id", targetRun.id);
+    if (error) {
+      toast.error("Errore nel salvare il buco accettato: " + error.message);
+    } else {
+      toast.success("Buco accettato — il turno verrà pubblicato con personale ridotto");
+      queryClient.invalidateQueries({ queryKey: ["generation-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
+    }
+  };
+
   if (!storeId) {
     return (
       <div>
@@ -616,6 +661,7 @@ const TeamCalendar = () => {
           suggestions={suggestions}
           onAccept={handleAcceptSuggestion}
           onDecline={handleDeclineSuggestion}
+          onAcceptGap={handleAcceptGap}
           onClose={() => setShowOptimizationErrors(false)}
           onNavigateToDay={(date) => {
             const d = new Date(date + "T00:00:00");

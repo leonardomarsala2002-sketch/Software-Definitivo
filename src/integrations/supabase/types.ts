@@ -403,6 +403,7 @@ export type Database = {
       }
       generation_runs: {
         Row: {
+          accepted_gaps: Json | null
           completed_at: string | null
           created_at: string
           created_by: string | null
@@ -421,6 +422,7 @@ export type Database = {
           week_start: string
         }
         Insert: {
+          accepted_gaps?: Json | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -439,6 +441,7 @@ export type Database = {
           week_start: string
         }
         Update: {
+          accepted_gaps?: Json | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
