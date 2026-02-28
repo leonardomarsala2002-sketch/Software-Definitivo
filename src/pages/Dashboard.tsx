@@ -41,6 +41,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { useAppointments, useRespondAppointment } from "@/hooks/useAppointments";
 import { AppointmentFormDialog } from "@/components/dashboard/AppointmentFormDialog";
+import { getShiftColor } from "@/lib/shiftColors";
 
 /* ── helpers ─────────────────────────────────────────── */
 
@@ -142,8 +143,14 @@ const Dashboard = () => {
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [weekOffset, setWeekOffset] = useState(0);
   const calendarCells = useMemo(() => buildCalendarGrid(calYear, calMonth), [calYear, calMonth]);
-  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
+  const weekBaseDate = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + weekOffset * 7);
+    return d;
+  }, [today, weekOffset]);
+  const weekDates = useMemo(() => getWeekDates(weekBaseDate), [weekBaseDate]);
 
   const prevMonth = () => {
     if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
@@ -255,9 +262,22 @@ const Dashboard = () => {
                 <CalendarIcon className="h-4 w-4 text-primary" />
               </div>
               Il mio orario settimanale
-              <span className="ml-auto text-xs font-normal text-muted-foreground">
-                {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
-              </span>
+              <div className="ml-auto flex items-center gap-1">
+                <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-normal text-muted-foreground min-w-[120px] text-center">
+                  {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
+                </span>
+                <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                {weekOffset !== 0 && (
+                  <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors px-2 py-0.5 rounded-md bg-primary/10">
+                    Oggi
+                  </button>
+                )}
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -301,9 +321,14 @@ const Dashboard = () => {
                           const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
                           const width = ((eH - sH) / totalSpan) * 100;
                           return (
-                            <div key={s.id} className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
-                              <span className="text-[10px] font-semibold text-primary">{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
-                            </div>
+                            (() => {
+                              const color = getShiftColor(s);
+                              return (
+                                <div key={s.id} className={`absolute top-0.5 bottom-0.5 rounded-md ${color.bg} border ${color.border} flex items-center justify-center`} style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
+                                  <span className={`text-[10px] font-semibold ${color.text}`}>{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
+                                </div>
+                              );
+                            })()
                           );
                         })
                       )}
@@ -652,9 +677,22 @@ const Dashboard = () => {
               <CalendarIcon className="h-4 w-4 text-primary" />
             </div>
             Il mio orario settimanale
-            <span className="ml-auto text-xs font-normal text-muted-foreground">
-              {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
-            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-normal text-muted-foreground min-w-[120px] text-center">
+                {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
+              </span>
+              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              {weekOffset !== 0 && (
+                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors px-2 py-0.5 rounded-md bg-primary/10">
+                  Oggi
+                </button>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -698,9 +736,14 @@ const Dashboard = () => {
                         const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
                         const width = ((eH - sH) / totalSpan) * 100;
                         return (
-                          <div key={s.id} className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
-                            <span className="text-[10px] font-semibold text-primary">{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
-                          </div>
+                            (() => {
+                              const color = getShiftColor(s);
+                              return (
+                                <div key={s.id} className={`absolute top-0.5 bottom-0.5 rounded-md ${color.bg} border ${color.border} flex items-center justify-center`} style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
+                                  <span className={`text-[10px] font-semibold ${color.text}`}>{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
+                                </div>
+                              );
+                            })()
                         );
                       })
                     )}
