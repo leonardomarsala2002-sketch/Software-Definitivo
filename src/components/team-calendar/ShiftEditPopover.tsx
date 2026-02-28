@@ -33,7 +33,7 @@ export function ShiftEditPopover({
   const entries = allowedEntries.length > 0 ? allowedEntries : Array.from({ length: 24 }, (_, i) => i);
   const exits = allowedExits.length > 0 ? allowedExits : Array.from({ length: 24 }, (_, i) => i + 1);
 
-  const MIN_SHIFT_HOURS = 4;
+  const MIN_SHIFT_HOURS = 3;
   const effectiveEnd = (end === 0 || end === 24) ? 24 : (end ?? 0);
   const shiftDuration = start !== null && end !== null ? effectiveEnd - (start ?? 0) : 0;
   const isTooShort = !isDayOff && start !== null && end !== null && shiftDuration < MIN_SHIFT_HOURS;
