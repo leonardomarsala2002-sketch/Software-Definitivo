@@ -342,6 +342,7 @@ function runIteration(
   randomize: boolean,
   partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
   smartMemory: SmartMemoryScores,
+  preferShortShifts: boolean = false,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -499,13 +500,32 @@ function runIteration(
 
       const MIN_SHIFT_HOURS = 3;
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
+      let bestScore = -Infinity;
+
+      // Compute transition exits for this day: hours where coverage drops by 2+ 
+      // (e.g. hour 15 needs 1 but hour 14 needs 4 → transition at 15)
+      const transitionExits = new Set<number>();
+      if (preferShortShifts) {
+        const covHoursSorted = [...hourCoverage.keys()].sort((a, b) => a - b);
+        for (let idx = 1; idx < covHoursSorted.length; idx++) {
+          const prevH = covHoursSorted[idx - 1];
+          const currH = covHoursSorted[idx];
+          if (currH === prevH + 1) {
+            const prevNeed = hourCoverage.get(prevH) ?? 0;
+            const currNeed = hourCoverage.get(currH) ?? 0;
+            if (prevNeed - currNeed >= 2) {
+              transitionExits.add(currH); // exit AT currH means shift ends at currH
+            }
+          }
+        }
+      }
 
       for (const entry of effectiveEntries) {
         if (entry < earliestStart) continue;
         for (const exit of effectiveExits) {
           if (exit <= entry) continue;
           const duration = exit - entry;
-          if (duration < MIN_SHIFT_HOURS) continue; // Minimum 4 hours
+          if (duration < MIN_SHIFT_HOURS) continue;
           if (duration > maxRemaining || duration > empMaxDaily) continue;
           if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
 
@@ -525,10 +545,24 @@ function runIteration(
           }
           if (wouldOverbook) continue;
 
-          if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
-            bestCoverage = coverCount;
-            bestStart = entry;
-            bestEnd = exit;
+          if (preferShortShifts) {
+            // Density-based scoring: prefer shorter shifts that cover more uncovered hours per hour worked
+            const density = coverCount / duration;
+            const transitionBonus = transitionExits.has(exit) ? 1000 : 0;
+            const score = density + transitionBonus;
+            if (score > bestScore || (score === bestScore && duration < (bestEnd - bestStart))) {
+              bestScore = score;
+              bestCoverage = coverCount;
+              bestStart = entry;
+              bestEnd = exit;
+            }
+          } else {
+            // Original strategy: max coverage, then shortest duration
+            if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
+              bestCoverage = coverCount;
+              bestStart = entry;
+              bestEnd = exit;
+            }
           }
         }
       }
@@ -589,6 +623,8 @@ function runIteration(
       });
 
       let splitCandidates = randomize ? shuffle(empsWithShiftToday) : empsWithShiftToday.slice();
+      // Sort by ascending weekly split count for equitable distribution
+      splitCandidates.sort((a, b) => (weeklySplits.get(a.user_id) ?? 0) - (weeklySplits.get(b.user_id) ?? 0));
 
       for (const emp of splitCandidates) {
         const ec = empConstraints.get(emp.user_id);
@@ -604,8 +640,9 @@ function runIteration(
 
         const maxRemainingDaily = empMaxDaily - dailyHoursUsed;
         const maxRemainingWeekly = empMaxWeekly - empWeeklyUsed;
-        const maxRemainingTarget = Math.max(adjustedTarget - empWeeklyUsed, 0);
-        const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly, maxRemainingTarget);
+        // For split shifts, allow going beyond contract target up to weekly max
+        // This enables splits to cover gaps even when contract hours are exhausted
+        const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly);
         if (maxRemaining <= 0) continue;
 
         // Check weekly split limit
@@ -1025,11 +1062,13 @@ Deno.serve(async (req) => {
           }
 
           for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
+            // Alternate strategy: even iterations use max-coverage, odd use short-shift density
+            const preferShort = i % 2 === 1;
             const result = runIteration(
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
               openingHoursData, hourBalances, empConstraints, maxSplits,
-              i > 0, partialDayBlocks, smartMemory,
+              i > 0, partialDayBlocks, smartMemory, preferShort,
             );
 
             if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
