@@ -220,34 +220,105 @@ const Dashboard = () => {
     },
   ];
 
-  return (
-    <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 animate-in fade-in duration-500">
-      {/* ── KPI Cards Row ── */}
-      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:overflow-visible">
-        {kpis.map((kpi) => (
-          <div key={kpi.title} className="min-w-[160px] snap-start md:min-w-0">
-            <KpiCard {...kpi} />
-          </div>
-        ))}
-      </div>
+  /* ── Employee-only dashboard ── */
+  if (!isAdmin) {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 animate-in fade-in duration-500">
+        {/* Weekly Timeline */}
+        <Card className="p-4 flex flex-col flex-shrink-0">
+          <CardHeader className="p-0 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                <CalendarIcon className="h-4 w-4 text-primary" />
+              </div>
+              Il mio orario settimanale
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="flex mb-1">
+              <div className="w-20 shrink-0" />
+              <div className="flex-1 flex">
+                {TIMELINE_HOURS.map((h) => (
+                  <div key={h} className="text-[10px] text-muted-foreground font-medium text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
+                    {String(h).padStart(2, "0")}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              {weekDates.map((d, i) => {
+                const isDayToday = d.toDateString() === today.toDateString();
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                const dayShifts = weekShifts.filter((s) => s.date === dateStr);
+                const isDayOff = dayShifts.some((s) => s.is_day_off);
+                return (
+                  <div key={i} className="flex items-center min-h-[28px]">
+                    <div className={`w-20 shrink-0 pr-2 text-right text-xs font-medium ${isDayToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                      <span className={isDayToday ? "bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[11px]" : ""}>
+                        {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
+                      </span>
+                    </div>
+                    <div className="flex-1 relative h-6 bg-secondary rounded-lg overflow-hidden border border-border">
+                      {TIMELINE_HOURS.map((h, hi) => (
+                        <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
+                      ))}
+                      {isDayOff ? (
+                        <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                          <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
+                        </div>
+                      ) : (
+                        dayShifts.filter((s) => !s.is_day_off && s.start_time && s.end_time).map((s) => {
+                          const sH = parseInt(s.start_time!.split(":")[0]);
+                          let eH = parseInt(s.end_time!.split(":")[0]);
+                          if (eH === 0) eH = 24;
+                          const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                          const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                          const width = ((eH - sH) / totalSpan) * 100;
+                          return (
+                            <div key={s.id} className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
+                              <span className="text-[10px] font-semibold text-primary">{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* ── Charts widgets ── */}
-      <DashboardCharts />
+        {/* New Request (inline form) */}
+        <Card className="p-4 flex flex-col">
+          <CardHeader className="p-0 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                <Inbox className="h-4 w-4 text-primary" />
+              </div>
+              Nuova Richiesta
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {activeStore?.id ? (
+              <RequestForm department={department} storeId={activeStore.id} onClose={() => {}} />
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">Nessuno store assegnato.</p>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* ── Main content grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
-        {/* Calendar */}
-        <Card className="lg:col-span-1 p-4 flex flex-col">
+        {/* Monthly Calendar */}
+        <Card className="p-4 flex flex-col">
           <CardHeader className="p-0 pb-3">
             <CardTitle className="flex items-center justify-between text-sm font-semibold">
               <span>{MONTHS_IT[calMonth]} {calYear}</span>
               <div className="flex gap-1">
-                <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors" aria-label="Mese precedente">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors" aria-label="Mese successivo">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+                <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </CardTitle>
           </CardHeader>
@@ -263,43 +334,86 @@ const Dashboard = () => {
                 const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
                 const isWeekend = idx % 7 >= 5;
                 return (
-                  <button
-                    key={idx}
-                    disabled={day === null}
-                    onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
+                  <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
                     className={`mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors
-                      ${day === null ? "invisible" : ""}
-                      ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
+                      ${day === null ? "invisible" : ""} ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
                       ${isToday && !isSelected ? "bg-primary/15 text-primary font-bold" : ""}
                       ${!isToday && !isSelected && day !== null ? "hover:bg-accent text-foreground/70 font-medium" : ""}
                       ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
-                    `}
-                  >
-                    {day}
-                  </button>
+                    `}>{day}</button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* ── Admin/Super Admin dashboard ── */
+  return (
+    <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 animate-in fade-in duration-500">
+      {/* KPI Cards Row */}
+      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:overflow-visible">
+        {kpis.map((kpi) => (
+          <div key={kpi.title} className="min-w-[160px] snap-start md:min-w-0">
+            <KpiCard {...kpi} />
+          </div>
+        ))}
+      </div>
+
+      <DashboardCharts />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
+        <Card className="lg:col-span-1 p-4 flex flex-col">
+          <CardHeader className="p-0 pb-3">
+            <CardTitle className="flex items-center justify-between text-sm font-semibold">
+              <span>{MONTHS_IT[calMonth]} {calYear}</span>
+              <div className="flex gap-1">
+                <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronRight className="h-4 w-4" /></button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col p-0">
+            <div className="grid grid-cols-7 mb-2">
+              {DAYS_IT.map((d, i) => (
+                <span key={d} className={`text-center text-[11px] font-medium text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-y-0.5">
+              {calendarCells.map((day, idx) => {
+                const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+                const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
+                const isWeekend = idx % 7 >= 5;
+                return (
+                  <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
+                    className={`mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors
+                      ${day === null ? "invisible" : ""} ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
+                      ${isToday && !isSelected ? "bg-primary/15 text-primary font-bold" : ""}
+                      ${!isToday && !isSelected && day !== null ? "hover:bg-accent text-foreground/70 font-medium" : ""}
+                      ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
+                    `}>{day}</button>
                 );
               })}
             </div>
           </CardContent>
         </Card>
 
-        {/* Requests */}
         <Card className="lg:col-span-2 p-4 flex flex-col">
           <CardHeader className="p-0 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary">
-                {isAdmin ? <Inbox className="h-4 w-4 text-muted-foreground" /> : <Bell className="h-4 w-4 text-muted-foreground" />}
+                <Inbox className="h-4 w-4 text-muted-foreground" />
               </div>
-              {isAdmin ? "Richieste pendenti" : "Avvisi"}
-              {isAdmin && pendingRequests.length > 0 && (
-                <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0 font-semibold">
-                  {pendingRequests.length}
-                </Badge>
+              Richieste pendenti
+              {pendingRequests.length > 0 && (
+                <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0 font-semibold">{pendingRequests.length}</Badge>
               )}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 p-0">
-            {isAdmin && pendingRequests.length > 0 ? (
+            {pendingRequests.length > 0 ? (
               <div className="space-y-2">
                 {pendingRequests.map((r) => (
                   <div key={r.id} className="flex items-center justify-between rounded-xl bg-secondary p-3">
@@ -308,29 +422,16 @@ const Dashboard = () => {
                       <p className="text-xs text-muted-foreground">{r.type} · {r.dates}</p>
                     </div>
                     <div className="flex gap-1.5 ml-3">
-                      <button
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
-                        aria-label={`Approva richiesta di ${r.name}`}
-                        onClick={() => setConfirmAction({ type: "approve", request: r })}
-                      >
+                      <button className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary hover:bg-primary/25 transition-colors" onClick={() => setConfirmAction({ type: "approve", request: r })}>
                         <Check className="h-4 w-4" />
                       </button>
-                      <button
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors"
-                        aria-label={`Rifiuta richiesta di ${r.name}`}
-                        onClick={() => setConfirmAction({ type: "reject", request: r })}
-                      >
+                      <button className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors" onClick={() => setConfirmAction({ type: "reject", request: r })}>
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 ))}
-                <Link
-                  to="/requests"
-                  className="inline-block text-xs text-primary hover:text-primary/80 transition-colors mt-1"
-                >
-                  Vedi tutte le richieste →
-                </Link>
+                <Link to="/requests" className="inline-block text-xs text-primary hover:text-primary/80 transition-colors mt-1">Vedi tutte le richieste →</Link>
               </div>
             ) : (
               <div className="flex items-center justify-center py-8">
@@ -341,7 +442,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* ── Weekly Timeline ── */}
+      {/* Weekly Timeline */}
       <Card className="p-4 flex flex-col flex-shrink-0">
         <CardHeader className="p-0 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -355,30 +456,22 @@ const Dashboard = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {/* Timeline header */}
           <div className="flex mb-1">
             <div className="w-20 shrink-0" />
             <div className="flex-1 flex">
               {TIMELINE_HOURS.map((h) => (
-                <div
-                  key={h}
-                  className="text-[10px] text-muted-foreground font-medium text-center"
-                  style={{ width: `${100 / TIMELINE_HOURS.length}%` }}
-                >
+                <div key={h} className="text-[10px] text-muted-foreground font-medium text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
                   {String(h).padStart(2, "0")}
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Day rows */}
           <div className="space-y-1">
             {weekDates.map((d, i) => {
               const isDayToday = d.toDateString() === today.toDateString();
               const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
               const dayShifts = weekShifts.filter((s) => s.date === dateStr);
               const isDayOff = dayShifts.some((s) => s.is_day_off);
-
               return (
                 <div key={i} className="flex items-center min-h-[28px]">
                   <div className={`w-20 shrink-0 pr-2 text-right text-xs font-medium ${isDayToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
@@ -386,43 +479,28 @@ const Dashboard = () => {
                       {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
                     </span>
                   </div>
-
                   <div className="flex-1 relative h-6 bg-secondary rounded-lg overflow-hidden border border-border">
                     {TIMELINE_HOURS.map((h, hi) => (
-                      <div
-                        key={h}
-                        className="absolute top-0 bottom-0 border-l border-border/40"
-                        style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }}
-                      />
+                      <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
                     ))}
-
                     {isDayOff ? (
                       <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
                         <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
                       </div>
                     ) : (
-                      dayShifts
-                        .filter((s) => !s.is_day_off && s.start_time && s.end_time)
-                        .map((s) => {
-                          const sH = parseInt(s.start_time!.split(":")[0]);
-                          let eH = parseInt(s.end_time!.split(":")[0]);
-                          if (eH === 0) eH = 24;
-                          const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
-                          const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
-                          const width = ((eH - sH) / totalSpan) * 100;
-
-                          return (
-                            <div
-                              key={s.id}
-                              className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center"
-                              style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
-                            >
-                              <span className="text-[10px] font-semibold text-primary">
-                                {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
-                              </span>
-                            </div>
-                          );
-                        })
+                      dayShifts.filter((s) => !s.is_day_off && s.start_time && s.end_time).map((s) => {
+                        const sH = parseInt(s.start_time!.split(":")[0]);
+                        let eH = parseInt(s.end_time!.split(":")[0]);
+                        if (eH === 0) eH = 24;
+                        const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                        const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                        const width = ((eH - sH) / totalSpan) * 100;
+                        return (
+                          <div key={s.id} className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
+                            <span className="text-[10px] font-semibold text-primary">{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -437,20 +515,12 @@ const Dashboard = () => {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Nuova Richiesta</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Compila il modulo per inviare una nuova richiesta
-            </DialogDescription>
+            <DialogDescription className="text-xs text-muted-foreground">Compila il modulo per inviare una nuova richiesta</DialogDescription>
           </DialogHeader>
           {activeStore?.id ? (
-            <RequestForm
-              department={department}
-              storeId={activeStore.id}
-              onClose={() => setShowRequestPopup(false)}
-            />
+            <RequestForm department={department} storeId={activeStore.id} onClose={() => setShowRequestPopup(false)} />
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Seleziona uno store per inviare una richiesta.
-            </p>
+            <p className="text-sm text-muted-foreground text-center py-4">Seleziona uno store per inviare una richiesta.</p>
           )}
         </DialogContent>
       </Dialog>
@@ -459,12 +529,9 @@ const Dashboard = () => {
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirmAction?.type === "approve" ? "Approva richiesta" : "Rifiuta richiesta"}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{confirmAction?.type === "approve" ? "Approva richiesta" : "Rifiuta richiesta"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Sei sicuro di voler {confirmAction?.type === "approve" ? "approvare" : "rifiutare"} la richiesta di{" "}
-              <strong>{confirmAction?.request.name}</strong>?
+              Sei sicuro di voler {confirmAction?.type === "approve" ? "approvare" : "rifiutare"} la richiesta di <strong>{confirmAction?.request.name}</strong>?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -473,11 +540,7 @@ const Dashboard = () => {
               className={confirmAction?.type === "approve" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}
               onClick={() => {
                 if (!confirmAction) return;
-                toast.success(
-                  confirmAction.type === "approve"
-                    ? `Richiesta di ${confirmAction.request.name} approvata`
-                    : `Richiesta di ${confirmAction.request.name} rifiutata`
-                );
+                toast.success(confirmAction.type === "approve" ? `Richiesta di ${confirmAction.request.name} approvata` : `Richiesta di ${confirmAction.request.name} rifiutata`);
                 setConfirmAction(null);
               }}
             >
