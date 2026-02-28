@@ -385,8 +385,9 @@ function runIteration(
     const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
     const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
 
-    const effectiveEntries = entries.length > 0 ? entries : [dayOpenH];
-    const effectiveExits = exits.length > 0 ? exits : [effectiveClose];
+    const effectiveEntries = entries.length > 0 ? entries.filter(e => e >= dayOpenH && e < effectiveClose) : [dayOpenH];
+    const effectiveExits = exits.length > 0 ? exits.filter(e => e > dayOpenH && e <= effectiveClose) : [effectiveClose];
+    if (effectiveEntries.length === 0 || effectiveExits.length === 0) continue;
 
     const hourCoverage = new Map<number, number>();
     for (const c of dayCoverage) {
