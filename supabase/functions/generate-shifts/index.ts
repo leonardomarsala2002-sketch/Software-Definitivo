@@ -157,8 +157,8 @@ function computeFitness(
         s.start_time !== null && s.end_time !== null &&
         parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
       ).length;
-      if (assigned > c.min_staff_required + 1) {
-        score += (assigned - c.min_staff_required - 1) * PENALTY_OVERCROWDED;
+      if (assigned > c.min_staff_required) {
+        score += (assigned - c.min_staff_required) * PENALTY_OVERCROWDED;
       }
     }
   }
@@ -304,23 +304,32 @@ function runIteration(
       const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
       if (empAvail.length === 0) continue;
 
+      const MIN_SHIFT_HOURS = 4;
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
 
       for (const entry of effectiveEntries) {
         for (const exit of effectiveExits) {
           if (exit <= entry) continue;
           const duration = exit - entry;
+          if (duration < MIN_SHIFT_HOURS) continue; // Minimum 4 hours
           if (duration > maxRemaining || duration > rules.max_daily_hours_per_employee) continue;
           if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
 
           const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
           if (!withinAvail) continue;
 
+          // Exact coverage: reject shifts that would cause ANY tracked hour to exceed required staff
+          let wouldOverbook = false;
           let coverCount = 0;
           for (let h = entry; h < exit; h++) {
             const needed = hourCoverage.get(h);
-            if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) coverCount++;
+            if (needed !== undefined) {
+              const current = staffAssigned.get(h) ?? 0;
+              if (current >= needed) { wouldOverbook = true; break; }
+              if (current < needed) coverCount++;
+            }
           }
+          if (wouldOverbook) continue;
 
           if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
             bestCoverage = coverCount;

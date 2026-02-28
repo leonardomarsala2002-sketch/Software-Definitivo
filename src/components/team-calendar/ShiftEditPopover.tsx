@@ -33,7 +33,11 @@ export function ShiftEditPopover({
   const entries = allowedEntries.length > 0 ? allowedEntries : Array.from({ length: 24 }, (_, i) => i);
   const exits = allowedExits.length > 0 ? allowedExits : Array.from({ length: 24 }, (_, i) => i + 1);
 
-  const canSave = isDayOff || (start !== null && end !== null && (end > start || end === 0 || end === 24));
+  const MIN_SHIFT_HOURS = 4;
+  const effectiveEnd = (end === 0 || end === 24) ? 24 : (end ?? 0);
+  const shiftDuration = start !== null && end !== null ? effectiveEnd - (start ?? 0) : 0;
+  const isTooShort = !isDayOff && start !== null && end !== null && shiftDuration < MIN_SHIFT_HOURS;
+  const canSave = isDayOff || (start !== null && end !== null && effectiveEnd > (start ?? 0) && !isTooShort);
 
   function handleSave() {
     if (!canSave) return;
@@ -119,6 +123,12 @@ export function ShiftEditPopover({
                 </div>
               </div>
             </>
+          )}
+
+          {isTooShort && (
+            <p className="text-[11px] text-destructive font-medium">
+              Minimo {MIN_SHIFT_HOURS} ore consecutive per turno ({shiftDuration}h selezionate)
+            </p>
           )}
 
           <Button

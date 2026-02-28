@@ -72,6 +72,89 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Fetch draft shifts for validation before publishing
+    const { data: draftShifts, error: draftErr } = await adminClient
+      .from("shifts")
+      .select("id, user_id, date, start_time, end_time, is_day_off, department, store_id")
+      .eq("store_id", store_id)
+      .eq("status", "draft")
+      .gte("date", week_start)
+      .lte("date", weekEnd);
+
+    if (draftErr) throw new Error(draftErr.message);
+
+    // ─── Validation: minimum 4 hours per shift ─────────────────────────
+    const MIN_SHIFT_HOURS = 4;
+    const invalidShifts: string[] = [];
+    for (const s of (draftShifts ?? [])) {
+      if (s.is_day_off || !s.start_time || !s.end_time) continue;
+      const startH = parseInt(s.start_time.split(":")[0], 10);
+      let endH = parseInt(s.end_time.split(":")[0], 10);
+      if (endH === 0) endH = 24;
+      const duration = endH - startH;
+      if (duration < MIN_SHIFT_HOURS) {
+        invalidShifts.push(`${s.date} ${s.start_time}-${s.end_time} (${duration}h)`);
+      }
+    }
+
+    if (invalidShifts.length > 0) {
+      return new Response(JSON.stringify({
+        error: `Impossibile pubblicare: ${invalidShifts.length} turni sotto le ${MIN_SHIFT_HOURS} ore minime`,
+        invalid_shifts: invalidShifts,
+      }), {
+        status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Validation: exact coverage (no overbooking) ───────────────────
+    const { data: coverageReqs } = await adminClient
+      .from("store_coverage_requirements")
+      .select("day_of_week, hour_slot, department, min_staff_required")
+      .eq("store_id", store_id);
+
+    if (coverageReqs && coverageReqs.length > 0) {
+      const overbookedSlots: string[] = [];
+      const workShifts = (draftShifts ?? []).filter(s => !s.is_day_off && s.start_time && s.end_time);
+
+      for (const cov of coverageReqs) {
+        const covHour = parseInt(cov.hour_slot.split(":")[0], 10);
+        // Check each day of the week
+        for (const s of workShifts) {
+          // We need to check by matching day_of_week
+          const d = new Date(s.date + "T00:00:00Z");
+          const dow = (d.getUTCDay() + 6) % 7;
+          if (dow !== cov.day_of_week || s.department !== cov.department) continue;
+        }
+        // Count per date
+        const datesByDow = new Map<string, number>();
+        for (const s of workShifts) {
+          const d = new Date(s.date + "T00:00:00Z");
+          const dow = (d.getUTCDay() + 6) % 7;
+          if (dow !== cov.day_of_week || s.department !== cov.department) continue;
+          const startH = parseInt(s.start_time!.split(":")[0], 10);
+          let endH = parseInt(s.end_time!.split(":")[0], 10);
+          if (endH === 0) endH = 24;
+          if (startH <= covHour && endH > covHour) {
+            datesByDow.set(s.date, (datesByDow.get(s.date) ?? 0) + 1);
+          }
+        }
+        for (const [date, count] of datesByDow) {
+          if (count > cov.min_staff_required) {
+            overbookedSlots.push(`${date} ${cov.hour_slot} ${cov.department}: ${count}/${cov.min_staff_required}`);
+          }
+        }
+      }
+
+      if (overbookedSlots.length > 0) {
+        return new Response(JSON.stringify({
+          error: `Impossibile pubblicare: ${overbookedSlots.length} slot con personale in eccesso`,
+          overbooked_slots: overbookedSlots,
+        }), {
+          status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Update ALL draft shifts for this store+week to published
     const { data: updatedShifts, error: updateErr } = await adminClient
       .from("shifts")
