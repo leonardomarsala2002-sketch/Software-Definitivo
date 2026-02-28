@@ -64,6 +64,7 @@ const GROUP_CONFIG: GroupConfig[] = [
 function classifyGroup(s: OptimizationSuggestion): GroupKey {
   if (s.type === "uncovered") return "critical";
   if (s.type === "lending") return "lending";
+  // staffing_analysis and other types go to equity
   return "equity";
 }
 
