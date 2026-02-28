@@ -317,6 +317,13 @@ function applyPartialBlocks(
 
 // ─── Single Iteration Generator ──────────────────────────────────────────────
 
+// Smart memory score map: key = `${userId}-${dow}-${hour}` -> score (positive = good, negative = bad)
+type SmartMemoryScores = Map<string, number>;
+
+function getSmartMemoryKey(userId: string, dow: number, hour?: number): string {
+  return hour !== undefined ? `${userId}-${dow}-${hour}` : `${userId}-${dow}`;
+}
+
 function runIteration(
   storeId: string,
   department: "sala" | "cucina",
@@ -334,6 +341,7 @@ function runIteration(
   maxSplitOverride: number,
   randomize: boolean,
   partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
+  smartMemory: SmartMemoryScores,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -414,6 +422,8 @@ function runIteration(
     if (randomize) {
       availableEmps = shuffle(availableEmps);
     } else {
+      // Smart memory: compute per-employee score for this day's coverage hours
+      const covHours = Array.from(hourCoverage.keys());
       availableEmps.sort((a, b) => {
         const aUsed = weeklyHours.get(a.user_id) ?? 0;
         const bUsed = weeklyHours.get(b.user_id) ?? 0;
@@ -421,7 +431,16 @@ function runIteration(
         const bBalance = hourBalances.get(b.user_id) ?? 0;
         const aTarget = a.weekly_contract_hours - aBalance;
         const bTarget = b.weekly_contract_hours - bBalance;
-        return (aUsed / Math.max(aTarget, 1)) - (bUsed / Math.max(bTarget, 1));
+        const fillRatio = (aUsed / Math.max(aTarget, 1)) - (bUsed / Math.max(bTarget, 1));
+        // Smart memory bonus: sum scores for this employee on this day's hours
+        let aMemory = 0, bMemory = 0;
+        for (const h of covHours) {
+          aMemory += smartMemory.get(getSmartMemoryKey(a.user_id, dow, h)) ?? 0;
+          bMemory += smartMemory.get(getSmartMemoryKey(b.user_id, dow, h)) ?? 0;
+        }
+        // Higher memory score = prioritize (sort ascending, so negate)
+        // Memory influence is secondary to fill ratio
+        return fillRatio + (bMemory - aMemory) * 0.01;
       });
     }
 
@@ -860,6 +879,31 @@ Deno.serve(async (req) => {
       empConstraints.set(c.user_id, c as EmployeeConstraints);
     }
 
+    // ─── Smart Memory: fetch historical outcomes (last 8 weeks) ──────
+    const SMART_MEMORY_WEEKS = 8;
+    const memoryStartDate = new Date(startD);
+    memoryStartDate.setUTCDate(memoryStartDate.getUTCDate() - SMART_MEMORY_WEEKS * 7);
+    const memoryStartStr = getDateStr(memoryStartDate);
+
+    const { data: outcomeRows } = await adminClient
+      .from("suggestion_outcomes")
+      .select("user_id, day_of_week, hour_slot, outcome")
+      .eq("store_id", store_id)
+      .gte("week_start", memoryStartStr);
+
+    // Build smart memory scores: accepted = +1, rejected = -1, gap_accepted = -0.5
+    const smartMemory: SmartMemoryScores = new Map();
+    for (const row of (outcomeRows ?? [])) {
+      const key = getSmartMemoryKey(row.user_id, row.day_of_week, row.hour_slot);
+      const current = smartMemory.get(key) ?? 0;
+      const delta = row.outcome === "accepted" || row.outcome === "lending_accepted" ? 1
+        : row.outcome === "rejected" || row.outcome === "lending_rejected" ? -1
+        : row.outcome === "gap_accepted" ? -0.5
+        : 0;
+      smartMemory.set(key, current + delta);
+    }
+    console.log(`[Smart Memory] Loaded ${(outcomeRows ?? []).length} historical outcomes, ${smartMemory.size} unique scores`);
+
     // Run for BOTH departments
     const departments: ("sala" | "cucina")[] = ["sala", "cucina"];
     const results: { department: string; runId: string; shifts: number; daysOff: number; uncovered: number; fitness: number; hourAdjustments: Record<string, number>; fallbackUsed: boolean }[] = [];
@@ -970,7 +1014,7 @@ Deno.serve(async (req) => {
             store_id, dept, iterDates, employees, availability,
             allExceptions, coverageData, allowedData, rules, run.id,
             openingHoursData, hourBalances, empConstraints, splitOverride,
-            i > 0, partialDayBlocks,
+            i > 0, partialDayBlocks, smartMemory,
           );
 
           if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
@@ -991,7 +1035,7 @@ Deno.serve(async (req) => {
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
               openingHoursData, hourBalances, empConstraints, splitOverride,
-              true, partialDayBlocks,
+              true, partialDayBlocks, smartMemory,
             );
 
             if (result.fitnessScore > bestResult!.fitnessScore) {
@@ -1168,12 +1212,18 @@ Deno.serve(async (req) => {
             });
           }
 
+          // Smart memory: sort alternatives by historical acceptance score (best first)
+          const dow = getDayOfWeek(dateStr);
+          alts.sort((a, b) => {
+            const aScore = a.userId ? (smartMemory.get(getSmartMemoryKey(a.userId, dow, uncoveredHour)) ?? 0) : 0;
+            const bScore = b.userId ? (smartMemory.get(getSmartMemoryKey(b.userId, dow, uncoveredHour)) ?? 0) : 0;
+            return bScore - aScore; // Higher score first
+          });
+
           // Cap alternatives to the number of uncovered spots (exact coverage = no overbooking)
           const uncoveredSpotsNeeded = (() => {
-            const dow = getDayOfWeek(dateStr);
             const cov = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === uncoveredHour);
             if (!cov) return 1;
-            // Count how many are already assigned at this hour
             const assignedCount = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time).filter(s => {
               const sh = parseInt(s.start_time!.split(":")[0], 10);
               let eh = parseInt(s.end_time!.split(":")[0], 10);
@@ -1182,7 +1232,7 @@ Deno.serve(async (req) => {
             }).length;
             return Math.max(1, cov.min_staff_required - assignedCount);
           })();
-          return alts.slice(0, uncoveredSpotsNeeded); // Cap to exact uncovered spots
+          return alts.slice(0, uncoveredSpotsNeeded);
         }
 
         // Track weekly hours from best result for alternative calculations

@@ -269,6 +269,36 @@ const TeamCalendar = () => {
     setShowApproveConfirm(false);
   };
 
+  // Helper to record suggestion outcome for smart memory
+  const recordOutcome = async (
+    suggestion: OptimizationSuggestion,
+    outcome: string,
+    actionType?: string,
+    userId?: string,
+  ) => {
+    if (!storeId || !suggestion.date) return;
+    const dateObj = new Date(suggestion.date + "T00:00:00");
+    const dow = (dateObj.getDay() + 6) % 7; // Mon=0..Sun=6
+    const hourSlot = suggestion.slot ? parseInt(suggestion.slot.split(":")[0], 10) : 0;
+    const targetUserId = userId || suggestion.userId;
+    if (!targetUserId) return;
+    try {
+      await supabase.from("suggestion_outcomes" as any).insert({
+        store_id: storeId,
+        user_id: targetUserId,
+        department,
+        day_of_week: dow,
+        hour_slot: hourSlot,
+        outcome,
+        action_type: actionType ?? null,
+        week_start: currentWeekStart,
+        suggestion_id: suggestion.id ?? null,
+      });
+    } catch (e) {
+      console.error("Failed to record outcome:", e);
+    }
+  };
+
   const handleAcceptSuggestion = async (suggestion: OptimizationSuggestion, action?: CorrectionAction) => {
     if (!storeId) return;
 
@@ -397,6 +427,8 @@ const TeamCalendar = () => {
           }
         }
       }
+      // Record accepted outcome for smart memory
+      recordOutcome(suggestion, "accepted", action.actionType, action.userId);
       return;
     }
 
@@ -406,6 +438,7 @@ const TeamCalendar = () => {
     } else if (suggestion.type === "surplus" && suggestion.shiftId) {
       deleteShift.mutate({ id: suggestion.shiftId, storeId });
       toast.success(`Turno di ${suggestion.userName} rimosso`);
+      recordOutcome(suggestion, "accepted", "remove_surplus");
     } else if (suggestion.type === "lending" && suggestion.shiftId && suggestion.targetStoreId) {
       const isDbLending = suggestion.id.startsWith("db-lending-");
       if (isDbLending) {
@@ -430,6 +463,7 @@ const TeamCalendar = () => {
           queryClient.invalidateQueries({ queryKey: ["shifts"] });
           queryClient.invalidateQueries({ queryKey: ["lending-suggestions"] });
           toast.success(`${suggestion.userName} prestato a ${suggestion.targetStoreName}`);
+          recordOutcome(suggestion, "lending_accepted", "lending", dbSuggestion.user_id);
         }
       }
     } else if (suggestion.type === "overtime_balance" && suggestion.userId) {
@@ -438,7 +472,11 @@ const TeamCalendar = () => {
   };
 
   const handleDeclineSuggestion = (id: string) => {
-    // No-op for wizard (handled internally)
+    // Record rejection for smart memory
+    const declined = suggestions.find(s => s.id === id);
+    if (declined) {
+      recordOutcome(declined, "rejected");
+    }
   };
 
   // Accept a gap (uncovered slot) — persists in generation_runs.accepted_gaps
@@ -464,6 +502,7 @@ const TeamCalendar = () => {
       toast.error("Errore nel salvare il buco accettato: " + error.message);
     } else {
       toast.success("Buco accettato — il turno verrà pubblicato con personale ridotto");
+      recordOutcome(suggestion, "gap_accepted");
       queryClient.invalidateQueries({ queryKey: ["generation-runs"] });
       queryClient.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
     }
