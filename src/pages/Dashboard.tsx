@@ -34,6 +34,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import RequestForm from "@/components/requests/RequestForm";
 import { useQuery } from "@tanstack/react-query";
+import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 
 /* ── helpers ─────────────────────────────────────────── */
 
@@ -227,6 +228,9 @@ const Dashboard = () => {
           <KpiCard key={kpi.title} {...kpi} />
         ))}
       </div>
+
+      {/* ── Charts widgets ── */}
+      <DashboardCharts />
 
       {/* ── Main content grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
