@@ -167,7 +167,7 @@ export function DayDetailDialog({
                                 )}
                                 style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, width)}%` }}
                               >
-                                <span className="text-[10px] font-semibold text-foreground/80">
+                                <span className={cn("text-[10px] font-semibold", color.text)}>
                                   {s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}
                                 </span>
                               </div>
