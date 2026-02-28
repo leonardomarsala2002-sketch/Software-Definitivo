@@ -1011,6 +1011,9 @@ Deno.serve(async (req) => {
         let bestResult: IterationResult | null = null;
         let fallbackUsed = false;
 
+        // Use effective dates for iterations (in patch mode, only cover the affected range)
+        const iterDates = isPatchMode ? effectiveWeekDates : weekDates;
+
         // Progressive split strategy: start with 0 splits, increase up to 3 only if needed
         const MAX_SPLITS_PROGRESSION = [0, 1, 2, 3];
 
