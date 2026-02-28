@@ -1172,6 +1172,63 @@ export type Database = {
         }
         Relationships: []
       }
+      suggestion_outcomes: {
+        Row: {
+          action_type: string | null
+          created_at: string
+          day_of_week: number
+          department: string
+          hour_slot: number
+          id: string
+          outcome: string
+          store_id: string
+          suggestion_id: string | null
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          action_type?: string | null
+          created_at?: string
+          day_of_week: number
+          department: string
+          hour_slot: number
+          id?: string
+          outcome: string
+          store_id: string
+          suggestion_id?: string | null
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          action_type?: string | null
+          created_at?: string
+          day_of_week?: number
+          department?: string
+          hour_slot?: number
+          id?: string
+          outcome?: string
+          store_id?: string
+          suggestion_id?: string | null
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_outcomes_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggestion_outcomes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_off_requests: {
         Row: {
           created_at: string
