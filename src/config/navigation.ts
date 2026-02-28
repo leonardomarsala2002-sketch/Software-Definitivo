@@ -24,7 +24,7 @@ export const navItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, section: "main" },
   { title: "Calendario Team", url: "/team-calendar", icon: CalendarDays, section: "main", roles: ["admin", "employee"] },
   { title: "Orari Admin", url: "/admin-shifts", icon: CalendarDays, section: "main", roles: ["super_admin"] },
-  { title: "Richieste", url: "/requests", icon: Inbox, section: "main" },
+  { title: "Richieste", url: "/requests", icon: Inbox, section: "main", roles: ["admin", "employee"] },
   { title: "Messaggi", url: "/messages", icon: MessageSquare, section: "main" },
   { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin"] },
   { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin"] },
