@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,13 +106,6 @@ export function AppHeader() {
 
         <div className="flex-1" />
 
-        <div className="hidden md:flex relative max-w-xs w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input placeholder="Cerca..." className="h-9 pl-9 rounded-xl bg-secondary border-transparent text-sm focus-visible:ring-1 focus-visible:ring-ring" />
-        </div>
-
-        <div className="flex-1 md:hidden" />
-
         <div className="flex items-center gap-2">
           <NotificationBell />
           <DropdownMenu>
@@ -166,15 +157,17 @@ export function AppHeader() {
               <>
                 <ProfileRow label="Nome" value={`${profileData.details.first_name ?? ""} ${profileData.details.last_name ?? ""}`.trim()} />
                 <ProfileRow label="Telefono" value={profileData.details.phone} />
-                <ProfileRow label="Reparto" value={profileData.details.department === "sala" ? "Sala" : profileData.details.department === "cucina" ? "Cucina" : profileData.details.department} />
-                <ProfileRow label="Contratto" value={profileData.details.contract_type} />
-                <ProfileRow label="Ore settimanali" value={profileData.details.weekly_contract_hours?.toString()} />
-                <ProfileRow label="Livello" value={profileData.details.level} />
-                <ProfileRow label="Mansione" value={profileData.details.role_label} />
-                <ProfileRow label="Data assunzione" value={profileData.details.hire_date} />
+                <ProfileRow label="Data di nascita" value={profileData.details.birth_date} />
+                <ProfileRow label="Luogo di nascita" value={profileData.details.birth_place} />
                 <ProfileRow label="Codice fiscale" value={profileData.details.fiscal_code} />
                 <ProfileRow label="Residenza" value={profileData.details.residence} />
                 <ProfileRow label="Domicilio" value={profileData.details.domicile} />
+                <ProfileRow label="Reparto" value={profileData.details.department === "sala" ? "Sala" : profileData.details.department === "cucina" ? "Cucina" : profileData.details.department} />
+                <ProfileRow label="Mansione" value={profileData.details.role_label} />
+                <ProfileRow label="Contratto" value={profileData.details.contract_type} />
+                <ProfileRow label="Livello" value={profileData.details.level} />
+                <ProfileRow label="Ore settimanali" value={profileData.details.weekly_contract_hours?.toString()} />
+                <ProfileRow label="Data assunzione" value={profileData.details.hire_date} />
               </>
             )}
             {profileData?.stores && profileData.stores.length > 0 && (
