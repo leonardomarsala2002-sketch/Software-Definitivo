@@ -39,8 +39,9 @@ import { Link } from "react-router-dom";
 import RequestForm from "@/components/requests/RequestForm";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
-import { useAppointments, useRespondAppointment } from "@/hooks/useAppointments";
+import { useAppointments, useRespondAppointment, useCancelAppointment } from "@/hooks/useAppointments";
 import { AppointmentFormDialog } from "@/components/dashboard/AppointmentFormDialog";
+import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
 import { getShiftColor, formatEndTime } from "@/lib/shiftColors";
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -165,6 +166,7 @@ const Dashboard = () => {
 
   const { data: appointments = [] } = useAppointments(calMonth, calYear);
   const respondAppointment = useRespondAppointment();
+  const cancelAppointment = useCancelAppointment();
 
   const weekStart = weekDates[0];
   const weekEnd = weekDates[6];
@@ -241,14 +243,6 @@ const Dashboard = () => {
   const employeeAppointmentDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
   const employeeSelectedDayAppointments = appointments.filter((a) => a.appointment_date === employeeAppointmentDateStr);
 
-  const CATEGORY_LABELS_EMP: Record<string, string> = {
-    meeting: "Riunione", training: "Formazione", inspection: "Ispezione", event: "Evento", other: "Altro",
-  };
-  const STATUS_LABELS_EMP: Record<string, { label: string; className: string }> = {
-    pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
-    accepted: { label: "Accettato", className: "bg-primary/15 text-primary" },
-    declined: { label: "Rifiutato", className: "bg-destructive/15 text-destructive" },
-  };
 
   /* ── Employee-only dashboard ── */
   if (!isAdmin) {
@@ -398,7 +392,7 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* My Appointments (read-only) */}
+        {/* My Appointments */}
         <Card className="p-4 flex flex-col flex-shrink-0">
           <CardHeader className="p-0 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -411,53 +405,22 @@ const Dashboard = () => {
           <CardContent className="p-0">
             {employeeSelectedDayAppointments.length > 0 ? (
               <div className="space-y-2">
-                {employeeSelectedDayAppointments.map((apt) => {
-                  const statusInfo = STATUS_LABELS_EMP[apt.status] ?? STATUS_LABELS_EMP.pending;
-                  return (
-                    <div key={apt.id} className="rounded-xl bg-secondary p-3 space-y-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground">{apt.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {apt.start_time?.slice(0, 5)} – {apt.end_time?.slice(0, 5)}
-                            {apt.store?.name && <> · {apt.store.name}</>}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge className={`text-[10px] px-1.5 py-0 border-0 font-semibold ${statusInfo.className}`}>
-                            {statusInfo.label}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            {CATEGORY_LABELS_EMP[apt.category] ?? apt.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      {apt.creator_profile?.full_name && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Users className="h-3 w-3" /> Da: {apt.creator_profile.full_name}
-                        </p>
-                      )}
-                      {apt.description && <p className="text-xs text-foreground/70">{apt.description}</p>}
-                      {apt.notes && <p className="text-xs text-muted-foreground italic">Note: {apt.notes}</p>}
-                      {/* Accept/Decline for target user */}
-                      {apt.status === "pending" && apt.target_user_id === user?.id && (
-                        <div className="flex gap-1.5 pt-1">
-                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-primary/15 text-primary hover:bg-primary/25"
-                            onClick={() => {
-                              respondAppointment.mutate({ id: apt.id, status: "accepted", created_by: apt.created_by });
-                              toast.success("Appuntamento accettato");
-                            }}>
-                            <Check className="h-3.5 w-3.5 mr-1" /> Accetta
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-destructive/15 text-destructive hover:bg-destructive/25"
-                            onClick={() => setDeclineTarget({ id: apt.id, created_by: apt.created_by })}>
-                            <X className="h-3.5 w-3.5 mr-1" /> Rifiuta
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {employeeSelectedDayAppointments.map((apt) => (
+                  <AppointmentCard
+                    key={apt.id}
+                    appointment={apt}
+                    currentUserId={user?.id}
+                    onAccept={(a) => {
+                      respondAppointment.mutate({ id: a.id, status: "accepted", created_by: a.created_by });
+                      toast.success("Appuntamento accettato");
+                    }}
+                    onDecline={(a) => setDeclineTarget({ id: a.id, created_by: a.created_by })}
+                    onCancel={(a) => {
+                      cancelAppointment.mutate({ id: a.id, target_user_id: a.target_user_id });
+                      toast.success("Appuntamento annullato");
+                    }}
+                  />
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -518,20 +481,6 @@ const Dashboard = () => {
   const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
   const selectedDayAppointments = appointments.filter((a) => a.appointment_date === selectedDateStr);
 
-
-  const CATEGORY_LABELS: Record<string, string> = {
-    meeting: "Riunione",
-    training: "Formazione",
-    inspection: "Ispezione",
-    event: "Evento",
-    other: "Altro",
-  };
-
-  const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-    pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
-    accepted: { label: "Accettato", className: "bg-primary/15 text-primary" },
-    declined: { label: "Rifiutato", className: "bg-destructive/15 text-destructive" },
-  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-in fade-in duration-500">
@@ -607,53 +556,22 @@ const Dashboard = () => {
           <CardContent className="flex-1 p-0 overflow-y-auto scrollbar-hide">
             {selectedDayAppointments.length > 0 ? (
               <div className="space-y-2">
-                {selectedDayAppointments.map((apt) => {
-                  const statusInfo = STATUS_LABELS[apt.status] ?? STATUS_LABELS.pending;
-                  return (
-                    <div key={apt.id} className="rounded-xl bg-secondary p-3 space-y-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground">{apt.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {apt.start_time?.slice(0, 5)} – {apt.end_time?.slice(0, 5)}
-                            {apt.store?.name && <> · {apt.store.name}</>}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge className={`text-[10px] px-1.5 py-0 border-0 font-semibold ${statusInfo.className}`}>
-                            {statusInfo.label}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            {CATEGORY_LABELS[apt.category] ?? apt.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      {apt.target_profile?.full_name && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Users className="h-3 w-3" /> Con: {apt.target_profile.full_name}
-                        </p>
-                      )}
-                      {apt.description && <p className="text-xs text-foreground/70">{apt.description}</p>}
-                      {apt.notes && <p className="text-xs text-muted-foreground italic">Note: {apt.notes}</p>}
-                      {/* Accept/Decline for target user viewing own appointments */}
-                      {apt.status === "pending" && apt.target_user_id === user?.id && (
-                        <div className="flex gap-1.5 pt-1">
-                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-primary/15 text-primary hover:bg-primary/25"
-                            onClick={() => {
-                              respondAppointment.mutate({ id: apt.id, status: "accepted", created_by: apt.created_by });
-                              toast.success("Appuntamento accettato");
-                            }}>
-                            <Check className="h-3.5 w-3.5 mr-1" /> Accetta
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-destructive/15 text-destructive hover:bg-destructive/25"
-                            onClick={() => setDeclineTarget({ id: apt.id, created_by: apt.created_by })}>
-                            <X className="h-3.5 w-3.5 mr-1" /> Rifiuta
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {selectedDayAppointments.map((apt) => (
+                  <AppointmentCard
+                    key={apt.id}
+                    appointment={apt}
+                    currentUserId={user?.id}
+                    onAccept={(a) => {
+                      respondAppointment.mutate({ id: a.id, status: "accepted", created_by: a.created_by });
+                      toast.success("Appuntamento accettato");
+                    }}
+                    onDecline={(a) => setDeclineTarget({ id: a.id, created_by: a.created_by })}
+                    onCancel={(a) => {
+                      cancelAppointment.mutate({ id: a.id, target_user_id: a.target_user_id });
+                      toast.success("Appuntamento annullato");
+                    }}
+                  />
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
