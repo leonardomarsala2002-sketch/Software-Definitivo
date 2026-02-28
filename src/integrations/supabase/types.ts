@@ -672,48 +672,87 @@ export type Database = {
       invitations: {
         Row: {
           accepted_at: string | null
+          birth_date: string | null
+          birth_place: string | null
+          contract_type: string | null
           created_at: string
           department: Database["public"]["Enums"]["department"] | null
+          domicile: string | null
           email: string
           expires_at: string
+          first_name: string | null
+          fiscal_code: string | null
+          hire_date: string | null
           id: string
           invited_by: string | null
+          last_name: string | null
+          level: string | null
+          phone: string | null
+          residence: string | null
           revoked_at: string | null
           role: Database["public"]["Enums"]["app_role"]
+          role_label: string | null
           status: string
           store_id: string | null
           token: string
           updated_at: string
+          weekly_contract_hours: number | null
         }
         Insert: {
           accepted_at?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          contract_type?: string | null
           created_at?: string
           department?: Database["public"]["Enums"]["department"] | null
+          domicile?: string | null
           email: string
           expires_at?: string
+          first_name?: string | null
+          fiscal_code?: string | null
+          hire_date?: string | null
           id?: string
           invited_by?: string | null
+          last_name?: string | null
+          level?: string | null
+          phone?: string | null
+          residence?: string | null
           revoked_at?: string | null
           role: Database["public"]["Enums"]["app_role"]
+          role_label?: string | null
           status?: string
           store_id?: string | null
           token?: string
           updated_at?: string
+          weekly_contract_hours?: number | null
         }
         Update: {
           accepted_at?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          contract_type?: string | null
           created_at?: string
           department?: Database["public"]["Enums"]["department"] | null
+          domicile?: string | null
           email?: string
           expires_at?: string
+          first_name?: string | null
+          fiscal_code?: string | null
+          hire_date?: string | null
           id?: string
           invited_by?: string | null
+          last_name?: string | null
+          level?: string | null
+          phone?: string | null
+          residence?: string | null
           revoked_at?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          role_label?: string | null
           status?: string
           store_id?: string | null
           token?: string
           updated_at?: string
+          weekly_contract_hours?: number | null
         }
         Relationships: [
           {
