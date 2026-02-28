@@ -112,7 +112,8 @@ Deno.serve(async (req) => {
     const storeSummary: Record<string, { sala: number; cucina: number }> = {};
 
     for (const store of stores) {
-      const sfx = store.name.replace("Store ", "").substring(0, 3).toLowerCase();
+      // Use last 4 chars of store ID as unique suffix to avoid email collisions
+      const sfx = store.id.slice(-4);
       const ideal = await calcIdealCounts(db, store.id);
       storeSummary[store.name] = ideal;
 
