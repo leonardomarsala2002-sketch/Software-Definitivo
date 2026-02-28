@@ -80,7 +80,7 @@ export default function Invitations() {
     <div className="space-y-8">
       <PageHeader title="Inviti" subtitle="Invita nuovi utenti nella piattaforma." />
 
-      <InviteForm />
+      {role === "super_admin" && <InviteForm />}
 
       {/* Invitations Table */}
       <Card className="border-border/60">
