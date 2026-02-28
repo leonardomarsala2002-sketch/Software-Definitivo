@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { TutorialProvider } from "@/components/tutorial/TutorialProvider";
 
 export function AppShell() {
   return (
@@ -21,6 +22,7 @@ export function AppShell() {
       </div>
 
       <MobileBottomNav />
+      <TutorialProvider />
     </div>
   );
 }

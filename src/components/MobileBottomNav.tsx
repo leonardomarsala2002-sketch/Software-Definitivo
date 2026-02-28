@@ -51,6 +51,7 @@ export function MobileBottomNav() {
             <Link
               key={item.url}
               to={item.url}
+              data-tutorial={item.tutorialId}
               className={cn(
                 "flex flex-col items-center gap-1 rounded-2xl px-4 py-2.5 min-w-[3rem] min-h-[2.75rem] transition-all active:scale-95",
                 isActive ? "text-primary" : "text-muted-foreground"
