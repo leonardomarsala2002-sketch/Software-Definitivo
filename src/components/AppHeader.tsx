@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Store, ChevronDown } from "lucide-react";
+import { LogOut, User, Store, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navItems } from "@/config/navigation";
 
@@ -56,8 +56,8 @@ export function AppHeader() {
         {pageTitle}
       </h1>
 
-      {/* Store selector (compact) */}
-      {role !== "employee" && stores.length > 1 ? (
+      {/* Store selector / label */}
+      {role === "super_admin" && stores.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -81,10 +81,21 @@ export function AppHeader() {
                 {s.name}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => window.location.href = "/manage-stores"}
+              className="text-[13px] text-primary"
+            >
+              <Plus className="mr-2 h-3.5 w-3.5" />
+              Aggiungi store
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : activeStore ? (
-        <span className="text-xs text-muted-foreground hidden sm:inline">{activeStore.name}</span>
+      ) : activeStore && role !== "employee" ? (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground hidden sm:inline-flex">
+          <Store className="h-3.5 w-3.5" />
+          {activeStore.name}
+        </span>
       ) : null}
 
       {/* Spacer */}
