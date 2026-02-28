@@ -199,7 +199,7 @@ const Employees = () => {
                   {salaEmployees.length}
                 </Badge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2">
                 {salaEmployees.length > 0 ? (
                   salaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (
@@ -221,7 +221,7 @@ const Employees = () => {
                   {cucinaEmployees.length}
                 </Badge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2">
                 {cucinaEmployees.length > 0 ? (
                   cucinaEmployees.map((emp) => <EmployeeCard key={emp.user_id} emp={emp} />)
                 ) : (
