@@ -21,6 +21,7 @@ import AcceptInvite from "@/pages/AcceptInvite";
 import SetPassword from "@/pages/SetPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
+import Messages from "@/pages/Messages";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
                 <Route path="/team-calendar" element={<TeamCalendar />} />
                 <Route path="/personal-calendar" element={<PersonalCalendar />} />
                 <Route path="/requests" element={<Requests />} />
+                <Route path="/messages" element={<Messages />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/store-settings" element={<StoreSettings />} />
                 <Route path="/audit-log" element={<AuditLog />} />
