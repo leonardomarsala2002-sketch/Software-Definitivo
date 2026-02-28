@@ -287,31 +287,64 @@ export type Database = {
       }
       employee_details: {
         Row: {
+          birth_date: string | null
+          birth_place: string | null
+          contract_type: string | null
           created_at: string
           department: Database["public"]["Enums"]["department"]
+          domicile: string | null
+          first_name: string | null
+          fiscal_code: string | null
+          hire_date: string | null
           id: string
           is_active: boolean
+          last_name: string | null
+          level: string | null
           phone: string | null
+          residence: string | null
+          role_label: string | null
           updated_at: string
           user_id: string
           weekly_contract_hours: number
         }
         Insert: {
+          birth_date?: string | null
+          birth_place?: string | null
+          contract_type?: string | null
           created_at?: string
           department: Database["public"]["Enums"]["department"]
+          domicile?: string | null
+          first_name?: string | null
+          fiscal_code?: string | null
+          hire_date?: string | null
           id?: string
           is_active?: boolean
+          last_name?: string | null
+          level?: string | null
           phone?: string | null
+          residence?: string | null
+          role_label?: string | null
           updated_at?: string
           user_id: string
           weekly_contract_hours?: number
         }
         Update: {
+          birth_date?: string | null
+          birth_place?: string | null
+          contract_type?: string | null
           created_at?: string
           department?: Database["public"]["Enums"]["department"]
+          domicile?: string | null
+          first_name?: string | null
+          fiscal_code?: string | null
+          hire_date?: string | null
           id?: string
           is_active?: boolean
+          last_name?: string | null
+          level?: string | null
           phone?: string | null
+          residence?: string | null
+          role_label?: string | null
           updated_at?: string
           user_id?: string
           weekly_contract_hours?: number

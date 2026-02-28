@@ -15,6 +15,18 @@ export interface EmployeeRow {
   primary_store_name: string | null;
   primary_store_id: string | null;
   availability_count: number;
+  // Extended profile fields
+  first_name: string | null;
+  last_name: string | null;
+  birth_date: string | null;
+  birth_place: string | null;
+  residence: string | null;
+  domicile: string | null;
+  fiscal_code: string | null;
+  hire_date: string | null;
+  level: string | null;
+  contract_type: string | null;
+  role_label: string | null;
 }
 
 export interface AvailabilityRow {
@@ -66,7 +78,7 @@ export function useEmployeeList(filterStoreIds?: string[]) {
     queryFn: async (): Promise<EmployeeRow[]> => {
       const { data: details, error: detailsErr } = await supabase
         .from("employee_details")
-        .select("user_id, department, weekly_contract_hours, phone, is_active");
+        .select("user_id, department, weekly_contract_hours, phone, is_active, first_name, last_name, birth_date, birth_place, residence, domicile, fiscal_code, hire_date, level, contract_type, role_label");
 
       if (detailsErr) throw detailsErr;
       if (!details || details.length === 0) return [];
@@ -132,6 +144,17 @@ export function useEmployeeList(filterStoreIds?: string[]) {
             primary_store_name: store?.name ?? null,
             primary_store_id: store?.id ?? null,
             availability_count: availCountMap.get(d.user_id) ?? 0,
+            first_name: (d as any).first_name ?? null,
+            last_name: (d as any).last_name ?? null,
+            birth_date: (d as any).birth_date ?? null,
+            birth_place: (d as any).birth_place ?? null,
+            residence: (d as any).residence ?? null,
+            domicile: (d as any).domicile ?? null,
+            fiscal_code: (d as any).fiscal_code ?? null,
+            hire_date: (d as any).hire_date ?? null,
+            level: (d as any).level ?? null,
+            contract_type: (d as any).contract_type ?? null,
+            role_label: (d as any).role_label ?? null,
           };
         });
     },

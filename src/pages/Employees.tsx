@@ -54,7 +54,7 @@ const Employees = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const canEdit = role === "super_admin" || role === "admin";
+  const canEdit = role === "super_admin";
 
   // Compute department lists from search filter
   const searchFiltered = (employees ?? []).filter((e) => {
@@ -132,7 +132,7 @@ const Employees = () => {
           title="Dipendenti"
           subtitle="Gestisci il personale, i ruoli e le assegnazioni agli store"
         />
-        {(role === "super_admin" || role === "admin") && (
+        {role === "super_admin" && (
           <button
             onClick={() => navigate("/invitations")}
             className="rounded-full flex h-10 w-10 items-center justify-center text-primary bg-primary/10 shadow-lg hover:border-2 hover:border-primary transition-all duration-200"

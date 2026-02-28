@@ -28,11 +28,25 @@ interface Props {
 }
 
 export default function EmployeeInfoTab({ employee, canEdit }: Props) {
+  const { role } = useAuth();
   const [department, setDepartment] = useState(employee.department);
   const [hours, setHours] = useState(employee.weekly_contract_hours);
   const [phone, setPhone] = useState(employee.phone ?? "");
   const [isActive, setIsActive] = useState(employee.is_active);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  // Extended fields
+  const [firstName, setFirstName] = useState(employee.first_name ?? "");
+  const [lastName, setLastName] = useState(employee.last_name ?? "");
+  const [birthDate, setBirthDate] = useState(employee.birth_date ?? "");
+  const [birthPlace, setBirthPlace] = useState(employee.birth_place ?? "");
+  const [residence, setResidence] = useState(employee.residence ?? "");
+  const [domicile, setDomicile] = useState(employee.domicile ?? "");
+  const [fiscalCode, setFiscalCode] = useState(employee.fiscal_code ?? "");
+  const [hireDate, setHireDate] = useState(employee.hire_date ?? "");
+  const [level, setLevel] = useState(employee.level ?? "");
+  const [contractType, setContractType] = useState(employee.contract_type ?? "");
+  const [roleLabel, setRoleLabel] = useState(employee.role_label ?? "");
 
   const { data: availability } = useEmployeeAvailability(employee.user_id);
   const update = useUpdateEmployeeDetails();
@@ -41,7 +55,18 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
     department !== employee.department ||
     hours !== employee.weekly_contract_hours ||
     phone !== (employee.phone ?? "") ||
-    isActive !== employee.is_active;
+    isActive !== employee.is_active ||
+    firstName !== (employee.first_name ?? "") ||
+    lastName !== (employee.last_name ?? "") ||
+    birthDate !== (employee.birth_date ?? "") ||
+    birthPlace !== (employee.birth_place ?? "") ||
+    residence !== (employee.residence ?? "") ||
+    domicile !== (employee.domicile ?? "") ||
+    fiscalCode !== (employee.fiscal_code ?? "") ||
+    hireDate !== (employee.hire_date ?? "") ||
+    level !== (employee.level ?? "") ||
+    contractType !== (employee.contract_type ?? "") ||
+    roleLabel !== (employee.role_label ?? "");
 
   const ready = isEmployeeReady(employee);
   const hasCustomSchedule = (availability?.length ?? 0) > 0;
@@ -55,7 +80,18 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
         weekly_contract_hours: hours,
         phone: phone || null,
         is_active: isActive,
-      },
+        first_name: firstName || null,
+        last_name: lastName || null,
+        birth_date: birthDate || null,
+        birth_place: birthPlace || null,
+        residence: residence || null,
+        domicile: domicile || null,
+        fiscal_code: fiscalCode || null,
+        hire_date: hireDate || null,
+        level: level || null,
+        contract_type: contractType || null,
+        role_label: roleLabel || null,
+      } as any,
     });
   };
 
@@ -146,6 +182,115 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
             <p className="text-xs text-muted-foreground">Il dipendente può ricevere turni</p>
           </div>
           <Switch checked={isActive} onCheckedChange={setIsActive} disabled={!canEdit} />
+        </div>
+
+        {/* ─── Extended Profile Fields ─── */}
+        <div className="pt-2 border-t border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Dati anagrafici e contrattuali</p>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Nome</Label>
+                {canEdit ? (
+                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Nome" />
+                ) : (
+                  <p className="text-sm text-foreground">{firstName || "—"}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Cognome</Label>
+                {canEdit ? (
+                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Cognome" />
+                ) : (
+                  <p className="text-sm text-foreground">{lastName || "—"}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Data di nascita</Label>
+                {canEdit ? (
+                  <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+                ) : (
+                  <p className="text-sm text-foreground">{birthDate || "—"}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Luogo di nascita</Label>
+                {canEdit ? (
+                  <Input value={birthPlace} onChange={(e) => setBirthPlace(e.target.value)} placeholder="Luogo di nascita" />
+                ) : (
+                  <p className="text-sm text-foreground">{birthPlace || "—"}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Codice fiscale</Label>
+              {canEdit ? (
+                <Input value={fiscalCode} onChange={(e) => setFiscalCode(e.target.value.toUpperCase())} placeholder="RSSMRC90A01H501Z" className="font-mono" />
+              ) : (
+                <p className="text-sm text-foreground font-mono">{fiscalCode || "—"}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Residenza</Label>
+              {canEdit ? (
+                <Input value={residence} onChange={(e) => setResidence(e.target.value)} placeholder="Indirizzo di residenza" />
+              ) : (
+                <p className="text-sm text-foreground">{residence || "—"}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Domicilio</Label>
+              {canEdit ? (
+                <Input value={domicile} onChange={(e) => setDomicile(e.target.value)} placeholder="Indirizzo di domicilio" />
+              ) : (
+                <p className="text-sm text-foreground">{domicile || "—"}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Data assunzione</Label>
+                {canEdit ? (
+                  <Input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+                ) : (
+                  <p className="text-sm text-foreground">{hireDate || "—"}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Livello</Label>
+                {canEdit ? (
+                  <Input value={level} onChange={(e) => setLevel(e.target.value)} placeholder="es. 4°" />
+                ) : (
+                  <p className="text-sm text-foreground">{level || "—"}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Tipo contratto</Label>
+                {canEdit ? (
+                  <Input value={contractType} onChange={(e) => setContractType(e.target.value)} placeholder="es. Indeterminato" />
+                ) : (
+                  <p className="text-sm text-foreground">{contractType || "—"}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Ruolo</Label>
+                {canEdit ? (
+                  <Input value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder="es. Cameriere" />
+                ) : (
+                  <p className="text-sm text-foreground">{roleLabel || "—"}</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Custom schedule button */}
