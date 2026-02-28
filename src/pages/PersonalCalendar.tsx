@@ -1,16 +1,20 @@
-import { useMemo } from "react";
-import { Calendar, Sun, Scissors } from "lucide-react";
+import { useMemo, useCallback } from "react";
+import { Calendar, Sun, Scissors, Download, Smartphone } from "lucide-react";
 import { format, parseISO, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { formatEndTime } from "@/lib/shiftColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { generateIcsContent, downloadIcsFile } from "@/lib/icsExport";
 
 interface PersonalShift {
   id: string;
@@ -72,12 +76,65 @@ const PersonalCalendar = () => {
     [groupedByDate]
   );
 
+  const handleExportIcs = useCallback(() => {
+    if (shifts.length === 0) {
+      toast.info("Nessun turno da esportare");
+      return;
+    }
+    const ics = generateIcsContent(shifts);
+    downloadIcsFile(ics, `turni-${format(new Date(), "yyyy-MM-dd")}.ics`);
+    toast.success("File .ics scaricato! Aprilo per aggiungerlo al tuo calendario");
+  }, [shifts]);
+
+  const handleSubscribeUrl = useCallback(() => {
+    // Copy a hint for manual subscription
+    const instructions = 
+      "Per sincronizzare automaticamente:\n" +
+      "1. Scarica il file .ics\n" +
+      "2. Importalo in Google Calendar, Apple Calendar o Outlook\n" +
+      "3. I turni appariranno nel tuo calendario";
+    toast.info("Scarica il file .ics e importalo nella tua app calendario preferita");
+  }, []);
+
   return (
     <div>
-      <PageHeader
-        title="Calendario Personale"
-        subtitle="I tuoi turni e la tua pianificazione settimanale"
-      />
+      <div className="flex items-center justify-between mb-2">
+        <PageHeader
+          title="Calendario Personale"
+          subtitle="I tuoi turni e la tua pianificazione settimanale"
+        />
+        {shifts.length > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                <Smartphone className="h-4 w-4" />
+                <span className="hidden sm:inline">Esporta</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-3">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-1">Sincronizza col telefono</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Scarica il file .ics e importalo in Google Calendar, Apple Calendar o Outlook.
+                  </p>
+                </div>
+                <Button onClick={handleExportIcs} className="w-full gap-2" size="sm">
+                  <Download className="h-4 w-4" />
+                  Scarica file .ics
+                </Button>
+                <div className="border-t border-border pt-2">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    <strong>Google Calendar:</strong> Impostazioni → Importa ed esporta → Importa<br />
+                    <strong>Apple Calendar:</strong> Apri il file .ics → Aggiungi<br />
+                    <strong>Outlook:</strong> File → Apri e Esporta → Importa
+                  </p>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
