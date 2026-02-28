@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
@@ -12,17 +12,33 @@ interface StoreInfo {
   is_primary: boolean;
 }
 
+/** Cycle order for preview role switching */
+const ROLE_CYCLE: (AppRole | null)[] = ["super_admin", "admin", "employee", null];
+
+/** Returns true when running inside Lovable preview (not published) */
+function isPreviewEnvironment(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host.includes("-preview--") || host === "localhost";
+}
+
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
-  /** The effective role (may be overridden by "View as Employee") */
+  /** The effective role (may be overridden by preview switch) */
   role: AppRole | null;
   /** The real role from the database */
   realRole: AppRole | null;
-  /** Whether we're currently in "view as employee" mode */
+  /** Whether we're currently in preview-role mode */
   isViewingAsEmployee: boolean;
-  /** Toggle "view as employee" mode (only for admin/super_admin) */
+  /** Toggle preview role (kept for backward compat, but now cycles) */
   toggleViewAsEmployee: () => void;
+  /** Cycle to next preview role (super_admin → admin → employee → off) */
+  cyclePreviewRole: () => void;
+  /** The currently forced preview role, or null if using real role */
+  previewRole: AppRole | null;
+  /** Whether preview switching is available */
+  isPreviewMode: boolean;
   stores: StoreInfo[];
   activeStore: StoreInfo | null;
   setActiveStore: (store: StoreInfo) => void;
@@ -38,19 +54,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [realRole, setRealRole] = useState<AppRole | null>(null);
-  const [isViewingAsEmployee, setIsViewingAsEmployee] = useState(false);
+  const [previewRole, setPreviewRole] = useState<AppRole | null>(null);
   const [stores, setStores] = useState<StoreInfo[]>([]);
   const [activeStore, setActiveStore] = useState<StoreInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Effective role: if viewing as employee, override to "employee"
-  const role: AppRole | null = isViewingAsEmployee && realRole ? "employee" : realRole;
+  const isPreviewMode = useMemo(() => isPreviewEnvironment(), []);
 
-  const toggleViewAsEmployee = useCallback(() => {
-    if (realRole === "super_admin" || realRole === "admin") {
-      setIsViewingAsEmployee(prev => !prev);
-    }
-  }, [realRole]);
+  // Effective role: use previewRole if set, otherwise realRole
+  const role: AppRole | null = previewRole ?? realRole;
+
+  // Backward compat: "isViewingAsEmployee" is true when previewing a non-real role
+  const isViewingAsEmployee = previewRole !== null && previewRole !== realRole;
+
+  /** Cycle through preview roles: super_admin → admin → employee → off (real) */
+  const cyclePreviewRole = useCallback(() => {
+    if (!isPreviewMode) return;
+    setPreviewRole(prev => {
+      const currentIdx = ROLE_CYCLE.indexOf(prev);
+      const nextIdx = (currentIdx + 1) % ROLE_CYCLE.length;
+      return ROLE_CYCLE[nextIdx];
+    });
+  }, [isPreviewMode]);
+
+  // Legacy toggle (maps to cycle)
+  const toggleViewAsEmployee = cyclePreviewRole;
 
   const loadUserData = useCallback(async (userId: string) => {
     try {
@@ -124,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRealRole(null);
           setStores([]);
           setActiveStore(null);
-          setIsViewingAsEmployee(false);
+          setPreviewRole(null);
           setIsLoading(false);
         }
       }
@@ -149,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRealRole(null);
     setStores([]);
     setActiveStore(null);
-    setIsViewingAsEmployee(false);
+    setPreviewRole(null);
   }, []);
 
   const isAuthorized = realRole !== null && stores.length > 0;
@@ -163,6 +191,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         realRole,
         isViewingAsEmployee,
         toggleViewAsEmployee,
+        cyclePreviewRole,
+        previewRole,
+        isPreviewMode,
         stores,
         activeStore,
         setActiveStore,
