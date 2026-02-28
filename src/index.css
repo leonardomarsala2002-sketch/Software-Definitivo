@@ -56,6 +56,11 @@
     --chart-4: 200 70% 50%;
     --chart-5: 0 0% 40%;
 
+    --shift-blue: 217 91% 60%;
+    --shift-yellow: 45 93% 47%;
+    --shift-green: 152 100% 38%;
+    --shift-violet: 270 70% 55%;
+
     --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.06);
     --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.06);
     --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.08), 0 1px 2px -1px hsl(0 0% 0% / 0.06);
@@ -116,6 +121,11 @@
     --chart-3: 38 90% 50%;
     --chart-4: 200 70% 50%;
     --chart-5: 0 0% 40%;
+
+    --shift-blue: 217 91% 65%;
+    --shift-yellow: 45 93% 52%;
+    --shift-green: 152 100% 42%;
+    --shift-violet: 270 70% 60%;
 
     --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.15);
     --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.15);

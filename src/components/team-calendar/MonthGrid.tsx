@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { getShiftColor } from "@/lib/shiftColors";
 import { ArrowRightLeft } from "lucide-react";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { LendingRecord } from "@/hooks/useLendingData";
@@ -162,8 +163,8 @@ export function MonthGrid({
                           : s.status === "archived"
                             ? "bg-muted/60 text-muted-foreground"
                             : s.status === "draft"
-                              ? "bg-warning/15 text-warning"
-                              : "bg-primary/15 text-primary"
+                              ? (() => { const c = getShiftColor(s); return `${c.bg} ${c.text} opacity-70`; })()
+                              : (() => { const c = getShiftColor(s); return `${c.bg} ${c.text}`; })()
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>

@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { getShiftColor } from "@/lib/shiftColors";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
 import type { LendingRecord } from "@/hooks/useLendingData";
@@ -36,17 +37,6 @@ interface DayDetailDialogProps {
   onDeleteShift: (id: string) => void;
 }
 
-function getShiftColor(s: ShiftRow): { bg: string; border: string; label?: string } {
-  if (s.is_day_off) return { bg: "bg-destructive/15", border: "border-destructive/30" };
-  const startH = s.start_time ? parseInt(s.start_time.split(":")[0]) : -1;
-  const endH = s.end_time ? parseInt(s.end_time.split(":")[0]) : -1;
-
-  if (startH === 9) return { bg: "bg-chart-4/20", border: "border-chart-4/40" };
-  if (startH === 11) return { bg: "bg-warning/20", border: "border-warning/40" };
-  if (startH === 19) return { bg: "bg-chart-3/20", border: "border-chart-3/40" };
-  if (endH === 17 || endH === 19) return { bg: "bg-primary/20", border: "border-primary/40" };
-  return { bg: "bg-secondary", border: "border-border" };
-}
 
 export function DayDetailDialog({
   open, onOpenChange, date, department, shifts, employees,
