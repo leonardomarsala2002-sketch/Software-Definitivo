@@ -223,7 +223,7 @@ const Dashboard = () => {
   /* ── Employee-only dashboard ── */
   if (!isAdmin) {
     return (
-      <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 animate-in fade-in duration-500">
+      <div className="flex h-full flex-col overflow-y-auto gap-5 pb-6 animate-in fade-in duration-500">
         {/* Weekly Timeline */}
         <Card className="p-4 flex flex-col flex-shrink-0">
           <CardHeader className="p-0 pb-3">
@@ -292,60 +292,63 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* New Request (inline form) */}
-        <Card className="p-4 flex flex-col">
-          <CardHeader className="p-0 pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
-                <Inbox className="h-4 w-4 text-primary" />
-              </div>
-              Nuova Richiesta
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {activeStore?.id ? (
-              <RequestForm department={department} storeId={activeStore.id} onClose={() => {}} />
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">Nessuno store assegnato.</p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Request + Calendar side by side on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-shrink-0">
+          {/* New Request */}
+          <Card className="p-4 flex flex-col">
+            <CardHeader className="p-0 pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                  <Inbox className="h-4 w-4 text-primary" />
+                </div>
+                Nuova Richiesta
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {activeStore?.id ? (
+                <RequestForm department={department} storeId={activeStore.id} onClose={() => {}} />
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Nessuno store assegnato.</p>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Monthly Calendar */}
-        <Card className="p-4 flex flex-col">
-          <CardHeader className="p-0 pb-3">
-            <CardTitle className="flex items-center justify-between text-sm font-semibold">
-              <span>{MONTHS_IT[calMonth]} {calYear}</span>
-              <div className="flex gap-1">
-                <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronLeft className="h-4 w-4" /></button>
-                <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronRight className="h-4 w-4" /></button>
+          {/* Monthly Calendar */}
+          <Card className="p-4 flex flex-col">
+            <CardHeader className="p-0 pb-3">
+              <CardTitle className="flex items-center justify-between text-sm font-semibold">
+                <span>{MONTHS_IT[calMonth]} {calYear}</span>
+                <div className="flex gap-1">
+                  <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronLeft className="h-4 w-4" /></button>
+                  <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent transition-colors"><ChevronRight className="h-4 w-4" /></button>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col p-0">
+              <div className="grid grid-cols-7 mb-2">
+                {DAYS_IT.map((d, i) => (
+                  <span key={d} className={`text-center text-[11px] font-medium text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
+                ))}
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-0">
-            <div className="grid grid-cols-7 mb-2">
-              {DAYS_IT.map((d, i) => (
-                <span key={d} className={`text-center text-[11px] font-medium text-muted-foreground ${i >= 5 ? "opacity-50" : ""}`}>{d}</span>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-y-0.5">
-              {calendarCells.map((day, idx) => {
-                const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
-                const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
-                const isWeekend = idx % 7 >= 5;
-                return (
-                  <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                    className={`mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors
-                      ${day === null ? "invisible" : ""} ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
-                      ${isToday && !isSelected ? "bg-primary/15 text-primary font-bold" : ""}
-                      ${!isToday && !isSelected && day !== null ? "hover:bg-accent text-foreground/70 font-medium" : ""}
-                      ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
-                    `}>{day}</button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+              <div className="grid grid-cols-7 gap-y-0.5">
+                {calendarCells.map((day, idx) => {
+                  const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+                  const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
+                  const isWeekend = idx % 7 >= 5;
+                  return (
+                    <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
+                      className={`mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors
+                        ${day === null ? "invisible" : ""} ${isSelected ? "bg-primary text-primary-foreground font-bold" : ""}
+                        ${isToday && !isSelected ? "bg-primary/15 text-primary font-bold" : ""}
+                        ${!isToday && !isSelected && day !== null ? "hover:bg-accent text-foreground/70 font-medium" : ""}
+                        ${isWeekend && !isSelected && !isToday ? "opacity-50" : ""}
+                      `}>{day}</button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
