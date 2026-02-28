@@ -44,12 +44,16 @@ const Employees = () => {
 
   // Initialize with active store once available
   const storeIds = useMemo(() => {
-    if (role !== "super_admin") return null; // non-super_admin uses default hook behavior
-    if (selectedStoreIds !== null) return selectedStoreIds;
-    return activeStore ? [activeStore.id] : allStores.map((s) => s.id);
-  }, [role, selectedStoreIds, activeStore, allStores]);
+    if (role === "super_admin") {
+      if (selectedStoreIds !== null) return selectedStoreIds;
+      return activeStore ? [activeStore.id] : allStores.map((s) => s.id);
+    }
+    // For admin/employee: filter by active store or assigned stores
+    if (activeStore) return [activeStore.id];
+    return authStores.map((s) => s.id);
+  }, [role, selectedStoreIds, activeStore, allStores, authStores]);
 
-  const { data: employees, isLoading, error } = useEmployeeList(role === "super_admin" ? storeIds ?? undefined : undefined);
+  const { data: employees, isLoading, error } = useEmployeeList(storeIds.length > 0 ? storeIds : undefined);
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
