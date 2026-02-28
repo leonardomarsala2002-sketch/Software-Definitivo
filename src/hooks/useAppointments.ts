@@ -15,6 +15,7 @@ export interface Appointment {
   created_by: string;
   target_user_id: string | null;
   status: string;
+  decline_reason: string | null;
   responded_at: string | null;
   created_at: string;
   updated_at: string;
@@ -121,6 +122,34 @@ export function useRespondAppointment() {
         type: "appointment_response",
         link: "/",
       });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
+  });
+}
+
+export function useCancelAppointment() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id, target_user_id }: { id: string; target_user_id: string | null }) => {
+      const { error } = await supabase
+        .from("appointments")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+
+      // Notify the target user if one exists
+      if (target_user_id) {
+        const userName = user?.user_metadata?.full_name || user?.email || "Un utente";
+        await supabase.from("notifications").insert({
+          user_id: target_user_id,
+          title: "Appuntamento annullato",
+          message: `${userName} ha annullato un appuntamento`,
+          type: "appointment_cancelled",
+          link: "/",
+        });
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
   });
