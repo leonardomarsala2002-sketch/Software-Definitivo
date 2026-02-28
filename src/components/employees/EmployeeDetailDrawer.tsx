@@ -15,6 +15,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
+  canEditSchedule?: boolean;
 }
 
 function getInitials(name: string | null) {
@@ -27,7 +28,7 @@ function getInitials(name: string | null) {
     .toUpperCase();
 }
 
-export default function EmployeeDetailDrawer({ employee, open, onOpenChange, canEdit }: Props) {
+export default function EmployeeDetailDrawer({ employee, open, onOpenChange, canEdit, canEditSchedule }: Props) {
   if (!employee) return null;
 
   return (
@@ -49,7 +50,7 @@ export default function EmployeeDetailDrawer({ employee, open, onOpenChange, can
         </SheetHeader>
 
         <ScrollArea className="flex-1 px-6 pb-6">
-          <EmployeeInfoTab employee={employee} canEdit={canEdit} />
+          <EmployeeInfoTab employee={employee} canEdit={canEdit} canEditSchedule={canEditSchedule} />
         </ScrollArea>
       </SheetContent>
     </Sheet>
