@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          appointment_date: string
+          category: string
+          created_at: string
+          created_by: string
+          description: string | null
+          end_time: string
+          id: string
+          notes: string | null
+          responded_at: string | null
+          start_time: string
+          status: string
+          store_id: string
+          target_user_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_date: string
+          category?: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          end_time: string
+          id?: string
+          notes?: string | null
+          responded_at?: string | null
+          start_time: string
+          status?: string
+          store_id: string
+          target_user_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_date?: string
+          category?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          end_time?: string
+          id?: string
+          notes?: string | null
+          responded_at?: string | null
+          start_time?: string
+          status?: string
+          store_id?: string
+          target_user_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
