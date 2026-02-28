@@ -385,15 +385,51 @@ function runIteration(
     const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
     const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
 
-    const effectiveEntries = entries.length > 0 ? entries.filter(e => e >= dayOpenH && e < effectiveClose) : [dayOpenH];
-    const effectiveExits = exits.length > 0 ? exits.filter(e => e > dayOpenH && e <= effectiveClose) : [effectiveClose];
-    if (effectiveEntries.length === 0 || effectiveExits.length === 0) continue;
-
     const hourCoverage = new Map<number, number>();
     for (const c of dayCoverage) {
       const h = parseInt(c.hour_slot.split(":")[0], 10);
       hourCoverage.set(h, c.min_staff_required);
     }
+
+    // ── Dynamic entry/exit points from coverage transitions ──
+    // Add every hour where coverage demand changes as a valid entry/exit point.
+    // This lets the engine create targeted short shifts (e.g. 13-15) that don't
+    // cross into already-saturated hours, solving the overbooking deadlock.
+    const covHoursSorted = [...hourCoverage.keys()].sort((a, b) => a - b);
+    const dynamicEntries = new Set<number>(
+      entries.length > 0 ? entries.filter(e => e >= dayOpenH && e < effectiveClose) : [dayOpenH]
+    );
+    const dynamicExits = new Set<number>(
+      exits.length > 0 ? exits.filter(e => e > dayOpenH && e <= effectiveClose) : [effectiveClose]
+    );
+    // Add coverage boundary hours as entry/exit points
+    for (const h of covHoursSorted) {
+      if (h >= dayOpenH && h < effectiveClose) dynamicEntries.add(h);
+      if (h > dayOpenH && h <= effectiveClose) dynamicExits.add(h);
+    }
+    // Also add h+1 for the last coverage hour (shift can end there)
+    if (covHoursSorted.length > 0) {
+      const lastCovH = covHoursSorted[covHoursSorted.length - 1];
+      if (lastCovH + 1 <= effectiveClose) dynamicExits.add(lastCovH + 1);
+    }
+    // Add transition points: where demand changes significantly
+    for (let idx = 1; idx < covHoursSorted.length; idx++) {
+      const prevH = covHoursSorted[idx - 1];
+      const currH = covHoursSorted[idx];
+      if (currH === prevH + 1) {
+        const prevNeed = hourCoverage.get(prevH) ?? 0;
+        const currNeed = hourCoverage.get(currH) ?? 0;
+        if (Math.abs(prevNeed - currNeed) >= 1) {
+          // Transition point: add as both entry and exit
+          if (currH >= dayOpenH && currH < effectiveClose) dynamicEntries.add(currH);
+          if (currH > dayOpenH && currH <= effectiveClose) dynamicExits.add(currH);
+        }
+      }
+    }
+
+    const effectiveEntries = [...dynamicEntries].sort((a, b) => a - b);
+    const effectiveExits = [...dynamicExits].sort((a, b) => a - b);
+    if (effectiveEntries.length === 0 || effectiveExits.length === 0) continue;
 
     let dailyTeamHoursUsed = 0;
 
@@ -503,11 +539,9 @@ function runIteration(
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
       let bestScore = -Infinity;
 
-      // Compute transition exits for this day: hours where coverage drops by 2+ 
-      // (e.g. hour 15 needs 1 but hour 14 needs 4 → transition at 15)
+      // Compute transition exits: hours where coverage demand drops significantly
       const transitionExits = new Set<number>();
       if (preferShortShifts) {
-        const covHoursSorted = [...hourCoverage.keys()].sort((a, b) => a - b);
         for (let idx = 1; idx < covHoursSorted.length; idx++) {
           const prevH = covHoursSorted[idx - 1];
           const currH = covHoursSorted[idx];
@@ -515,7 +549,7 @@ function runIteration(
             const prevNeed = hourCoverage.get(prevH) ?? 0;
             const currNeed = hourCoverage.get(currH) ?? 0;
             if (prevNeed - currNeed >= 2) {
-              transitionExits.add(currH); // exit AT currH means shift ends at currH
+              transitionExits.add(currH);
             }
           }
         }
@@ -549,7 +583,7 @@ function runIteration(
           if (preferShortShifts) {
             // Density-based scoring: prefer shorter shifts that cover more uncovered hours per hour worked
             const density = coverCount / duration;
-            const transitionBonus = transitionExits.has(exit) ? 1000 : 0;
+            const transitionBonus = transitionExits.has(exit) ? 0.1 : 0;
             const score = density + transitionBonus;
             if (score > bestScore || (score === bestScore && duration < (bestEnd - bestStart))) {
               bestScore = score;
@@ -736,6 +770,155 @@ function runIteration(
           weeklySplits.set(emp.user_id, (weeklySplits.get(emp.user_id) ?? 0) + 1);
 
           // Update last shift end
+          const existingEnd = lastShiftEnd.get(emp.user_id);
+          if (!existingEnd || dateStr > existingEnd.date || (dateStr === existingEnd.date && bestEnd > existingEnd.endHour)) {
+            lastShiftEnd.set(emp.user_id, { date: dateStr, endHour: bestEnd === 24 ? 24 : bestEnd });
+          }
+
+          for (let h = bestStart; h < bestEnd; h++) {
+            if (staffAssigned.has(h)) {
+              staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
+            }
+          }
+        }
+      }
+    }
+
+    // ── THIRD PASS: Gap-filling with any available employee using dynamic entry/exit ──
+    // This catches cases where the first pass skipped employees because all shifts
+    // from original entry/exit points crossed saturated hours, but now dynamic
+    // points allow creating short targeted shifts.
+    let hasUncoveredAfterSplits = false;
+    for (const [h, needed] of hourCoverage) {
+      if ((staffAssigned.get(h) ?? 0) < needed) { hasUncoveredAfterSplits = true; break; }
+    }
+
+    if (hasUncoveredAfterSplits) {
+      // Try ALL available employees (including those without shifts today)
+      let gapFillers = deptEmployees.filter(emp => {
+        if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) return false;
+        const ec = empConstraints.get(emp.user_id);
+        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+        const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+        if (empWeeklyUsed >= empMaxWeekly) return false;
+        // Check days off limit
+        const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
+        const worked = daysWorked.get(emp.user_id)!;
+        if (worked.size >= maxDaysWorked && !worked.has(dateStr)) return false;
+        return true;
+      });
+      gapFillers = randomize ? shuffle(gapFillers) : gapFillers;
+
+      for (const emp of gapFillers) {
+        let stillUncovered = false;
+        for (const [h, needed] of hourCoverage) {
+          if ((staffAssigned.get(h) ?? 0) < needed) { stillUncovered = true; break; }
+        }
+        if (!stillUncovered) break;
+        if (weeklyTeamHoursUsed >= maxWeeklyTeamHours) break;
+        if (dailyTeamHoursUsed >= maxDailyTeamHours) break;
+
+        const ec = empConstraints.get(emp.user_id);
+        const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+        const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+
+        // Check if already has shifts today
+        const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
+        const dailyHoursUsed = todayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+        const maxRemainingDaily = empMaxDaily - dailyHoursUsed;
+        const maxRemainingWeekly = empMaxWeekly - empWeeklyUsed;
+        const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly);
+        if (maxRemaining < 3) continue; // MIN_SHIFT_HOURS
+
+        // If already has a shift today, enforce split constraints
+        if (todayShifts.length > 0) {
+          const empWeeklySplitCount = weeklySplits.get(emp.user_id) ?? 0;
+          const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
+          if (empWeeklySplitCount >= maxSplitsWeek) continue;
+        }
+
+        // 11h rest
+        let earliestStart = 0;
+        const prev = lastShiftEnd.get(emp.user_id);
+        if (prev) {
+          const prevDate = new Date(prev.date + "T00:00:00Z");
+          const currDate = new Date(dateStr + "T00:00:00Z");
+          const dayDiff = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (dayDiff === 1) {
+            earliestStart = Math.max(0, 11 - (24 - prev.endHour));
+          }
+        }
+
+        // If has a shift today, enforce 2h gap
+        if (todayShifts.length > 0) {
+          const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
+          earliestStart = Math.max(earliestStart, lastEndToday + 2);
+        }
+
+        let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+        const blocks3 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
+        if (blocks3) empAvail = applyPartialBlocks(empAvail, blocks3);
+        if (empAvail.length === 0) continue;
+
+        // Find the best short shift covering only uncovered hours
+        let bestStart = -1, bestEnd = -1, bestCoverage = 0;
+        for (const entry of effectiveEntries) {
+          if (entry < earliestStart) continue;
+          for (const exit of effectiveExits) {
+            if (exit <= entry) continue;
+            const duration = exit - entry;
+            if (duration < 3) continue;
+            if (duration > maxRemaining) continue;
+            if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
+
+            const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
+            if (!withinAvail) continue;
+
+            // STRICT no overbooking
+            let wouldOverbook = false;
+            let coverCount = 0;
+            for (let h = entry; h < exit; h++) {
+              const needed = hourCoverage.get(h);
+              if (needed !== undefined) {
+                const current = staffAssigned.get(h) ?? 0;
+                if (current >= needed) { wouldOverbook = true; break; }
+                if (current < needed) coverCount++;
+              }
+            }
+            if (wouldOverbook) continue;
+            if (coverCount === 0) continue;
+
+            if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
+              bestCoverage = coverCount;
+              bestStart = entry;
+              bestEnd = exit;
+            }
+          }
+        }
+
+        if (bestStart >= 0 && bestEnd > bestStart) {
+          const duration = bestEnd - bestStart;
+          const isSplit = todayShifts.length > 0;
+
+          shifts.push({
+            store_id: storeId, user_id: emp.user_id, date: dateStr,
+            start_time: `${String(bestStart).padStart(2, "0")}:00`,
+            end_time: `${String(bestEnd === 24 ? 0 : bestEnd).padStart(2, "0")}:00`,
+            department, is_day_off: false, status: "draft", generation_run_id: runId,
+          });
+
+          weeklyHours.set(emp.user_id, empWeeklyUsed + duration);
+          daysWorked.get(emp.user_id)!.add(dateStr);
+          dailyTeamHoursUsed += duration;
+          weeklyTeamHoursUsed += duration;
+
+          const empDailySplits = dailySplits.get(emp.user_id)!;
+          empDailySplits.set(dateStr, (empDailySplits.get(dateStr) ?? 0) + 1);
+          if (isSplit) {
+            weeklySplits.set(emp.user_id, (weeklySplits.get(emp.user_id) ?? 0) + 1);
+          }
+
           const existingEnd = lastShiftEnd.get(emp.user_id);
           if (!existingEnd || dateStr > existingEnd.date || (dateStr === existingEnd.date && bestEnd > existingEnd.endHour)) {
             lastShiftEnd.set(emp.user_id, { date: dateStr, endHour: bestEnd === 24 ? 24 : bestEnd });
