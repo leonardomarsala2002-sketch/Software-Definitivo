@@ -516,6 +516,74 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Weekly Timeline */}
+      <Card className="p-4 flex flex-col flex-shrink-0">
+        <CardHeader className="p-0 pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+              <CalendarIcon className="h-4 w-4 text-primary" />
+            </div>
+            Il mio orario settimanale
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[0].getMonth()]}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="flex mb-1">
+            <div className="w-20 shrink-0" />
+            <div className="flex-1 flex">
+              {TIMELINE_HOURS.map((h) => (
+                <div key={h} className="text-[10px] text-muted-foreground font-medium text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
+                  {String(h).padStart(2, "0")}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            {weekDates.map((d, i) => {
+              const isDayToday = d.toDateString() === today.toDateString();
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              const dayShifts = weekShifts.filter((s) => s.date === dateStr);
+              const isDayOff = dayShifts.some((s) => s.is_day_off);
+              return (
+                <div key={i} className="flex items-center min-h-[28px]">
+                  <div className={`w-20 shrink-0 pr-2 text-right text-xs font-medium ${isDayToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                    <span className={isDayToday ? "bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[11px]" : ""}>
+                      {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
+                    </span>
+                  </div>
+                  <div className="flex-1 relative h-6 bg-secondary rounded-lg overflow-hidden border border-border">
+                    {TIMELINE_HOURS.map((h, hi) => (
+                      <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
+                    ))}
+                    {isDayOff ? (
+                      <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                        <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
+                      </div>
+                    ) : (
+                      dayShifts.filter((s) => !s.is_day_off && s.start_time && s.end_time).map((s) => {
+                        const sH = parseInt(s.start_time!.split(":")[0]);
+                        let eH = parseInt(s.end_time!.split(":")[0]);
+                        if (eH === 0) eH = 24;
+                        const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                        const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                        const width = ((eH - sH) / totalSpan) * 100;
+                        return (
+                          <div key={s.id} className="absolute top-0.5 bottom-0.5 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
+                            <span className="text-[10px] font-semibold text-primary">{s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Appointment Form Dialog */}
       <AppointmentFormDialog
         open={showAppointmentForm}
