@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { formatEndTime } from "@/lib/shiftColors";
 import { getShiftColor } from "@/lib/shiftColors";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
@@ -167,7 +168,7 @@ export function DayDetailDialog({
                                 style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, width)}%` }}
                               >
                                 <span className="text-[10px] font-semibold text-foreground/80">
-                                  {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
+                                  {s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}
                                 </span>
                               </div>
                             );
