@@ -53,11 +53,11 @@ export function KpiCards({ shifts, employeeCount, year, month }: KpiCardsProps) 
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+    <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-4 md:overflow-visible mb-3">
       {cards.map((c) => (
         <div
           key={c.label}
-          className="rounded-2xl border border-border bg-card p-3.5 flex items-start gap-3"
+          className="min-w-[140px] snap-start md:min-w-0 rounded-2xl border border-border bg-card p-3.5 flex items-start gap-3"
         >
           <div className="rounded-xl p-2 bg-secondary">
             <c.icon className={`h-4 w-4 ${c.iconColor}`} />

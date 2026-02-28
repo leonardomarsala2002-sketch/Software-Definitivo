@@ -524,7 +524,7 @@ const TeamCalendar = () => {
   return (
     <div className="flex flex-col h-full">
       {/* Compact header with controls */}
-      <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-3 flex-shrink-0">
         {/* Title */}
         <div className="mr-auto">
           <h1 className="text-lg font-bold tracking-tight text-foreground">Calendario Team</h1>
