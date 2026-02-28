@@ -75,9 +75,16 @@ const Employees = () => {
 
   const readyCount = searchFiltered.filter(isEmployeeReady).length;
 
+  const roleLabels: Record<string, string> = {
+    super_admin: "Super Admin",
+    admin: "Admin",
+    employee: "Dipendente",
+  };
+
   const EmployeeCard = ({ emp }: { emp: EmployeeRow }) => {
     const ready = isEmployeeReady(emp);
     const isSala = emp.department === "sala";
+    const showRole = (role === "super_admin" || role === "admin") && emp.app_role;
     return (
       <div
         onClick={() => handleRowClick(emp)}
@@ -98,6 +105,20 @@ const Employees = () => {
           <p className="text-xs text-muted-foreground truncate">{emp.weekly_contract_hours}h/sett · {emp.primary_store_name ?? "—"}</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {showRole && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${
+                emp.app_role === "super_admin"
+                  ? "border-primary text-primary"
+                  : emp.app_role === "admin"
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {roleLabels[emp.app_role!] ?? emp.app_role}
+            </Badge>
+          )}
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>

@@ -15,6 +15,7 @@ export interface EmployeeRow {
   primary_store_name: string | null;
   primary_store_id: string | null;
   availability_count: number;
+  app_role: "super_admin" | "admin" | "employee" | null;
   // Extended profile fields
   first_name: string | null;
   last_name: string | null;
@@ -86,7 +87,7 @@ export function useEmployeeList(filterStoreIds?: string[]) {
       const userIds = details.map((d) => d.user_id);
 
       // Fetch ALL assignments (not just primary) so we can filter by store
-      const [profilesRes, allAssignmentsRes, primaryAssignmentsRes, availRes] = await Promise.all([
+      const [profilesRes, allAssignmentsRes, primaryAssignmentsRes, availRes, rolesRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds),
         filterStoreIds && filterStoreIds.length > 0
           ? supabase
@@ -103,6 +104,10 @@ export function useEmployeeList(filterStoreIds?: string[]) {
         supabase
           .from("employee_availability")
           .select("user_id")
+          .in("user_id", userIds),
+        supabase
+          .from("user_roles")
+          .select("user_id, role")
           .in("user_id", userIds),
       ]);
 
@@ -127,6 +132,12 @@ export function useEmployeeList(filterStoreIds?: string[]) {
         availCountMap.set(a.user_id, (availCountMap.get(a.user_id) ?? 0) + 1);
       });
 
+      // Build role map
+      const roleMap = new Map<string, "super_admin" | "admin" | "employee">();
+      (rolesRes.data ?? []).forEach((r) => {
+        roleMap.set(r.user_id, r.role as "super_admin" | "admin" | "employee");
+      });
+
       return details
         .filter((d) => !allowedUserIds || allowedUserIds.has(d.user_id))
         .map((d) => {
@@ -144,6 +155,7 @@ export function useEmployeeList(filterStoreIds?: string[]) {
             primary_store_name: store?.name ?? null,
             primary_store_id: store?.id ?? null,
             availability_count: availCountMap.get(d.user_id) ?? 0,
+            app_role: roleMap.get(d.user_id) ?? null,
             first_name: (d as any).first_name ?? null,
             last_name: (d as any).last_name ?? null,
             birth_date: (d as any).birth_date ?? null,
