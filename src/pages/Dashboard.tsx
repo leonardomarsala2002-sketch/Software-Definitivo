@@ -223,9 +223,11 @@ const Dashboard = () => {
   return (
     <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 animate-in fade-in duration-500">
       {/* ── KPI Cards Row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 flex-shrink-0">
+      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:overflow-visible">
         {kpis.map((kpi) => (
-          <KpiCard key={kpi.title} {...kpi} />
+          <div key={kpi.title} className="min-w-[160px] snap-start md:min-w-0">
+            <KpiCard {...kpi} />
+          </div>
         ))}
       </div>
 

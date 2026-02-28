@@ -9,8 +9,8 @@ export function MobileBottomNav() {
   const visibleItems = filterNavByRole(bottomNavItems, role);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm md:hidden">
-      <div className="flex h-[4.25rem] items-center justify-around px-1 pb-1">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background md:hidden safe-area-bottom">
+      <div className="flex h-[4.5rem] items-center justify-around px-1 pb-1">
         {visibleItems.map((item) => {
           const isActive =
             item.url === "/"
@@ -21,17 +21,17 @@ export function MobileBottomNav() {
               key={item.url}
               to={item.url}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-2xl px-3 py-2 transition-all",
+                "flex flex-col items-center gap-1 rounded-2xl px-4 py-2.5 min-w-[3rem] min-h-[2.75rem] transition-all active:scale-95",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
+                  "flex h-9 w-9 items-center justify-center rounded-xl transition-all",
                   isActive && "border-2 border-primary bg-primary/10"
                 )}
               >
-                <item.icon className={cn("h-[18px] w-[18px]", isActive && "text-primary")} />
+                <item.icon className={cn("h-5 w-5", isActive && "text-primary")} />
               </div>
               <span className={cn(
                 "text-[10px] leading-none",

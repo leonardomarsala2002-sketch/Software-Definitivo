@@ -15,7 +15,7 @@ export function AppShell() {
         <AppHeader />
 
         {/* Page content */}
-        <main className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-6 py-6 pb-20 md:pb-6">
+        <main className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-4 pb-20 md:px-6 md:py-6 md:pb-6">
           <Outlet />
         </main>
       </div>
