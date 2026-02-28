@@ -36,26 +36,28 @@ export function AppSidebar() {
   };
 
   const iconClass = (active: boolean) =>
-    `rounded-full flex h-11 w-11 items-center justify-center transition-all duration-200 ${
+    `rounded-xl flex h-10 w-10 items-center justify-center transition-all duration-200 ${
       active
-        ? "border-2 border-primary text-primary bg-primary/10"
+        ? "bg-primary/15 text-primary"
         : "text-muted-foreground hover:text-foreground hover:bg-accent"
     }`;
 
   return (
-    <aside className="hidden md:flex w-20 flex-col h-full">
-      <div className="flex flex-col h-full items-center py-4">
-        {/* Logo placeholder */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/20 shadow-lg mb-6" />
+    <aside className="hidden md:flex w-[72px] flex-col h-full border-r border-border bg-card/50">
+      <div className="flex flex-col h-full items-center py-5">
+        {/* Logo */}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20 mb-8">
+          <span className="text-primary font-bold text-sm">S</span>
+        </div>
 
         {/* Preview role switch */}
         {isPreviewMode && (
-          <div className="mb-3 px-1">
+          <div className="mb-3">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={cyclePreviewRole}
-                  className={`rounded-full flex h-9 w-9 items-center justify-center relative transition-colors ${
+                  className={`rounded-xl flex h-9 w-9 items-center justify-center relative transition-colors ${
                     previewRole
                       ? "text-primary ring-1 ring-primary/40 bg-primary/10"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -79,7 +81,7 @@ export function AppSidebar() {
         )}
 
         {/* Main Navigation */}
-        <nav className="flex-1 flex flex-col items-center py-2 space-y-3 overflow-y-auto">
+        <nav className="flex-1 flex flex-col items-center py-2 space-y-1.5 overflow-y-auto">
           {mainItems.map((item) => {
             const active = isActive(item.url);
             return (
@@ -87,11 +89,11 @@ export function AppSidebar() {
                 <TooltipTrigger asChild>
                   <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
                     <div className={iconClass(active)}>
-                      <item.icon className="h-5 w-5" />
+                      <item.icon className="h-[18px] w-[18px]" />
                     </div>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">{item.title}</TooltipContent>
+                <TooltipContent side="right" className="font-medium text-xs">{item.title}</TooltipContent>
               </Tooltip>
             );
           })}
@@ -106,11 +108,11 @@ export function AppSidebar() {
                     <TooltipTrigger asChild>
                       <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
                         <div className={iconClass(active)}>
-                          <item.icon className="h-5 w-5" />
+                          <item.icon className="h-[18px] w-[18px]" />
                         </div>
                       </Link>
                     </TooltipTrigger>
-                    <TooltipContent side="right" className="font-medium">{item.title}</TooltipContent>
+                    <TooltipContent side="right" className="font-medium text-xs">{item.title}</TooltipContent>
                   </Tooltip>
                 );
               })}
@@ -119,22 +121,22 @@ export function AppSidebar() {
         </nav>
 
         {/* Bottom Section */}
-        <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
+        <div className="mt-auto flex flex-col items-center pb-3 space-y-1.5">
           {role !== "employee" && (
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
                     <button className={iconClass(false)}>
-                      <Store className="h-5 w-5" />
+                      <Store className="h-[18px] w-[18px]" />
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
+                <TooltipContent side="right" className="font-medium text-xs">
                   {activeStore?.name ?? "Seleziona store"}
                 </TooltipContent>
               </Tooltip>
-              <DropdownMenuContent side="right" align="end" className="w-56 rounded-xl p-1.5 shadow-lg">
+              <DropdownMenuContent side="right" align="end" className="w-56">
                 <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
                   Seleziona Store
                 </DropdownMenuLabel>
@@ -142,7 +144,7 @@ export function AppSidebar() {
                   <DropdownMenuItem
                     key={s.id}
                     onClick={() => setActiveStore(s)}
-                    className={`rounded-lg px-3 py-2 text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
+                    className={`text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
                   >
                     <Store className="mr-2.5 h-4 w-4" />
                     {s.name}
@@ -153,7 +155,7 @@ export function AppSidebar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => navigate("/manage-stores")}
-                      className="rounded-lg px-3 py-2 text-[13px] text-primary font-medium"
+                      className="text-[13px] text-primary font-medium"
                     >
                       <Settings className="mr-2.5 h-4 w-4" />
                       Gestisci Store
@@ -171,10 +173,10 @@ export function AppSidebar() {
                 className={`${iconClass(false)} hover:text-destructive`}
                 aria-label="Esci"
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut className="h-[18px] w-[18px]" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-medium">Esci</TooltipContent>
+            <TooltipContent side="right" className="font-medium text-xs">Esci</TooltipContent>
           </Tooltip>
         </div>
       </div>
