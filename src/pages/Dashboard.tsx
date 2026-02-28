@@ -644,7 +644,7 @@ const Dashboard = () => {
       </div>
 
       {/* Weekly Timeline - only for admin, not super_admin */}
-      {role === "admin" && (
+      {isAdmin && (
       <Card className="p-4 flex flex-col flex-shrink-0">
         <CardHeader className="p-0 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">

@@ -130,7 +130,7 @@ export function MonthGrid({
                 "rounded-xl border border-border/60 bg-secondary p-1 cursor-pointer transition-all duration-150 ease-in-out hover:border-primary/40 hover:bg-accent flex flex-col overflow-hidden min-h-0",
                 dimmed && "opacity-40",
                 isToday && "ring-2 ring-primary border-primary/50 shadow-[0_0_12px_hsl(152_100%_40%/0.25)]",
-                isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/50 border-destructive/30",
+                false && isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/50 border-destructive/30",
                 hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-warning/50 border-warning/30",
                 (isArchived || isPast) && !isToday && "opacity-50",
               )}
