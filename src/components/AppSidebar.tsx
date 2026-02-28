@@ -84,7 +84,7 @@ export function AppSidebar() {
             return (
               <Tooltip key={item.url}>
                 <TooltipTrigger asChild>
-                  <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
+                  <Link to={item.url} aria-label={item.title} className="flex items-center justify-center" data-tutorial={item.tutorialId}>
                     <div className={iconClass(active)}>
                       <item.icon className="h-[18px] w-[18px]" />
                     </div>
@@ -103,7 +103,7 @@ export function AppSidebar() {
                 return (
                   <Tooltip key={item.url}>
                     <TooltipTrigger asChild>
-                      <Link to={item.url} aria-label={item.title} className="flex items-center justify-center">
+                      <Link to={item.url} aria-label={item.title} className="flex items-center justify-center" data-tutorial={item.tutorialId}>
                         <div className={iconClass(active)}>
                           <item.icon className="h-[18px] w-[18px]" />
                         </div>

@@ -1078,6 +1078,7 @@ export type Database = {
           created_at: string
           email: string | null
           full_name: string | null
+          has_seen_tutorial: boolean
           id: string
           updated_at: string
           vacation_balance: number
@@ -1087,6 +1088,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          has_seen_tutorial?: boolean
           id: string
           updated_at?: string
           vacation_balance?: number
@@ -1096,6 +1098,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          has_seen_tutorial?: boolean
           id?: string
           updated_at?: string
           vacation_balance?: number

@@ -80,8 +80,9 @@ export function AppHeader() {
 
         {role === "super_admin" && stores.length > 0 ? (
           <DropdownMenu>
+            {/* store switcher tutorial target is on the trigger below */}
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2.5 text-xs text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2.5 text-xs text-muted-foreground hover:text-foreground" data-tutorial="store-switcher">
                 <Store className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline max-w-[120px] truncate">{activeStore?.name ?? "Store"}</span>
                 <ChevronDown className="h-3 w-3 opacity-50" />
@@ -118,7 +119,7 @@ export function AppHeader() {
           <NotificationBell />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background">
+              <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background" data-tutorial="header-profile">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary">{initials}</AvatarFallback>
                 </Avatar>
