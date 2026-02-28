@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import Dashboard from "@/pages/Dashboard";
 import TeamCalendar from "@/pages/TeamCalendar";
+import AdminShiftsViewer from "@/pages/AdminShiftsViewer";
 import PersonalCalendar from "@/pages/PersonalCalendar";
 import Requests from "@/pages/Requests";
 import Employees from "@/pages/Employees";
@@ -46,6 +47,7 @@ const App = () => (
               >
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/team-calendar" element={<TeamCalendar />} />
+                <Route path="/admin-shifts" element={<AdminShiftsViewer />} />
                 <Route path="/personal-calendar" element={<PersonalCalendar />} />
                 <Route path="/requests" element={<Requests />} />
                 <Route path="/messages" element={<Messages />} />
