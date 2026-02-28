@@ -126,9 +126,9 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="backdrop-blur-xl bg-card/95 border-border/50 shadow-2xl sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="text-base">Copertura Minima</DialogTitle>
+          <DialogTitle className="text-base">Copertura Richiesta</DialogTitle>
           <DialogDescription className="text-xs">
-            {step === 0 ? "Seleziona giorni e configura slot" : "Imposta personale minimo per slot"}
+            {step === 0 ? "Seleziona giorni e configura slot" : "Imposta il numero esatto di personale per slot (nessun overbooking)"}
           </DialogDescription>
         </DialogHeader>
 
