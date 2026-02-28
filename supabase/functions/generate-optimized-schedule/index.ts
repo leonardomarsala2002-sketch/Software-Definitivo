@@ -497,6 +497,7 @@ function runIteration(
       }
       if (empAvail.length === 0) continue;
 
+      const MIN_SHIFT_HOURS = 4;
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
 
       for (const entry of effectiveEntries) {
@@ -504,6 +505,7 @@ function runIteration(
         for (const exit of effectiveExits) {
           if (exit <= entry) continue;
           const duration = exit - entry;
+          if (duration < MIN_SHIFT_HOURS) continue; // Minimum 4 hours
           if (duration > maxRemaining || duration > empMaxDaily) continue;
           if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
 
@@ -635,6 +637,7 @@ function runIteration(
         }
         if (empAvail.length === 0) continue;
 
+        const MIN_SHIFT_HOURS_SPLIT = 4;
         let bestStart = -1, bestEnd = -1, bestCoverage = 0;
 
         for (const entry of effectiveEntries) {
@@ -642,6 +645,7 @@ function runIteration(
           for (const exit of effectiveExits) {
             if (exit <= entry) continue;
             const duration = exit - entry;
+            if (duration < MIN_SHIFT_HOURS_SPLIT) continue; // Minimum 4 hours for split shifts too
             if (duration > maxRemaining) continue;
             if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
 
