@@ -516,7 +516,8 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Weekly Timeline */}
+      {/* Weekly Timeline - only for admin, not super_admin */}
+      {role === "admin" && (
       <Card className="p-4 flex flex-col flex-shrink-0">
         <CardHeader className="p-0 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -583,6 +584,7 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Appointment Form Dialog */}
       <AppointmentFormDialog
