@@ -21,7 +21,7 @@ export interface CorrectionAction {
 
 export interface OptimizationSuggestion {
   id: string;
-  type: "surplus" | "lending" | "overtime_balance" | "uncovered" | "hour_reduction";
+  type: "surplus" | "lending" | "overtime_balance" | "uncovered" | "hour_reduction" | "staffing_analysis";
   severity: "critical" | "warning" | "info";
   title: string;
   description: string;

@@ -1431,6 +1431,38 @@ Deno.serve(async (req) => {
           }
         }
 
+        // ── Staffing Analysis Suggestion ──
+        // Calculate weekly required hours from coverage data
+        {
+          const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
+          const totalWeeklyRequired = weekDates.reduce((sum, dateStr) => {
+            const dow = getDayOfWeek(dateStr);
+            const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+            return sum + dayCov.reduce((s, c) => s + c.min_staff_required, 0);
+          }, 0);
+          const avgContract = deptEmployees.length > 0
+            ? deptEmployees.reduce((s, e) => s + e.weekly_contract_hours, 0) / deptEmployees.length
+            : 40;
+          const idealCount = Math.ceil(totalWeeklyRequired / avgContract);
+          const actualCount = deptEmployees.length;
+          const delta = actualCount - idealCount;
+          if (delta !== 0) {
+            deptSuggestions.push({
+              id: `staffing-${dept}`,
+              type: "surplus",
+              severity: delta < 0 ? "warning" : "info",
+              title: delta > 0
+                ? `Organico ${deptLabel}: +${delta} rispetto al fabbisogno`
+                : `Organico ${deptLabel}: ${delta} rispetto al fabbisogno`,
+              description: `Servono ${totalWeeklyRequired}h/settimana (${idealCount} dipendenti ideali a ${Math.round(avgContract)}h). Presenti: ${actualCount}.`,
+              actionLabel: "Info",
+              declineLabel: "Ok",
+              surplusCount: Math.abs(delta),
+              surplusReason: delta > 0 ? "Surplus organico" : "Deficit organico",
+            });
+          }
+        }
+
         // Update run with notes AND suggestions
         const notes = [
           uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
