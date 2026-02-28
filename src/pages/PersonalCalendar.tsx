@@ -8,6 +8,7 @@ import EmptyState from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatEndTime } from "@/lib/shiftColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -140,7 +141,7 @@ const PersonalCalendar = () => {
                         {dayShifts.filter(s => !s.is_day_off).map(s => (
                           <div key={s.id} className="flex items-center gap-2">
                             <span className="text-base font-semibold text-foreground tabular-nums">
-                              {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}
+                              {s.start_time?.slice(0, 5)} – {formatEndTime(s.end_time)}
                             </span>
                             <Badge
                               variant="secondary"
