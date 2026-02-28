@@ -527,8 +527,8 @@ const TeamCalendar = () => {
       <div className="flex flex-wrap items-center gap-3 mb-3 flex-shrink-0">
         {/* Title */}
         <div className="mr-auto">
-          <h1 className="text-lg font-bold tracking-tight text-[#111]">Calendario Team</h1>
-          <p className="text-[11px] text-[#444]">
+          <h1 className="text-lg font-bold tracking-tight text-foreground">Calendario Team</h1>
+          <p className="text-[11px] text-muted-foreground">
             {activeStore?.name ?? "Store"} · {department === "sala" ? "Sala" : "Cucina"}
           </p>
         </div>
@@ -565,7 +565,7 @@ const TeamCalendar = () => {
         {canEdit && (
           <div className="flex items-center gap-2">
             {hasDraftShifts && (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded-[32px]">
+              <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10 rounded-[32px]">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 Draft
               </Badge>
@@ -632,15 +632,15 @@ const TeamCalendar = () => {
 
       {/* Warning banner when suggestions exist but wizard is dismissed */}
       {canEdit && !showOptimizationErrors && suggestions.length > 0 && hasDraftShifts && (
-        <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-2.5">
-          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span className="text-xs text-amber-800 dark:text-amber-300 font-medium flex-1">
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5">
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+          <span className="text-xs text-warning font-medium flex-1">
             Ci sono <strong>{suggestions.length}</strong> problemi da risolvere prima di pubblicare i turni.
           </span>
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-[11px] px-3 gap-1.5 rounded-[32px] border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
+            className="h-7 text-[11px] px-3 gap-1.5 rounded-[32px] border-warning/40 text-warning hover:bg-warning/15"
             onClick={() => setShowOptimizationErrors(true)}
           >
             <Stethoscope className="h-3 w-3" />
@@ -750,7 +750,7 @@ const TeamCalendar = () => {
                 </span>
               )}
               {!hasCriticalConflicts && uncoveredSlotsMap.size > 0 && (
-                <span className="block mt-2 text-amber-600 font-medium">
+                <span className="block mt-2 text-warning font-medium">
                   ⚠ Ci sono {uncoveredSlotsMap.size} giorni con avvisi di copertura (non critici).
                 </span>
               )}

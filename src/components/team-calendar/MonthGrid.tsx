@@ -89,17 +89,16 @@ export function MonthGrid({
       ? String(today.getDate())
       : null;
 
-  // Adaptive: fewer rows visible when month has more weeks
   const maxVisibleShifts = totalWeeks >= 6 ? 1 : totalWeeks >= 5 ? 2 : 4;
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="grid grid-cols-7 gap-1.5 mb-0.5 flex-shrink-0 px-1.5">
+      <div className="grid grid-cols-7 gap-1 mb-0.5 flex-shrink-0 px-1">
         {DOW_LABELS.map((d) => (
           <div
             key={d}
-            className="text-center text-[10px] font-semibold text-muted-foreground py-1 uppercase tracking-[0.6px]"
+            className="text-center text-[10px] font-semibold text-muted-foreground py-1.5 uppercase tracking-wider"
           >
             {d}
           </div>
@@ -107,7 +106,7 @@ export function MonthGrid({
       </div>
 
       {/* Days grid */}
-      <div className="grid grid-cols-7 gap-1.5 flex-1 auto-rows-fr px-1.5 pb-1.5">
+      <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-fr px-1 pb-1">
         {cells.map((day, i) => {
           if (day === null) {
             return <div key={`e-${i}`} />;
@@ -128,12 +127,12 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "rounded-[14px] border border-border bg-card p-1 cursor-pointer transition-all duration-150 ease-in-out hover:shadow-md hover:border-primary/30 flex flex-col overflow-hidden min-h-0",
+                "rounded-xl border border-border/60 bg-secondary p-1 cursor-pointer transition-all duration-150 ease-in-out hover:border-primary/40 hover:bg-accent flex flex-col overflow-hidden min-h-0",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-primary shadow-[0_0_16px_hsl(152_100%_40%/0.3)]",
-                isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/40",
-                hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-amber-400/40",
-                (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
+                isToday && "ring-2 ring-primary border-primary/50 shadow-[0_0_12px_hsl(152_100%_40%/0.25)]",
+                isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/50 border-destructive/30",
+                hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-warning/50 border-warning/30",
+                (isArchived || isPast) && !isToday && "opacity-50",
               )}
               onClick={() => onDayClick(dateStr)}
               title={isArchived ? "Questa settimana è archiviata e non può essere modificata." : undefined}
@@ -143,7 +142,7 @@ export function MonthGrid({
                   "text-[10px] font-medium mb-0.5 leading-none",
                   isToday
                     ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-                    : "text-foreground font-medium"
+                    : "text-foreground/80 font-medium"
                 )}
               >
                 {day}
@@ -157,19 +156,19 @@ export function MonthGrid({
                     <div
                       key={s.id}
                       className={cn(
-                        "text-[8px] leading-tight truncate rounded px-0.5 py-px",
+                        "text-[8px] leading-tight truncate rounded-md px-1 py-px font-medium",
                         s.is_day_off
-                          ? "bg-destructive/10 text-destructive"
+                          ? "bg-destructive/15 text-destructive"
                           : s.status === "archived"
-                            ? "bg-muted text-muted-foreground"
+                            ? "bg-muted/60 text-muted-foreground"
                             : s.status === "draft"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-[#00C853]/10 text-[#009624]"
+                              ? "bg-warning/15 text-warning"
+                              : "bg-primary/15 text-primary"
                       )}
                     >
                       <span className="truncate">{name} {formatShiftTime(s)}</span>
                       {isLent && (
-                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-primary/10 text-primary ml-0.5">
+                        <span className="text-[7px] font-bold shrink-0 px-0.5 rounded bg-primary/20 text-primary ml-0.5">
                           P
                         </span>
                       )}
@@ -183,8 +182,8 @@ export function MonthGrid({
                 )}
                 {dayLendings.length > 0 && (
                   <div className="flex items-center gap-0.5 mt-px">
-                    <ArrowRightLeft className="h-2.5 w-2.5 text-blue-600" />
-                    <span className="text-[7px] font-bold text-blue-600">{dayLendings.length} prestito</span>
+                    <ArrowRightLeft className="h-2.5 w-2.5 text-chart-4" />
+                    <span className="text-[7px] font-bold text-chart-4">{dayLendings.length} prestito</span>
                   </div>
                 )}
               </div>

@@ -1,18 +1,16 @@
 import { useState, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
-import { Plus, Trash2, Edit2, X, ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
 import type { LendingRecord } from "@/hooks/useLendingData";
-import { ShiftEditPopover } from "./ShiftEditPopover";
 import { EmployeeWeekDrawer } from "./EmployeeWeekDrawer";
 
 interface Employee {
@@ -43,11 +41,11 @@ function getShiftColor(s: ShiftRow): { bg: string; border: string; label?: strin
   const startH = s.start_time ? parseInt(s.start_time.split(":")[0]) : -1;
   const endH = s.end_time ? parseInt(s.end_time.split(":")[0]) : -1;
 
-  if (startH === 9) return { bg: "bg-blue-500/20", border: "border-blue-500/40" };
-  if (startH === 11) return { bg: "bg-orange-500/20", border: "border-orange-500/40" };
-  if (startH === 19) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40" };
-  if (endH === 17 || endH === 19) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40" };
-  return { bg: "bg-muted", border: "border-border", label: "custom" };
+  if (startH === 9) return { bg: "bg-chart-4/20", border: "border-chart-4/40" };
+  if (startH === 11) return { bg: "bg-warning/20", border: "border-warning/40" };
+  if (startH === 19) return { bg: "bg-chart-3/20", border: "border-chart-3/40" };
+  if (endH === 17 || endH === 19) return { bg: "bg-primary/20", border: "border-primary/40" };
+  return { bg: "bg-secondary", border: "border-border" };
 }
 
 export function DayDetailDialog({
@@ -56,14 +54,10 @@ export function DayDetailDialog({
   lendings = [], currentStoreId,
   onCreateShift, onUpdateShift, onDeleteShift,
 }: DayDetailDialogProps) {
-  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
-  const [addingForUser, setAddingForUser] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
-  // Disable editing if all shifts for this date are archived
   const deptShiftsForDate = shifts.filter(s => s.department === department && s.date === date);
   const isArchived = deptShiftsForDate.length > 0 && deptShiftsForDate.every(s => s.status === "archived");
-  const effectiveCanEdit = canEdit && !isArchived;
 
   const dayOfWeek = date ? (parseISO(date).getDay() + 6) % 7 : 0;
   const dayHours = openingHours.find((h) => h.day_of_week === dayOfWeek);
@@ -79,7 +73,6 @@ export function DayDetailDialog({
 
   const deptShifts = shifts.filter((s) => s.department === department && s.date === date);
 
-  // Group shifts by user
   const userShifts = useMemo(() => {
     const map = new Map<string, ShiftRow[]>();
     deptShifts.forEach((s) => {
@@ -95,9 +88,9 @@ export function DayDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0 rounded-[32px]">
-        <DialogHeader className="px-6 pt-5 pb-3 border-b">
-          <DialogTitle className="capitalize text-base">{dateLabel}</DialogTitle>
+      <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0 rounded-2xl border-border bg-card">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b border-border">
+          <DialogTitle className="capitalize text-base text-foreground">{dateLabel}</DialogTitle>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant="outline" className="w-fit text-xs capitalize">{department}</Badge>
             {isArchived && (
@@ -124,7 +117,6 @@ export function DayDetailDialog({
                   </div>
                 ))}
               </div>
-              {/* Read-only view */}
             </div>
 
             {/* Grid lines */}
@@ -136,7 +128,6 @@ export function DayDetailDialog({
 
                 return (
                   <div key={emp.user_id} className="flex items-center group min-h-[36px]">
-                    {/* Name */}
                     <div className="w-32 shrink-0 pr-2">
                       <button
                         type="button"
@@ -151,14 +142,12 @@ export function DayDetailDialog({
                       </button>
                     </div>
 
-                    {/* Timeline bar area */}
-                    <div className="flex-1 relative h-8 bg-muted/30 rounded-md overflow-hidden border border-border/40">
-                      {/* Hour grid lines */}
-                      {hours.map((h, i) => (
+                    <div className="flex-1 relative h-8 bg-secondary/60 rounded-lg overflow-hidden border border-border/40">
+                      {hours.map((h, idx) => (
                         <div
                           key={h}
                           className="absolute top-0 bottom-0 border-l border-border/20"
-                          style={{ left: `${(i / hours.length) * 100}%` }}
+                          style={{ left: `${(idx / hours.length) * 100}%` }}
                         />
                       ))}
 
@@ -181,7 +170,7 @@ export function DayDetailDialog({
                               <div
                                 key={s.id}
                                 className={cn(
-                                  "absolute top-0.5 bottom-0.5 rounded border flex items-center justify-center",
+                                  "absolute top-0.5 bottom-0.5 rounded-md border flex items-center justify-center",
                                   color.bg,
                                   color.border
                                 )}
@@ -190,18 +179,11 @@ export function DayDetailDialog({
                                 <span className="text-[10px] font-semibold text-foreground/80">
                                   {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
                                 </span>
-                                {color.label && (
-                                  <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 h-3">
-                                    {color.label}
-                                  </Badge>
-                                )}
                               </div>
                             );
                           })
                       )}
                     </div>
-
-                    {/* Actions removed - shifts are managed only via AI suggestions */}
                   </div>
                 );
               })}
@@ -217,9 +199,9 @@ export function DayDetailDialog({
             {lendings.length > 0 && (
               <div className="mt-4 pt-3 border-t border-border/40">
                 <div className="flex items-center gap-2 mb-2">
-                  <ArrowRightLeft className="h-4 w-4 text-blue-600" />
+                  <ArrowRightLeft className="h-4 w-4 text-chart-4" />
                   <span className="text-xs font-semibold text-foreground">Prestiti Inter-Store</span>
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-blue-600 border-blue-300">
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-chart-4 border-chart-4/30">
                     {lendings.length}
                   </Badge>
                 </div>
@@ -229,11 +211,11 @@ export function DayDetailDialog({
                     const otherStore = isOutgoing ? l.target_store_name : l.source_store_name;
                     const statusLabel = l.status === "accepted" ? "Confermato" : "In attesa";
                     const statusColor = l.status === "accepted"
-                      ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-                      : "bg-amber-100 text-amber-700 border-amber-300";
+                      ? "bg-primary/15 text-primary border-primary/30"
+                      : "bg-warning/15 text-warning border-warning/30";
 
                     return (
-                      <div key={l.id} className="rounded-lg border border-border bg-card p-2.5 flex items-center gap-3">
+                      <div key={l.id} className="rounded-xl border border-border bg-secondary p-2.5 flex items-center gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-semibold text-foreground">{l.user_name ?? "Dipendente"}</span>
@@ -260,7 +242,6 @@ export function DayDetailDialog({
           </div>
         </ScrollArea>
 
-        {/* Employee week drawer */}
         {selectedEmployee && (
           <EmployeeWeekDrawer
             open={!!selectedEmployee}
