@@ -188,24 +188,6 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
         <div className="pt-2 border-t border-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Dati anagrafici e contrattuali</p>
           <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Nome</Label>
-                {canEdit ? (
-                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Nome" />
-                ) : (
-                  <p className="text-sm text-foreground">{firstName || "—"}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Cognome</Label>
-                {canEdit ? (
-                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Cognome" />
-                ) : (
-                  <p className="text-sm text-foreground">{lastName || "—"}</p>
-                )}
-              </div>
-            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -272,23 +254,13 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Tipo contratto</Label>
-                {canEdit ? (
-                  <Input value={contractType} onChange={(e) => setContractType(e.target.value)} placeholder="es. Indeterminato" />
-                ) : (
-                  <p className="text-sm text-foreground">{contractType || "—"}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase tracking-wider">Ruolo</Label>
-                {canEdit ? (
-                  <Input value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder="es. Cameriere" />
-                ) : (
-                  <p className="text-sm text-foreground">{roleLabel || "—"}</p>
-                )}
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Tipo contratto</Label>
+              {canEdit ? (
+                <Input value={contractType} onChange={(e) => setContractType(e.target.value)} placeholder="es. Indeterminato" />
+              ) : (
+                <p className="text-sm text-foreground">{contractType || "—"}</p>
+              )}
             </div>
           </div>
         </div>
