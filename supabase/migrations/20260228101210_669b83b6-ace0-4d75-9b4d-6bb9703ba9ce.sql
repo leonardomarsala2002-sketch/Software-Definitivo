@@ -1,0 +1,1 @@
+ALTER TABLE public.appointments ADD COLUMN decline_reason text DEFAULT NULL;

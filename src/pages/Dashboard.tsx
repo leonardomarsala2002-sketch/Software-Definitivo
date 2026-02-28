@@ -12,9 +12,11 @@ import {
   TrendingDown,
   Bell,
   Plus,
+  MessageSquare,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -118,6 +120,8 @@ function KpiCard({ title, value, trend, period, icon }: KpiCardProps) {
 const Dashboard = () => {
   const { user, role, activeStore, stores } = useAuth();
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [declineTarget, setDeclineTarget] = useState<{ id: string; created_by: string } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   const { data: myDetails } = useQuery({
     queryKey: ["my-employee-details", user?.id],
@@ -421,10 +425,7 @@ const Dashboard = () => {
                             <Check className="h-3.5 w-3.5 mr-1" /> Accetta
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs bg-destructive/15 text-destructive hover:bg-destructive/25"
-                            onClick={() => {
-                              respondAppointment.mutate({ id: apt.id, status: "declined", created_by: apt.created_by });
-                              toast.success("Appuntamento rifiutato");
-                            }}>
+                            onClick={() => setDeclineTarget({ id: apt.id, created_by: apt.created_by })}>
                             <X className="h-3.5 w-3.5 mr-1" /> Rifiuta
                           </Button>
                         </div>
@@ -441,6 +442,49 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Decline reason dialog (employee) */}
+        <AlertDialog open={!!declineTarget} onOpenChange={(open) => { if (!open) { setDeclineTarget(null); setDeclineReason(""); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-destructive" />
+                Rifiuta appuntamento
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Scrivi una motivazione per il rifiuto (opzionale).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Textarea
+              placeholder="Es. Ho un impegno in quel giorno..."
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setDeclineTarget(null); setDeclineReason(""); }}>Annulla</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (declineTarget) {
+                    respondAppointment.mutate({
+                      id: declineTarget.id,
+                      status: "declined",
+                      created_by: declineTarget.created_by,
+                      decline_reason: declineReason.trim() || undefined,
+                    });
+                    toast.success("Appuntamento rifiutato");
+                    setDeclineTarget(null);
+                    setDeclineReason("");
+                  }
+                }}
+              >
+                Conferma rifiuto
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
@@ -577,10 +621,7 @@ const Dashboard = () => {
                             <Check className="h-3.5 w-3.5 mr-1" /> Accetta
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs bg-destructive/15 text-destructive hover:bg-destructive/25"
-                            onClick={() => {
-                              respondAppointment.mutate({ id: apt.id, status: "declined", created_by: apt.created_by });
-                              toast.success("Appuntamento rifiutato");
-                            }}>
+                            onClick={() => setDeclineTarget({ id: apt.id, created_by: apt.created_by })}>
                             <X className="h-3.5 w-3.5 mr-1" /> Rifiuta
                           </Button>
                         </div>
@@ -678,6 +719,49 @@ const Dashboard = () => {
         onOpenChange={setShowAppointmentForm}
         defaultDate={selectedDateStr}
       />
+
+      {/* Decline reason dialog */}
+      <AlertDialog open={!!declineTarget} onOpenChange={(open) => { if (!open) { setDeclineTarget(null); setDeclineReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-destructive" />
+              Rifiuta appuntamento
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Scrivi una motivazione per il rifiuto (opzionale). Verrà inviata a chi ha creato l'appuntamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            placeholder="Es. Ho un impegno in quel giorno..."
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            rows={3}
+            maxLength={500}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeclineTarget(null); setDeclineReason(""); }}>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (declineTarget) {
+                  respondAppointment.mutate({
+                    id: declineTarget.id,
+                    status: "declined",
+                    created_by: declineTarget.created_by,
+                    decline_reason: declineReason.trim() || undefined,
+                  });
+                  toast.success("Appuntamento rifiutato");
+                  setDeclineTarget(null);
+                  setDeclineReason("");
+                }
+              }}
+            >
+              Conferma rifiuto
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
