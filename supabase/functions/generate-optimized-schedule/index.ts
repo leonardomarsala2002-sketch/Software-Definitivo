@@ -338,7 +338,7 @@ function runIteration(
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
   hourBalances: Map<string, number>,
   empConstraints: Map<string, EmployeeConstraints>,
-  maxSplitOverride: number,
+  maxSplitsAllowed: number,
   randomize: boolean,
   partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
   smartMemory: SmartMemoryScores,
@@ -468,7 +468,7 @@ function runIteration(
       // Check split shift limit
       const empDaySplitCount = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
       const empWeeklySplitCount = weeklySplits.get(emp.user_id) ?? 0;
-      const maxSplitsWeek = (ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week) + maxSplitOverride;
+      const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
       if (empDaySplitCount >= 1 && empWeeklySplitCount >= maxSplitsWeek) continue;
 
       let hasUncovered = false;
@@ -610,7 +610,7 @@ function runIteration(
 
         // Check weekly split limit
         const empWeeklySplitCount = weeklySplits.get(emp.user_id) ?? 0;
-        const maxSplitsWeek = (ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week) + maxSplitOverride;
+        const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
         if (empWeeklySplitCount >= maxSplitsWeek) continue;
 
         // Check team hour limits
@@ -1010,47 +1010,34 @@ Deno.serve(async (req) => {
 
         let bestResult: IterationResult | null = null;
         let fallbackUsed = false;
-        let splitOverride = 0;
 
-        // Phase 1: Normal 40 iterations
-        // Use effective dates for iterations (in patch mode, only cover the affected range)
-        const iterDates = isPatchMode ? effectiveWeekDates : weekDates;
-        
-        for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
-          const result = runIteration(
-            store_id, dept, iterDates, employees, availability,
-            allExceptions, coverageData, allowedData, rules, run.id,
-            openingHoursData, hourBalances, empConstraints, splitOverride,
-            i > 0, partialDayBlocks, smartMemory,
-          );
+        // Progressive split strategy: start with 0 splits, increase up to 3 only if needed
+        const MAX_SPLITS_PROGRESSION = [0, 1, 2, 3];
 
-          if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
-            bestResult = result;
+        for (const maxSplits of MAX_SPLITS_PROGRESSION) {
+          if (!isTimeBudgetOk()) break;
+          if (maxSplits > 0) {
+            fallbackUsed = true;
+            console.log(`[${dept}] Escalating: allowing ${maxSplits} split(s)/week per employee`);
           }
-
-          if (result.uncoveredSlots.length === 0 && result.fitnessScore >= 0) break;
-        }
-
-        // Phase 2: Fallback - if still uncovered, increase split limit by 1 and retry
-        if (bestResult && bestResult.uncoveredSlots.length > 0 && isTimeBudgetOk()) {
-          splitOverride = 1;
-          fallbackUsed = true;
-          console.log(`[${dept}] Fallback: increasing split limit by +1, retrying ${MAX_ITERATIONS} iterations`);
 
           for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
             const result = runIteration(
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
-              openingHoursData, hourBalances, empConstraints, splitOverride,
-              true, partialDayBlocks, smartMemory,
+              openingHoursData, hourBalances, empConstraints, maxSplits,
+              i > 0, partialDayBlocks, smartMemory,
             );
 
-            if (result.fitnessScore > bestResult!.fitnessScore) {
+            if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
               bestResult = result;
             }
 
             if (result.uncoveredSlots.length === 0 && result.fitnessScore >= 0) break;
           }
+
+          // Stop escalating if coverage is fully satisfied
+          if (bestResult && bestResult.uncoveredSlots.length === 0) break;
         }
 
         const { shifts, uncoveredSlots, fitnessScore, hourAdjustments } = bestResult!;
