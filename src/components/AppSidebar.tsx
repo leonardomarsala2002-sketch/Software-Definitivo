@@ -14,11 +14,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Store, LogOut, Eye, EyeOff, Settings } from "lucide-react";
+import { Store, LogOut, Eye, Settings } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "SA",
+  admin: "A",
+  employee: "E",
+};
+
 export function AppSidebar() {
-  const { role, realRole, stores, activeStore, setActiveStore, signOut, isViewingAsEmployee, toggleViewAsEmployee } = useAuth();
+  const {
+    role, realRole, stores, activeStore, setActiveStore, signOut,
+    cyclePreviewRole, previewRole, isPreviewMode,
+  } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const filtered = filterNavByRole(navItems, role);
@@ -26,7 +35,6 @@ export function AppSidebar() {
   const secondaryItems = filtered.filter((i) => i.section === "secondary");
 
   const canManageStores = realRole === "super_admin" || realRole === "admin";
-  const canViewAsEmployee = realRole === "super_admin" || realRole === "admin";
 
   const isActive = (url: string) => {
     if (url === "/") return location.pathname === "/";
@@ -46,16 +54,33 @@ export function AppSidebar() {
         {/* Logo placeholder */}
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6" />
 
-        {/* View as Employee indicator */}
-        {isViewingAsEmployee && (
+        {/* Preview role switch — only in preview environment */}
+        {isPreviewMode && (
           <div className="mb-3 px-1">
-            <button
-              onClick={toggleViewAsEmployee}
-              className="glass-icon-card flex h-9 w-9 items-center justify-center bg-amber-100/80 text-amber-700 animate-pulse hover:animate-none hover:bg-amber-200/80 transition-colors"
-              title="Stai visualizzando come Dipendente. Clicca per tornare alla vista Admin."
-            >
-              <EyeOff className="h-4 w-4" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={cyclePreviewRole}
+                  className={`glass-icon-card flex h-9 w-9 items-center justify-center relative transition-colors ${
+                    previewRole
+                      ? "text-[#00C853] ring-1 ring-[#00C853]/40"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Eye className="h-4 w-4" />
+                  {previewRole && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00C853] text-[8px] font-bold text-white leading-none">
+                      {ROLE_LABELS[previewRole]}
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium text-xs">
+                {previewRole
+                  ? `Preview: ${previewRole === "super_admin" ? "Super Admin" : previewRole === "admin" ? "Admin" : "Dipendente"} — clicca per cambiare`
+                  : "Attiva preview ruolo"}
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
 
@@ -101,21 +126,6 @@ export function AppSidebar() {
 
         {/* Bottom Section */}
         <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-          {canViewAsEmployee && !isViewingAsEmployee && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={toggleViewAsEmployee}
-                  className={iconClass(false)}
-                  aria-label="Visualizza come Dipendente"
-                >
-                  <Eye className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="font-medium">Visualizza come Dipendente</TooltipContent>
-            </Tooltip>
-          )}
-
           {/* Store Selector – hidden for employees */}
           {role !== "employee" && (
             <DropdownMenu>
