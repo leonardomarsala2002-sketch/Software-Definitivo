@@ -153,23 +153,19 @@ export function AppHeader() {
 
           <div className="space-y-3 pt-2">
             <ProfileRow label="Email" value={profileData?.profile?.email ?? user?.email} />
-            {profileData?.details && (
-              <>
-                <ProfileRow label="Nome" value={`${profileData.details.first_name ?? ""} ${profileData.details.last_name ?? ""}`.trim()} />
-                <ProfileRow label="Telefono" value={profileData.details.phone} />
-                <ProfileRow label="Data di nascita" value={profileData.details.birth_date} />
-                <ProfileRow label="Luogo di nascita" value={profileData.details.birth_place} />
-                <ProfileRow label="Codice fiscale" value={profileData.details.fiscal_code} />
-                <ProfileRow label="Residenza" value={profileData.details.residence} />
-                <ProfileRow label="Domicilio" value={profileData.details.domicile} />
-                <ProfileRow label="Reparto" value={profileData.details.department === "sala" ? "Sala" : profileData.details.department === "cucina" ? "Cucina" : profileData.details.department} />
-                <ProfileRow label="Mansione" value={profileData.details.role_label} />
-                <ProfileRow label="Contratto" value={profileData.details.contract_type} />
-                <ProfileRow label="Livello" value={profileData.details.level} />
-                <ProfileRow label="Ore settimanali" value={profileData.details.weekly_contract_hours?.toString()} />
-                <ProfileRow label="Data assunzione" value={profileData.details.hire_date} />
-              </>
-            )}
+            <ProfileRow label="Nome" value={profileData?.details ? `${profileData.details.first_name ?? ""} ${profileData.details.last_name ?? ""}`.trim() || null : null} />
+            <ProfileRow label="Telefono" value={profileData?.details?.phone} />
+            <ProfileRow label="Data di nascita" value={profileData?.details?.birth_date} />
+            <ProfileRow label="Luogo di nascita" value={profileData?.details?.birth_place} />
+            <ProfileRow label="Codice fiscale" value={profileData?.details?.fiscal_code} />
+            <ProfileRow label="Residenza" value={profileData?.details?.residence} />
+            <ProfileRow label="Domicilio" value={profileData?.details?.domicile} />
+            <ProfileRow label="Reparto" value={profileData?.details?.department === "sala" ? "Sala" : profileData?.details?.department === "cucina" ? "Cucina" : profileData?.details?.department} />
+            <ProfileRow label="Mansione" value={profileData?.details?.role_label} />
+            <ProfileRow label="Contratto" value={profileData?.details?.contract_type} />
+            <ProfileRow label="Livello" value={profileData?.details?.level} />
+            <ProfileRow label="Ore settimanali" value={profileData?.details?.weekly_contract_hours?.toString()} />
+            <ProfileRow label="Data assunzione" value={profileData?.details?.hire_date} />
             {profileData?.stores && profileData.stores.length > 0 && (
               <div className="pt-2 border-t border-border">
                 <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Store assegnati</p>
@@ -191,11 +187,10 @@ export function AppHeader() {
 }
 
 function ProfileRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
   return (
     <div className="flex items-start gap-3">
       <span className="text-[11px] font-medium text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-foreground">{value}</span>
+      <span className={`text-sm ${value ? "text-foreground" : "text-muted-foreground/50"}`}>{value || "—"}</span>
     </div>
   );
 }
