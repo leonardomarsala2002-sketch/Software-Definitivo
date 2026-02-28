@@ -226,6 +226,19 @@ const Dashboard = () => {
     return set;
   }, [appointments, calMonth, calYear, isAdmin]);
 
+  // Employee appointments (read-only)
+  const employeeAppointmentDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+  const employeeSelectedDayAppointments = appointments.filter((a) => a.appointment_date === employeeAppointmentDateStr);
+
+  const CATEGORY_LABELS_EMP: Record<string, string> = {
+    meeting: "Riunione", training: "Formazione", inspection: "Ispezione", event: "Evento", other: "Altro",
+  };
+  const STATUS_LABELS_EMP: Record<string, { label: string; className: string }> = {
+    pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
+    accepted: { label: "Accettato", className: "bg-primary/15 text-primary" },
+    declined: { label: "Rifiutato", className: "bg-destructive/15 text-destructive" },
+  };
+
   /* ── Employee-only dashboard ── */
   if (!isAdmin) {
     return (
@@ -298,7 +311,7 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Request + Calendar side by side on desktop, stacked on mobile */}
+        {/* Request + Calendar + Appointments */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-shrink-0">
           {/* New Request */}
           <Card className="p-4 flex flex-col">
@@ -355,6 +368,79 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* My Appointments (read-only) */}
+        <Card className="p-4 flex flex-col flex-shrink-0">
+          <CardHeader className="p-0 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                <Bell className="h-4 w-4 text-primary" />
+              </div>
+              I miei appuntamenti – {selectedDate.getDate()} {MONTHS_IT[selectedDate.getMonth()]}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {employeeSelectedDayAppointments.length > 0 ? (
+              <div className="space-y-2">
+                {employeeSelectedDayAppointments.map((apt) => {
+                  const statusInfo = STATUS_LABELS_EMP[apt.status] ?? STATUS_LABELS_EMP.pending;
+                  return (
+                    <div key={apt.id} className="rounded-xl bg-secondary p-3 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-foreground">{apt.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {apt.start_time?.slice(0, 5)} – {apt.end_time?.slice(0, 5)}
+                            {apt.store?.name && <> · {apt.store.name}</>}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge className={`text-[10px] px-1.5 py-0 border-0 font-semibold ${statusInfo.className}`}>
+                            {statusInfo.label}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {CATEGORY_LABELS_EMP[apt.category] ?? apt.category}
+                          </Badge>
+                        </div>
+                      </div>
+                      {apt.creator_profile?.full_name && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Da: {apt.creator_profile.full_name}
+                        </p>
+                      )}
+                      {apt.description && <p className="text-xs text-foreground/70">{apt.description}</p>}
+                      {apt.notes && <p className="text-xs text-muted-foreground italic">Note: {apt.notes}</p>}
+                      {/* Accept/Decline for target user */}
+                      {apt.status === "pending" && apt.target_user_id === user?.id && (
+                        <div className="flex gap-1.5 pt-1">
+                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-primary/15 text-primary hover:bg-primary/25"
+                            onClick={() => {
+                              respondAppointment.mutate({ id: apt.id, status: "accepted", created_by: apt.created_by });
+                              toast.success("Appuntamento accettato");
+                            }}>
+                            <Check className="h-3.5 w-3.5 mr-1" /> Accetta
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs bg-destructive/15 text-destructive hover:bg-destructive/25"
+                            onClick={() => {
+                              respondAppointment.mutate({ id: apt.id, status: "declined", created_by: apt.created_by });
+                              toast.success("Appuntamento rifiutato");
+                            }}>
+                            <X className="h-3.5 w-3.5 mr-1" /> Rifiuta
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <CalendarIcon className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">Nessun appuntamento per questo giorno</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
