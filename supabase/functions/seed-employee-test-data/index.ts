@@ -6,18 +6,44 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const SALA = [
+  { first: "Marco", last: "Rossi" },
+  { first: "Giulia", last: "Bianchi" },
+  { first: "Alessandro", last: "Giordano" },
+  { first: "Valentina", last: "Greco" },
+  { first: "Davide", last: "Fontana" },
+  { first: "Chiara", last: "Costa" },
+  { first: "Lorenzo", last: "Moretti" },
+  { first: "Martina", last: "Lombardi" },
+];
+
+const CUCINA = [
+  { first: "Luca", last: "Colombo" },
+  { first: "Sara", last: "Ricci" },
+  { first: "Andrea", last: "Marino" },
+  { first: "Elisa", last: "Conti" },
+  { first: "Matteo", last: "De Luca" },
+  { first: "Federica", last: "Mancini" },
+  { first: "Simone", last: "Barbieri" },
+  { first: "Alessia", last: "Galli" },
+];
+
+function mkId(si: number, ei: number): string {
+  const s = String(si).padStart(4, "0");
+  const e = String(ei).padStart(4, "0");
+  return `d0000000-${s}-${e}-0000-000000000001`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Verify caller identity
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -26,116 +52,103 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-
-    const { data: claimsData, error: claimsErr } = await anonClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsErr || !claimsData?.claims) {
+    const { data: { user }, error: userErr } = await anonClient.auth.getUser();
+    if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub as string;
+    const me = user.id;
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Service role client to bypass RLS
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // Get stores
+    const { data: stores } = await db.from("stores").select("id, name").eq("is_active", true).order("name");
+    if (!stores?.length) throw new Error("No stores");
 
-    // 1. Upsert employee_details
-    const { data: existing } = await admin
-      .from("employee_details")
-      .select("id")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // Get IDs to delete
+    const { data: others } = await db.from("profiles").select("id").neq("id", me);
+    const ids = (others ?? []).map(p => p.id);
 
-    if (!existing) {
-      const { error: insertErr } = await admin.from("employee_details").insert({
-        user_id: userId,
-        department: "sala",
-        weekly_contract_hours: 40,
-        is_active: true,
-      });
-      if (insertErr) throw insertErr;
+    // Batch delete related tables
+    if (ids.length > 0) {
+      const tables = [
+        "shifts", "employee_monthly_stats", "employee_stats", "employee_constraints",
+        "employee_exceptions", "employee_availability", "employee_details",
+        "generation_adjustments", "suggestion_outcomes", "time_off_requests",
+        "notifications", "conversation_participants", "user_store_assignments", "user_roles",
+      ];
+      for (const t of tables) {
+        await db.from(t).delete().in("user_id", ids);
+      }
+      // Special FK columns
+      await db.from("lending_requests").delete().in("target_user_id", ids);
+      await db.from("lending_suggestions").delete().in("user_id", ids);
+      await db.from("appointments").delete().in("created_by", ids);
+      await db.from("profiles").delete().in("id", ids);
     }
 
-    // 2. Get primary store
-    const { data: primaryStore } = await admin
-      .from("user_store_assignments")
-      .select("store_id")
-      .eq("user_id", userId)
-      .eq("is_primary", true)
-      .maybeSingle();
+    // Build batch arrays
+    const profiles: any[] = [];
+    const roles: any[] = [];
+    const assignments: any[] = [];
+    const details: any[] = [];
 
-    if (!primaryStore) {
-      return new Response(
-        JSON.stringify({ error: "Nessuno store primario assegnato" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    for (let si = 0; si < stores.length; si++) {
+      const store = stores[si];
+      const all = [
+        ...SALA.map((n, i) => ({ ...n, dept: "sala", idx: i })),
+        ...CUCINA.map((n, i) => ({ ...n, dept: "cucina", idx: i + 8 })),
+      ];
+
+      for (const emp of all) {
+        const id = mkId(si + 1, emp.idx + 1);
+        const sfx = store.name.replace("Store ", "").substring(0, 3).toLowerCase();
+        profiles.push({
+          id,
+          full_name: `${emp.first} ${emp.last}`,
+          email: `${emp.first.toLowerCase()}.${emp.last.toLowerCase().replace(/ /g, "")}@${sfx}.demo`,
+          has_seen_tutorial: true,
+        });
+        roles.push({ user_id: id, role: "employee" });
+        assignments.push({ user_id: id, store_id: store.id, is_primary: true });
+        details.push({
+          user_id: id,
+          department: emp.dept,
+          weekly_contract_hours: 40,
+          is_active: true,
+          first_name: emp.first,
+          last_name: emp.last,
+          role_label: emp.dept === "sala" ? "Cameriere" : "Cuoco",
+        });
+      }
     }
 
-    const storeId = primaryStore.store_id;
+    // Batch upserts
+    const { error: e1 } = await db.from("profiles").upsert(profiles, { onConflict: "id" });
+    if (e1) throw new Error(`profiles: ${e1.message}`);
 
-    // 3. Insert availability (Monday 09-18) if not exists
-    const { data: existingAvail } = await admin
-      .from("employee_availability")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("store_id", storeId)
-      .eq("day_of_week", 0)
-      .eq("start_time", "09:00")
-      .maybeSingle();
+    const { error: e2 } = await db.from("user_roles").upsert(roles, { onConflict: "user_id" });
+    if (e2) throw new Error(`roles: ${e2.message}`);
 
-    if (!existingAvail) {
-      const { error: availErr } = await admin.from("employee_availability").insert({
-        user_id: userId,
-        store_id: storeId,
-        day_of_week: 0,
-        start_time: "09:00",
-        end_time: "18:00",
-        availability_type: "available",
-      });
-      if (availErr) throw availErr;
-    }
+    const { error: e3 } = await db.from("user_store_assignments").upsert(assignments, { onConflict: "user_id,store_id" });
+    if (e3) throw new Error(`assignments: ${e3.message}`);
 
-    // 4. Insert exception (ferie, 3 days from tomorrow) if none exist for that range
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const endDate = new Date(tomorrow);
-    endDate.setDate(endDate.getDate() + 2);
-
-    const fmt = (d: Date) => d.toISOString().split("T")[0];
-
-    const { data: existingExc } = await admin
-      .from("employee_exceptions")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("store_id", storeId)
-      .eq("exception_type", "ferie")
-      .eq("start_date", fmt(tomorrow))
-      .maybeSingle();
-
-    if (!existingExc) {
-      const { error: excErr } = await admin.from("employee_exceptions").insert({
-        user_id: userId,
-        store_id: storeId,
-        exception_type: "ferie",
-        start_date: fmt(tomorrow),
-        end_date: fmt(endDate),
-        notes: "Seed test data - ferie",
-        created_by: userId,
-      });
-      if (excErr) throw excErr;
-    }
+    const { error: e4 } = await db.from("employee_details").upsert(details, { onConflict: "user_id" });
+    if (e4) throw new Error(`details: ${e4.message}`);
 
     return new Response(
-      JSON.stringify({ success: true, message: "Dati test dipendente creati" }),
+      JSON.stringify({
+        success: true,
+        deleted: ids.length,
+        created: profiles.length,
+        stores: stores.length,
+        message: `Eliminati ${ids.length}, creati ${profiles.length} dipendenti (16 × ${stores.length} store)`,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: unknown) {
+    console.error("Seed error:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
