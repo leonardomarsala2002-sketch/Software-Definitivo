@@ -261,6 +261,7 @@ const Employees = () => {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         canEdit={canEdit && (selected?.user_id !== user?.id || role === "super_admin")}
+        canEditSchedule={role === "super_admin" || role === "admin"}
       />
     </div>
   );

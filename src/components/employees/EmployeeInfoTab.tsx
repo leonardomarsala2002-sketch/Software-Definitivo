@@ -25,10 +25,12 @@ import {
 interface Props {
   employee: EmployeeRow;
   canEdit: boolean;
+  canEditSchedule?: boolean;
 }
 
-export default function EmployeeInfoTab({ employee, canEdit }: Props) {
+export default function EmployeeInfoTab({ employee, canEdit, canEditSchedule }: Props) {
   const { role } = useAuth();
+  const scheduleEditable = canEditSchedule ?? canEdit;
   const [department, setDepartment] = useState(employee.department);
   const [hours, setHours] = useState(employee.weekly_contract_hours);
   const [phone, setPhone] = useState(employee.phone ?? "");
@@ -319,7 +321,7 @@ export default function EmployeeInfoTab({ employee, canEdit }: Props) {
         onOpenChange={setScheduleOpen}
         userId={employee.user_id}
         storeId={employee.primary_store_id}
-        canEdit={canEdit}
+        canEdit={scheduleEditable}
         availability={availability ?? []}
       />
     </div>
