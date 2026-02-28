@@ -1,5 +1,4 @@
 import { Palmtree, Clock, Hourglass, Thermometer } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import type { ShiftRow } from "@/hooks/useShifts";
 
 interface KpiCardsProps {
@@ -28,46 +27,47 @@ export function KpiCards({ shifts, employeeCount, year, month }: KpiCardsProps) 
       label: "Ferie / Riposi",
       value: `${totalDaysOff}`,
       sub: "nel mese",
-      iconColor: "text-[#00C853]",
+      iconColor: "text-primary",
     },
     {
       icon: Clock,
       label: "Turni assegnati",
       value: `${totalShifts}`,
       sub: `su ${employeeCount} dipendenti`,
-      iconColor: "text-[#2962FF]",
+      iconColor: "text-chart-4",
     },
     {
       icon: Hourglass,
       label: "Ore coperte",
       value: `${coveredHours}h`,
       sub: "totale mese",
-      iconColor: "text-[#00C853]",
+      iconColor: "text-primary",
     },
     {
       icon: Thermometer,
       label: "Malattie",
       value: "0",
       sub: "questo mese",
-      iconColor: "text-[#FF3D00]",
+      iconColor: "text-destructive",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
       {cards.map((c) => (
-        <Card key={c.label}>
-          <CardContent className="p-4 flex items-start gap-3">
-            <div className="rounded-xl p-2 bg-accent">
-              <c.icon className={`h-4 w-4 ${c.iconColor}`} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#444] truncate">{c.label}</p>
-              <p className="text-lg font-bold text-[#111] leading-tight">{c.value}</p>
-              <p className="text-[10px] text-[#666]">{c.sub}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          key={c.label}
+          className="rounded-2xl border border-border bg-card p-3.5 flex items-start gap-3"
+        >
+          <div className="rounded-xl p-2 bg-secondary">
+            <c.icon className={`h-4 w-4 ${c.iconColor}`} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] text-muted-foreground truncate">{c.label}</p>
+            <p className="text-lg font-bold text-foreground leading-tight">{c.value}</p>
+            <p className="text-[10px] text-muted-foreground">{c.sub}</p>
+          </div>
+        </div>
       ))}
     </div>
   );
