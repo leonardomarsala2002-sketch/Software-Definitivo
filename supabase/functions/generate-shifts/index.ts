@@ -327,7 +327,7 @@ function runIteration(
       const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
       if (empAvail.length === 0) continue;
 
-      const MIN_SHIFT_HOURS = 4;
+      const MIN_SHIFT_HOURS = 3;
       let bestStart = -1, bestEnd = -1, bestCoverage = 0;
 
       for (const entry of effectiveEntries) {

@@ -83,8 +83,8 @@ Deno.serve(async (req) => {
 
     if (draftErr) throw new Error(draftErr.message);
 
-    // ─── Validation: minimum 4 hours per shift ─────────────────────────
-    const MIN_SHIFT_HOURS = 4;
+    // ─── Validation: minimum 3 hours per shift ─────────────────────────
+    const MIN_SHIFT_HOURS = 3;
     const invalidShifts: string[] = [];
     for (const s of (draftShifts ?? [])) {
       if (s.is_day_off || !s.start_time || !s.end_time) continue;
