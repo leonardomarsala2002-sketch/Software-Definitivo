@@ -1,5 +1,6 @@
 import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
@@ -8,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Store, LogOut, Eye, Settings } from "lucide-react";
+import { Store, LogOut, Eye, Settings, Sun, Moon } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -18,6 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function AppSidebar() {
+  const { theme, toggleTheme } = useTheme();
   const {
     role, realRole, stores, activeStore, setActiveStore, signOut,
     cyclePreviewRole, previewRole, isPreviewMode,
@@ -165,6 +167,26 @@ export function AppSidebar() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {/* Theme toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={toggleTheme}
+                className={iconClass(false)}
+                aria-label="Cambia tema"
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-[18px] w-[18px]" />
+                ) : (
+                  <Moon className="h-[18px] w-[18px]" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="font-medium text-xs">
+              {theme === "dark" ? "Tema chiaro" : "Tema scuro"}
+            </TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
