@@ -1213,7 +1213,6 @@ Deno.serve(async (req) => {
           }
 
           // Smart memory: sort alternatives by historical acceptance score (best first)
-          const dow = getDayOfWeek(dateStr);
           alts.sort((a, b) => {
             const aScore = a.userId ? (smartMemory.get(getSmartMemoryKey(a.userId, dow, uncoveredHour)) ?? 0) : 0;
             const bScore = b.userId ? (smartMemory.get(getSmartMemoryKey(b.userId, dow, uncoveredHour)) ?? 0) : 0;
