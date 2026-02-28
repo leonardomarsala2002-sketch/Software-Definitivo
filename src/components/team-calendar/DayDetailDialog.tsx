@@ -233,7 +233,7 @@ export function DayDetailDialog({
                       : "bg-amber-100 text-amber-700 border-amber-300";
 
                     return (
-                      <div key={l.id} className="glass-card rounded-lg p-2.5 flex items-center gap-3">
+                      <div key={l.id} className="rounded-lg border border-border bg-card p-2.5 flex items-center gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-semibold text-foreground">{l.user_name ?? "Dipendente"}</span>

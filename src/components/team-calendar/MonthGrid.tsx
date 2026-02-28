@@ -128,9 +128,9 @@ export function MonthGrid({
             <div
               key={day}
               className={cn(
-                "glass-card rounded-[14px] p-1 cursor-pointer transition-[box-shadow,border-color] duration-150 ease-in-out hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_12px_40px_rgba(0,0,0,0.12)] hover:border-[rgba(0,200,83,0.35)] flex flex-col overflow-hidden min-h-0",
+                "rounded-[14px] border border-border bg-card p-1 cursor-pointer transition-all duration-150 ease-in-out hover:shadow-md hover:border-primary/30 flex flex-col overflow-hidden min-h-0",
                 dimmed && "opacity-40",
-                isToday && "ring-2 ring-[#00C853] shadow-[0_0_16px_rgba(0,200,83,0.3)]",
+                isToday && "ring-2 ring-primary shadow-[0_0_16px_hsl(152_100%_40%/0.3)]",
                 isUncovered && !isArchived && !isToday && "ring-1 ring-destructive/40",
                 hasDraft && !isUncovered && !isArchived && !isToday && "ring-1 ring-amber-400/40",
                 (isArchived || isPast) && !isToday && "opacity-60 grayscale-[50%]",
@@ -142,7 +142,7 @@ export function MonthGrid({
                 className={cn(
                   "text-[10px] font-medium mb-0.5 leading-none",
                   isToday
-                    ? "bg-[#00C853] text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                    ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
                     : "text-foreground font-medium"
                 )}
               >

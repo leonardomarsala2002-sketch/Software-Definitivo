@@ -81,7 +81,7 @@ const Employees = () => {
     return (
       <div
         onClick={() => handleRowClick(emp)}
-        className="glass-card flex items-center gap-3 p-3 cursor-pointer"
+        className="rounded-xl border border-border bg-card flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors"
       >
         <Avatar className="h-9 w-9 flex-shrink-0">
           <AvatarImage src={emp.avatar_url ?? undefined} />
@@ -135,7 +135,7 @@ const Employees = () => {
         {(role === "super_admin" || role === "admin") && (
           <button
             onClick={() => navigate("/invitations")}
-            className="glass-icon-card !rounded-full flex h-10 w-10 items-center justify-center text-[#00C853] shadow-lg hover:border-2 hover:border-[#00C853] transition-all duration-200"
+            className="rounded-full flex h-10 w-10 items-center justify-center text-primary bg-primary/10 shadow-lg hover:border-2 hover:border-primary transition-all duration-200"
             aria-label="Nuovo invito"
           >
             <Plus className="h-5 w-5" />
@@ -189,7 +189,7 @@ const Employees = () => {
           {/* Dual Card System: SALA | CUCINA */}
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0 overflow-hidden">
             {/* SALA Column */}
-            <div className="glass-card p-4 flex flex-col min-h-0 overflow-hidden">
+            <div className="rounded-2xl border border-border bg-card p-4 flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-200">
                   <Users className="h-4 w-4 text-orange-700" />
@@ -211,7 +211,7 @@ const Employees = () => {
             </div>
 
             {/* CUCINA Column */}
-            <div className="glass-card p-4 flex flex-col min-h-0 overflow-hidden">
+            <div className="rounded-2xl border border-border bg-card p-4 flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-2 mb-3 flex-shrink-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00C853]/20">
                   <Users className="h-4 w-4 text-[#00C853]" />
