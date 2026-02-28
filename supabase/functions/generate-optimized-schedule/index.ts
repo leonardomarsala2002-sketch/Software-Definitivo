@@ -783,7 +783,10 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending } = body;
     const isPatchMode = mode === "patch";
-    const MAX_ITERATIONS = 40;
+    const MAX_ITERATIONS = 12;
+    const START_TIME = Date.now();
+    const MAX_EXECUTION_MS = 120_000; // 120s hard limit (edge fn ~150s timeout)
+    const isTimeBudgetOk = () => (Date.now() - START_TIME) < MAX_EXECUTION_MS;
 
     if (!store_id || !week_start_date) {
       return new Response(JSON.stringify({ error: "store_id and week_start_date required" }), {
@@ -1013,7 +1016,7 @@ Deno.serve(async (req) => {
         // Use effective dates for iterations (in patch mode, only cover the affected range)
         const iterDates = isPatchMode ? effectiveWeekDates : weekDates;
         
-        for (let i = 0; i < MAX_ITERATIONS; i++) {
+        for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
           const result = runIteration(
             store_id, dept, iterDates, employees, availability,
             allExceptions, coverageData, allowedData, rules, run.id,
@@ -1029,12 +1032,12 @@ Deno.serve(async (req) => {
         }
 
         // Phase 2: Fallback - if still uncovered, increase split limit by 1 and retry
-        if (bestResult && bestResult.uncoveredSlots.length > 0) {
+        if (bestResult && bestResult.uncoveredSlots.length > 0 && isTimeBudgetOk()) {
           splitOverride = 1;
           fallbackUsed = true;
           console.log(`[${dept}] Fallback: increasing split limit by +1, retrying ${MAX_ITERATIONS} iterations`);
 
-          for (let i = 0; i < MAX_ITERATIONS; i++) {
+          for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
             const result = runIteration(
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, rules, run.id,
@@ -1471,7 +1474,7 @@ Deno.serve(async (req) => {
     // Previous: N×M serial queries (uncovered_slots × other_stores). Now: O(1) batch queries.
     let lendingSuggestionsCreated = 0;
 
-    if (!skip_lending) {
+    if (!skip_lending && isTimeBudgetOk()) {
     const { data: currentStore } = await adminClient
       .from("stores").select("id, city").eq("id", store_id).single();
     const storeCity = currentStore?.city;
