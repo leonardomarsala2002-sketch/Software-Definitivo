@@ -19,7 +19,11 @@ const ROLE_CYCLE: (AppRole | null)[] = ["super_admin", "admin", "employee", null
 function isPreviewEnvironment(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname;
-  return host.includes("-preview--") || host === "localhost";
+  return (
+    host.includes("-preview--") ||
+    host.includes("lovableproject.com") ||
+    host === "localhost"
+  );
 }
 
 interface AuthContextValue {
