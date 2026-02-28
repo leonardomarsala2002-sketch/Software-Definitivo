@@ -99,19 +99,25 @@ export function useRespondAppointment() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ id, status, created_by }: { id: string; status: "accepted" | "declined"; created_by: string }) => {
+    mutationFn: async ({ id, status, created_by, decline_reason }: { id: string; status: "accepted" | "declined"; created_by: string; decline_reason?: string }) => {
+      const updatePayload: Record<string, unknown> = { status, responded_at: new Date().toISOString() };
+      if (status === "declined" && decline_reason) {
+        updatePayload.decline_reason = decline_reason;
+      }
       const { error } = await supabase
         .from("appointments")
-        .update({ status, responded_at: new Date().toISOString() })
+        .update(updatePayload)
         .eq("id", id);
       if (error) throw error;
 
-      // Notify the creator
       const userName = user?.user_metadata?.full_name || user?.email || "Un utente";
+      const message = status === "accepted"
+        ? `${userName} ha accettato l'appuntamento`
+        : `${userName} ha rifiutato l'appuntamento${decline_reason ? `: "${decline_reason}"` : ""}`;
       await supabase.from("notifications").insert({
         user_id: created_by,
         title: status === "accepted" ? "Appuntamento accettato" : "Appuntamento rifiutato",
-        message: `${userName} ha ${status === "accepted" ? "accettato" : "rifiutato"} l'appuntamento`,
+        message,
         type: "appointment_response",
         link: "/",
       });
