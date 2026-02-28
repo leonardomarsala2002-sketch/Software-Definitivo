@@ -241,7 +241,7 @@ export function SuggestionWizardDialog({
                 Come evitare questi problemi la prossima settimana
               </div>
               {recommendations.map((tip, i) => (
-                <div key={i} className="rounded-xl glass-card p-3">
+                <div key={i} className="rounded-xl border border-border bg-secondary p-3">
                   <p className="text-xs text-foreground leading-relaxed">{tip}</p>
                 </div>
               ))}
@@ -323,7 +323,7 @@ export function SuggestionWizardDialog({
         </h3>
 
         {/* Human explanation */}
-        <div className="rounded-xl glass-card p-4 mt-1">
+        <div className="rounded-xl border border-border bg-secondary p-4 mt-1">
           <p className="text-sm text-foreground leading-relaxed">
             {explanation}
           </p>

@@ -64,7 +64,7 @@ export default function Login() {
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
           {/* Logo placeholder */}
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#111] shadow-lg" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/20 shadow-lg" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Shift Scheduler
@@ -76,7 +76,7 @@ export default function Login() {
         </div>
 
         {/* Login card */}
-        <div className="glass-card rounded-2xl p-8 space-y-6">
+        <div className="rounded-2xl border border-border bg-card p-8 space-y-6">
           {/* Email + password form */}
           <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
             <div className="space-y-2">
@@ -134,7 +134,7 @@ export default function Login() {
               <span className="w-full border-t border-border/60" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-transparent px-3 text-muted-foreground">oppure</span>
+              <span className="bg-card px-3 text-muted-foreground">oppure</span>
             </div>
           </div>
 

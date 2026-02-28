@@ -2,17 +2,11 @@ import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Separator } from "@/components/ui/separator";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
+  Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Store, LogOut, Eye, Settings } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
@@ -42,34 +36,34 @@ export function AppSidebar() {
   };
 
   const iconClass = (active: boolean) =>
-    `glass-icon-card !rounded-full flex h-11 w-11 items-center justify-center transition-all duration-200 ${
+    `rounded-full flex h-11 w-11 items-center justify-center transition-all duration-200 ${
       active
-        ? "border-2 border-[#00C853] text-[#00C853]"
-        : "text-[#666] hover:text-[#333]"
+        ? "border-2 border-primary text-primary bg-primary/10"
+        : "text-muted-foreground hover:text-foreground hover:bg-accent"
     }`;
 
   return (
     <aside className="hidden md:flex w-20 flex-col h-full">
       <div className="flex flex-col h-full items-center py-4">
         {/* Logo placeholder */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-lg mb-6" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/20 shadow-lg mb-6" />
 
-        {/* Preview role switch — only in preview environment */}
+        {/* Preview role switch */}
         {isPreviewMode && (
           <div className="mb-3 px-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={cyclePreviewRole}
-                  className={`glass-icon-card flex h-9 w-9 items-center justify-center relative transition-colors ${
+                  className={`rounded-full flex h-9 w-9 items-center justify-center relative transition-colors ${
                     previewRole
-                      ? "text-[#00C853] ring-1 ring-[#00C853]/40"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-primary ring-1 ring-primary/40 bg-primary/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   }`}
                 >
                   <Eye className="h-4 w-4" />
                   {previewRole && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00C853] text-[8px] font-bold text-white leading-none">
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground leading-none">
                       {ROLE_LABELS[previewRole]}
                     </span>
                   )}
@@ -126,7 +120,6 @@ export function AppSidebar() {
 
         {/* Bottom Section */}
         <div className="mt-auto flex flex-col items-center pb-4 space-y-3">
-          {/* Store Selector – hidden for employees */}
           {role !== "employee" && (
             <DropdownMenu>
               <Tooltip>
@@ -160,7 +153,7 @@ export function AppSidebar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => navigate("/manage-stores")}
-                      className="rounded-lg px-3 py-2 text-[13px] text-[#00C853] font-medium"
+                      className="rounded-lg px-3 py-2 text-[13px] text-primary font-medium"
                     >
                       <Settings className="mr-2.5 h-4 w-4" />
                       Gestisci Store
@@ -171,7 +164,6 @@ export function AppSidebar() {
             </DropdownMenu>
           )}
 
-          {/* Logout */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button

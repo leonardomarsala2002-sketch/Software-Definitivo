@@ -69,14 +69,14 @@ const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7); // 07–23
 
 /* ── card style ──────────────────────────────────────── */
 
-const cardBase = "glass-card rounded-[20px] p-4";
+const cardBase = "rounded-2xl p-4";
 
 const cardProfile = cardBase;
 const cardFerie = cardBase;
 const cardCalendar = cardBase;
 const cardRichiesteAdmin = cardBase;
 const cardRichiesteUser = cardBase;
-const cardAgenda = "glass-card rounded-[20px] p-3";
+const cardAgenda = "rounded-2xl p-3";
 
 /* ── component ───────────────────────────────────────── */
 
