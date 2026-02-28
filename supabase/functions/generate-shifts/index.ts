@@ -72,6 +72,9 @@ interface IterationResult {
   hourAdjustments: Record<string, number>; // user_id -> delta from contract
 }
 
+// Smart memory: historical preference scores per employee+slot
+type SmartMemory = Map<string, number>; // key: "userId:dow:hour" -> acceptance score
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function parseHour(timeStr: string): number {
@@ -124,6 +127,19 @@ function shuffle<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+// ─── Smart Memory Helper ─────────────────────────────────────────────────────
+
+function getSmartMemoryScore(
+  userId: string, dow: number, hourCoverage: Map<number, number>, memory: SmartMemory
+): number {
+  let score = 0;
+  for (const [h] of hourCoverage) {
+    const key = `${userId}:${dow}:${h}`;
+    score += memory.get(key) ?? 0;
+  }
+  return score;
 }
 
 // ─── Fitness Scoring ─────────────────────────────────────────────────────────
@@ -207,6 +223,7 @@ function runIteration(
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
   hourBalances: Map<string, number>,
   randomize: boolean,
+  smartMemory: SmartMemory,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -265,7 +282,7 @@ function runIteration(
     if (randomize) {
       availableEmps = shuffle(availableEmps);
     } else {
-      // Sort by hours used (least first), with hour bank compensation
+      // Sort by hours used (least first), with hour bank compensation + smart memory boost
       availableEmps.sort((a, b) => {
         const aUsed = weeklyHours.get(a.user_id) ?? 0;
         const bUsed = weeklyHours.get(b.user_id) ?? 0;
@@ -273,7 +290,13 @@ function runIteration(
         const bBalance = hourBalances.get(b.user_id) ?? 0;
         const aTarget = a.weekly_contract_hours - aBalance;
         const bTarget = b.weekly_contract_hours - bBalance;
-        return (aUsed / Math.max(aTarget, 1)) - (bUsed / Math.max(bTarget, 1));
+        const loadRatio = (aUsed / Math.max(aTarget, 1)) - (bUsed / Math.max(bTarget, 1));
+
+        // Smart memory: boost employees historically accepted for this day's slots
+        const aMemScore = getSmartMemoryScore(a.user_id, dow, hourCoverage, smartMemory);
+        const bMemScore = getSmartMemoryScore(b.user_id, dow, hourCoverage, smartMemory);
+        // Higher memory score = more preferred, so subtract to prioritize
+        return loadRatio - (aMemScore - bMemScore) * 0.1;
       });
     }
 
@@ -470,8 +493,13 @@ Deno.serve(async (req) => {
         .eq("store_id", store_id).eq("department", department)
         .eq("status", "draft").gte("date", week_start).lte("date", weekEnd);
 
-      // Fetch all data in parallel
-      const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes] = await Promise.all([
+      // Compute 8-week lookback date for smart memory
+      const lookbackDate = new Date(week_start + "T00:00:00Z");
+      lookbackDate.setUTCDate(lookbackDate.getUTCDate() - 56);
+      const lookbackStr = getDateStr(lookbackDate);
+
+      // Fetch all data in parallel (including adjustments & suggestion history)
+      const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes, adjRes, outcomesRes] = await Promise.all([
         adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active"),
         adminClient.from("employee_availability").select("user_id, day_of_week, start_time, end_time").eq("store_id", store_id),
         adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", week_start),
@@ -482,6 +510,12 @@ Deno.serve(async (req) => {
         adminClient.from("time_off_requests").select("user_id, request_date, request_type, selected_hour, status")
           .eq("store_id", store_id).eq("status", "approved").gte("request_date", week_start).lte("request_date", weekEnd),
         adminClient.from("employee_stats").select("user_id, current_balance").eq("store_id", store_id),
+        // Accepted adjustments for this week (hour compensation from previous suggestions)
+        adminClient.from("generation_adjustments").select("user_id, extra_hours")
+          .eq("store_id", store_id).eq("week_start", week_start),
+        // Smart memory: suggestion outcomes from last 8 weeks
+        adminClient.from("suggestion_outcomes").select("user_id, day_of_week, hour_slot, outcome, department")
+          .eq("store_id", store_id).gte("week_start", lookbackStr),
       ]);
 
       if (rulesRes.error || !rulesRes.data) throw new Error("Store rules not found");
@@ -506,10 +540,29 @@ Deno.serve(async (req) => {
         day_of_week: h.day_of_week, opening_time: h.opening_time, closing_time: h.closing_time,
       }));
 
-      // Hour bank balances
+      // ─── Hour bank balances + adjustment compensation ──────────────────
       const hourBalances = new Map<string, number>();
       for (const s of (statsRes.data ?? [])) {
         hourBalances.set(s.user_id, Number(s.current_balance));
+      }
+      // Add accepted adjustments (e.g. +1h last week → -1h this week via balance)
+      for (const adj of (adjRes.data ?? [])) {
+        const current = hourBalances.get(adj.user_id) ?? 0;
+        hourBalances.set(adj.user_id, current + Number(adj.extra_hours));
+      }
+
+      // ─── Build Smart Memory from suggestion outcomes ───────────────────
+      const smartMemory: SmartMemory = new Map();
+      for (const o of (outcomesRes.data ?? [])) {
+        if (o.department !== department) continue;
+        const key = `${o.user_id}:${o.day_of_week}:${o.hour_slot}`;
+        const current = smartMemory.get(key) ?? 0;
+        // Accepted outcomes boost score, rejected ones penalize
+        if (o.outcome === "accepted") {
+          smartMemory.set(key, current + 1);
+        } else if (o.outcome === "rejected") {
+          smartMemory.set(key, current - 0.5);
+        }
       }
 
       // ─── Run N iterations, keep best ───────────────────────────────────
@@ -521,6 +574,7 @@ Deno.serve(async (req) => {
           allExceptions, coverageData, allowedData, rules, run.id,
           openingHoursData, hourBalances,
           i > 0, // first iteration is deterministic, rest randomized
+          smartMemory,
         );
 
         if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
