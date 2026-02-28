@@ -105,7 +105,7 @@ const StoreSettings = () => {
       onEdit: () => setHoursOpen(true),
     },
     {
-      title: "Copertura Minima",
+      title: "Copertura Richiesta",
       icon: LayoutGrid,
       summary: coverage.length > 0 ? `${coverage.length} slot configurati` : "Non configurata",
       configured: coverage.length > 0,

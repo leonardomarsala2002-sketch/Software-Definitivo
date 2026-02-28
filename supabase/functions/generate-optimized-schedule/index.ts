@@ -186,8 +186,8 @@ function computeFitness(
         s.start_time !== null && s.end_time !== null &&
         parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
       ).length;
-      if (assigned > c.min_staff_required + 1) {
-        score += (assigned - c.min_staff_required - 1) * PENALTY_OVERCROWDED;
+      if (assigned > c.min_staff_required) {
+        score += (assigned - c.min_staff_required) * PENALTY_OVERCROWDED;
       }
     }
   }
@@ -491,11 +491,18 @@ function runIteration(
           const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
           if (!withinAvail) continue;
 
+          // Exact coverage: reject shifts that would cause ANY tracked hour to exceed its required staff
+          let wouldOverbook = false;
           let coverCount = 0;
           for (let h = entry; h < exit; h++) {
             const needed = hourCoverage.get(h);
-            if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) coverCount++;
+            if (needed !== undefined) {
+              const current = staffAssigned.get(h) ?? 0;
+              if (current >= needed) { wouldOverbook = true; break; }
+              if (current < needed) coverCount++;
+            }
           }
+          if (wouldOverbook) continue;
 
           if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
             bestCoverage = coverCount;
@@ -622,11 +629,18 @@ function runIteration(
             const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
             if (!withinAvail) continue;
 
+            // Exact coverage: reject if any hour would exceed required staff
+            let wouldOverbook = false;
             let coverCount = 0;
             for (let h = entry; h < exit; h++) {
               const needed = hourCoverage.get(h);
-              if (needed !== undefined && (staffAssigned.get(h) ?? 0) < needed) coverCount++;
+              if (needed !== undefined) {
+                const current = staffAssigned.get(h) ?? 0;
+                if (current >= needed) { wouldOverbook = true; break; }
+                if (current < needed) coverCount++;
+              }
             }
+            if (wouldOverbook) continue;
 
             if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
               bestCoverage = coverCount;
@@ -1154,7 +1168,21 @@ Deno.serve(async (req) => {
             });
           }
 
-          return alts.slice(0, 5); // Max 5 alternatives
+          // Cap alternatives to the number of uncovered spots (exact coverage = no overbooking)
+          const uncoveredSpotsNeeded = (() => {
+            const dow = getDayOfWeek(dateStr);
+            const cov = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === uncoveredHour);
+            if (!cov) return 1;
+            // Count how many are already assigned at this hour
+            const assignedCount = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time).filter(s => {
+              const sh = parseInt(s.start_time!.split(":")[0], 10);
+              let eh = parseInt(s.end_time!.split(":")[0], 10);
+              if (eh === 0) eh = 24;
+              return uncoveredHour >= sh && uncoveredHour < eh;
+            }).length;
+            return Math.max(1, cov.min_staff_required - assignedCount);
+          })();
+          return alts.slice(0, uncoveredSpotsNeeded); // Cap to exact uncovered spots
         }
 
         // Track weekly hours from best result for alternative calculations
