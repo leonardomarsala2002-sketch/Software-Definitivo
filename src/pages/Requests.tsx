@@ -16,7 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 const Requests = () => {
   const { user, role, activeStore } = useAuth();
   const storeId = activeStore?.id;
-  const isAdmin = role === "super_admin" || role === "admin";
+  const isAdmin = role === "admin";
+  const isSuperAdmin = role === "super_admin";
 
   const [showForm, setShowForm] = useState(false);
 
@@ -37,10 +38,11 @@ const Requests = () => {
 
   const department = (myDetails?.department as "sala" | "cucina") ?? "sala";
 
-  // Admin sees all store requests, employee sees own
+  // Admin sees store requests + own requests; employee sees only own
   const { data: storeRequests, isLoading: storeLoading } = useStoreRequests(isAdmin ? storeId : undefined);
-  const { data: myRequests, isLoading: myLoading } = useMyRequests(!isAdmin ? user?.id : undefined);
+  const { data: myRequests, isLoading: myLoading } = useMyRequests(user?.id);
 
+  // Admin: show both store requests and own requests merged
   const requests = isAdmin ? storeRequests : myRequests;
   const isLoading = isAdmin ? storeLoading : myLoading;
 
@@ -55,13 +57,27 @@ const Requests = () => {
   const pendingRequests = requests?.filter((r) => r.status === "pending") ?? [];
   const otherRequests = requests?.filter((r) => r.status !== "pending") ?? [];
 
+  // Super admin should never see this page, but just in case
+  if (isSuperAdmin) {
+    return (
+      <div>
+        <PageHeader title="Richieste" subtitle="I super admin non gestiscono richieste" />
+        <EmptyState
+          icon={<Inbox className="h-6 w-6" />}
+          title="Non disponibile"
+          description="I super admin non hanno accesso alle richieste."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title="Richieste"
-        subtitle={isAdmin ? "Gestisci le richieste del team" : "Ferie, permessi, cambi turno e malattie"}
+        subtitle={isAdmin ? "Gestisci le richieste del team e le tue" : "Ferie, permessi, cambi turno e malattie"}
       >
-        {!isAdmin && !showForm && (
+        {!showForm && (
           <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4" />
             Nuova richiesta
@@ -69,7 +85,7 @@ const Requests = () => {
         )}
       </PageHeader>
 
-      {!isAdmin && showForm && storeId && (
+      {showForm && storeId && (
         <Card className="mb-6 border border-border bg-card shadow-sm transition-all duration-200 hover:shadow-lg">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Nuova richiesta</CardTitle>
@@ -79,6 +95,7 @@ const Requests = () => {
               department={department}
               storeId={storeId}
               onClose={() => setShowForm(false)}
+              autoApprove={isAdmin}
             />
           </CardContent>
         </Card>

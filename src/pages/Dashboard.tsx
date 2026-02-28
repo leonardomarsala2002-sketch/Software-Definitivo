@@ -13,11 +13,15 @@ import {
   Bell,
   Plus,
   MessageSquare,
+  Globe,
+  Store,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -124,6 +128,8 @@ const Dashboard = () => {
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
   const [declineTarget, setDeclineTarget] = useState<{ id: string; created_by: string } | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+  const [viewAllStores, setViewAllStores] = useState(false);
+  const isSuperAdmin = role === "super_admin";
 
   const { data: myDetails } = useQuery({
     queryKey: ["my-employee-details", user?.id],
@@ -213,13 +219,13 @@ const Dashboard = () => {
       period: "vs sett. scorsa",
       icon: <AlertTriangle className="h-4 w-4" />,
     },
-    {
+    ...(isSuperAdmin ? [] : [{
       title: "Richieste pendenti",
       value: 0,
       trend: 0,
       period: "questa settimana",
       icon: <Inbox className="h-4 w-4" />,
-    },
+    }]),
     {
       title: "Tasso copertura",
       value: "94%",
@@ -484,8 +490,29 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-in fade-in duration-500">
+      {/* Super admin: store toggle */}
+      {isSuperAdmin && (
+        <div className="flex items-center gap-3 px-1">
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">
+              {viewAllStores ? "Tutti i locali" : (activeStore?.name ?? "Store selezionato")}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <Label htmlFor="view-toggle" className="text-xs text-muted-foreground">Tutti i locali</Label>
+            <Switch
+              id="view-toggle"
+              checked={viewAllStores}
+              onCheckedChange={setViewAllStores}
+            />
+            <Globe className={`h-4 w-4 transition-colors ${viewAllStores ? "text-primary" : "text-muted-foreground/40"}`} />
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards Row */}
-      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:overflow-visible">
+      <div className={`flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:overflow-visible ${isSuperAdmin ? "md:grid-cols-4" : "md:grid-cols-5"}`}>
         {kpis.map((kpi) => (
           <div key={kpi.title} className="min-w-[160px] snap-start md:min-w-0">
             <KpiCard {...kpi} />

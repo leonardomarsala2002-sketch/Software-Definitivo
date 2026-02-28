@@ -25,9 +25,10 @@ interface Props {
   department: "sala" | "cucina";
   storeId: string;
   onClose: () => void;
+  autoApprove?: boolean;
 }
 
-export default function RequestForm({ department, storeId, onClose }: Props) {
+export default function RequestForm({ department, storeId, onClose, autoApprove = false }: Props) {
   const { user } = useAuth();
   const { data: allowedTimes } = useAllowedTimes(storeId);
   const { data: openingHours } = useOpeningHours(storeId);
@@ -112,6 +113,7 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
         selected_hour: needsHour ? selectedHour : null,
         department,
         notes: notes || null,
+        autoApprove,
       },
       { onSuccess: onClose }
     );
@@ -195,7 +197,7 @@ export default function RequestForm({ department, storeId, onClose }: Props) {
           onClick={handleSubmit}
           disabled={createReq.isPending || isDateLocked || (needsHour && (noHoursConfigured || selectedHour === null))}
         >
-          Invia richiesta
+          {autoApprove ? "Crea e approva" : "Invia richiesta"}
         </Button>
         <Button size="sm" variant="outline" onClick={onClose}>
           Annulla
