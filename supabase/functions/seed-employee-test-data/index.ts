@@ -40,34 +40,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userErr } = await anonClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const me = user.id;
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Get caller id from body or skip deletion of self
+    const body = await req.json().catch(() => ({}));
+    const me = body.me || null;
 
     // Get stores
     const { data: stores } = await db.from("stores").select("id, name").eq("is_active", true).order("name");
     if (!stores?.length) throw new Error("No stores");
 
     // Get IDs to delete
-    const { data: others } = await db.from("profiles").select("id").neq("id", me);
+    const query = db.from("profiles").select("id");
+    const { data: others } = me ? await query.neq("id", me) : await query;
     const ids = (others ?? []).map(p => p.id);
 
     // Batch delete related tables
