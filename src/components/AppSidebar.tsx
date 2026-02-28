@@ -1,15 +1,10 @@
 import { navItems, filterNavByRole } from "@/config/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Store, LogOut, Eye, Settings, Sun, Moon } from "lucide-react";
+import { Eye, Sun, Moon } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -102,7 +97,7 @@ export function AppSidebar() {
 
           {secondaryItems.length > 0 && (
             <>
-              <Separator className="mx-2 my-2 w-8 opacity-20" />
+              <div className="mx-2 my-2 w-8 h-px bg-border opacity-20" />
               {secondaryItems.map((item) => {
                 const active = isActive(item.url);
                 return (
@@ -124,50 +119,6 @@ export function AppSidebar() {
 
         {/* Bottom Section */}
         <div className="mt-auto flex flex-col items-center pb-3 space-y-1.5">
-          {role !== "employee" && (
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button className={iconClass(false)}>
-                      <Store className="h-[18px] w-[18px]" />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium text-xs">
-                  {activeStore?.name ?? "Seleziona store"}
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent side="right" align="end" className="w-56">
-                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                  Seleziona Store
-                </DropdownMenuLabel>
-                {stores.map((s) => (
-                  <DropdownMenuItem
-                    key={s.id}
-                    onClick={() => setActiveStore(s)}
-                    className={`text-[13px] ${activeStore?.id === s.id ? "bg-accent" : ""}`}
-                  >
-                    <Store className="mr-2.5 h-4 w-4" />
-                    {s.name}
-                  </DropdownMenuItem>
-                ))}
-                {canManageStores && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => navigate("/manage-stores")}
-                      className="text-[13px] text-primary font-medium"
-                    >
-                      <Settings className="mr-2.5 h-4 w-4" />
-                      Gestisci Store
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
           {/* Theme toggle */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -186,19 +137,6 @@ export function AppSidebar() {
             <TooltipContent side="right" className="font-medium text-xs">
               {theme === "dark" ? "Tema chiaro" : "Tema scuro"}
             </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={signOut}
-                className={`${iconClass(false)} hover:text-destructive`}
-                aria-label="Esci"
-              >
-                <LogOut className="h-[18px] w-[18px]" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="font-medium text-xs">Esci</TooltipContent>
           </Tooltip>
         </div>
       </div>
