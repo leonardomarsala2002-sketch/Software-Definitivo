@@ -29,7 +29,7 @@ export function getShiftColor(s: ShiftRow): {
   const startH = s.start_time ? parseInt(s.start_time.split(":")[0]) : -1;
   const endH = s.end_time ? parseInt(s.end_time.split(":")[0]) : -1;
 
-  // Ingresso 9, uscita 15 → blu
+  // Ingresso 9, uscita 15 → blu (Mattina)
   if (startH === 9 && endH === 15) {
     return {
       bg: "bg-shift-blue/20",
@@ -39,8 +39,28 @@ export function getShiftColor(s: ShiftRow): {
     };
   }
 
-  // Ingresso 11, uscita 15 → giallo
+  // Ingresso 10, uscita 15 → blu chiaro (Mattina tarda)
+  if (startH === 10 && endH === 15) {
+    return {
+      bg: "bg-shift-blue/20",
+      border: "border-shift-blue/40",
+      text: "text-shift-blue",
+      label: "Mattina",
+    };
+  }
+
+  // Ingresso 11, uscita 15 → giallo (Pranzo)
   if (startH === 11 && endH === 15) {
+    return {
+      bg: "bg-shift-yellow/20",
+      border: "border-shift-yellow/40",
+      text: "text-shift-yellow",
+      label: "Pranzo",
+    };
+  }
+
+  // Ingresso 12, uscita 15 → giallo (Pranzo breve)
+  if (startH === 12 && endH === 15) {
     return {
       bg: "bg-shift-yellow/20",
       border: "border-shift-yellow/40",

@@ -1,14 +1,13 @@
 import { useMemo } from "react";
-import { Calendar, Sun, Scissors } from "lucide-react";
+import { Sun, Scissors } from "lucide-react";
 import { format, parseISO, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatEndTime } from "@/lib/shiftColors";
+import { getShiftColor, formatEndTime } from "@/lib/shiftColors";
 import { cn } from "@/lib/utils";
 import type { ShiftRow } from "@/hooks/useShifts";
 
@@ -17,11 +16,12 @@ interface EmployeeWeekDrawerProps {
   onOpenChange: (open: boolean) => void;
   employeeName: string;
   employeeId: string;
-  /** The date the user clicked — we show the week containing this date */
   referenceDate: string;
-  /** All shifts for the store/month — we filter client-side */
   allShifts: ShiftRow[];
 }
+
+const DAYS_FULL_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7);
 
 function isSplitDay(shifts: ShiftRow[]): boolean {
   const work = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
@@ -54,6 +54,8 @@ export function EmployeeWeekDrawer({
     return map;
   }, [allShifts, employeeId]);
 
+  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="w-full h-[70vh] rounded-t-[32px] p-0">
@@ -63,83 +65,82 @@ export function EmployeeWeekDrawer({
         </SheetHeader>
 
         <ScrollArea className="h-[calc(70vh-80px)]">
-          <div className="px-5 py-4 space-y-2">
-            {weekDates.map(dateStr => {
-              const dayShifts = shiftsByDate.get(dateStr) ?? [];
-              const isDayOff = dayShifts.some(s => s.is_day_off);
-              const isSplit = isSplitDay(dayShifts);
-              const d = parseISO(dateStr);
-              const dayName = format(d, "EEEE", { locale: it });
-              const dateLabel = format(d, "d MMMM", { locale: it });
-              const isRef = dateStr === referenceDate;
-              const hasShifts = dayShifts.length > 0;
+          <div className="px-5 py-4">
+            {/* Timeline header */}
+            <div className="flex mb-1">
+              <div className="w-20 shrink-0" />
+              <div className="flex-1 flex">
+                {TIMELINE_HOURS.map((h) => (
+                  <div key={h} className="text-[10px] text-muted-foreground font-medium text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
+                    {String(h).padStart(2, "0")}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-              return (
-                <Card
-                  key={dateStr}
-                  className={cn(
-                    "p-4 transition-all",
-                    isDayOff && "border-destructive/30 bg-destructive/5",
-                    isSplit && !isDayOff && "border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20",
-                    isRef && "ring-2 ring-primary/30",
-                    !hasShifts && !isDayOff && "opacity-50"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-semibold capitalize text-foreground">
-                          {dayName}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{dateLabel}</span>
-                        {isRef && (
-                          <Badge variant="default" className="text-[9px] px-1.5 py-0 h-4">
-                            Selezionato
-                          </Badge>
-                        )}
-                        {dayShifts[0]?.status === "draft" && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 text-amber-600 border-amber-300">
-                            Draft
-                          </Badge>
-                        )}
-                      </div>
+            {/* Week rows - same as dashboard timeline */}
+            <div className="space-y-1">
+              {weekDates.map((dateStr, i) => {
+                const dayShifts = shiftsByDate.get(dateStr) ?? [];
+                const isDayOff = dayShifts.some(s => s.is_day_off);
+                const isSplit = isSplitDay(dayShifts);
+                const d = parseISO(dateStr);
+                const isDayToday = dateStr === today;
+                const isRef = dateStr === referenceDate;
 
-                      {isDayOff ? (
-                        <div className="flex items-center gap-1.5 text-destructive">
-                          <Sun className="h-4 w-4" />
-                          <span className="text-sm font-medium">Giorno di riposo</span>
-                        </div>
-                      ) : hasShifts ? (
-                        <div className="space-y-1">
-                          {dayShifts.filter(s => !s.is_day_off).map(s => (
-                            <div key={s.id} className="flex items-center gap-2">
-                              <span className="text-base font-semibold text-foreground tabular-nums">
-                                {s.start_time?.slice(0, 5)} – {formatEndTime(s.end_time)}
-                              </span>
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1.5 py-0 h-4 capitalize"
-                              >
-                                {s.department}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Nessun turno</span>
-                      )}
+                return (
+                  <div key={dateStr} className={cn("flex items-center min-h-[28px]", isRef && "ring-1 ring-primary/30 rounded-lg")}>
+                    <div className={cn(
+                      "w-20 shrink-0 pr-2 text-right text-xs font-medium",
+                      isDayToday ? "text-primary font-semibold" : "text-muted-foreground"
+                    )}>
+                      <span className={isDayToday ? "bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[11px]" : ""}>
+                        {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
+                      </span>
                     </div>
 
-                    {isSplit && !isDayOff && (
-                      <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                        <Scissors className="h-4 w-4" />
-                        <span className="text-[10px] font-semibold">Spezzato</span>
-                      </div>
-                    )}
+                    <div className="flex-1 relative h-6 bg-secondary rounded-lg overflow-hidden border border-border">
+                      {TIMELINE_HOURS.map((h, hi) => (
+                        <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
+                      ))}
+
+                      {isDayOff ? (
+                        <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                          <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
+                        </div>
+                      ) : (
+                        dayShifts.filter(s => !s.is_day_off && s.start_time && s.end_time).map(s => {
+                          const sH = parseInt(s.start_time!.split(":")[0]);
+                          let eH = parseInt(s.end_time!.split(":")[0]);
+                          if (eH === 0) eH = 24;
+                          const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                          const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                          const width = ((eH - sH) / totalSpan) * 100;
+                          const color = getShiftColor(s);
+                          return (
+                            <div
+                              key={s.id}
+                              className={cn("absolute top-0.5 bottom-0.5 rounded-md border flex items-center justify-center", color.bg, color.border)}
+                              style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                            >
+                              <span className={cn("text-[10px] font-semibold", color.text)}>
+                                {s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {isSplit && !isDayOff && (
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                          <Scissors className="h-3 w-3" />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </Card>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </ScrollArea>
       </SheetContent>
