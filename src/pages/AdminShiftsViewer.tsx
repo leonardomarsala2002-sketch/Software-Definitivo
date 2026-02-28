@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getShiftColor, formatEndTime } from "@/lib/shiftColors";
 import type { ShiftRow } from "@/hooks/useShifts";
 
-const DAYS_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+const DAYS_FULL_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
 const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7);
 
 interface AdminUser {
@@ -32,7 +32,6 @@ function useAdminUsers() {
   return useQuery({
     queryKey: ["admin-users-with-stores"],
     queryFn: async (): Promise<AdminUser[]> => {
-      // Get all admin role users
       const { data: roles, error: rolesErr } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -42,7 +41,6 @@ function useAdminUsers() {
 
       const userIds = roles.map((r) => r.user_id);
 
-      // Fetch profiles and store assignments in parallel
       const [profilesRes, assignmentsRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email").in("id", userIds),
         supabase.from("user_store_assignments").select("user_id, store_id, stores(id, name)").in("user_id", userIds),
@@ -94,7 +92,6 @@ const AdminShiftsViewer = () => {
   const weekStartStr = format(weekStart, "yyyy-MM-dd");
   const weekEndStr = format(weekDates[6], "yyyy-MM-dd");
 
-  // Filter admins by search and store
   const filteredAdmins = useMemo(() => {
     let list = admins;
     if (searchQuery.trim()) {
@@ -114,21 +111,16 @@ const AdminShiftsViewer = () => {
 
   const selectedAdmin = admins.find((a) => a.user_id === selectedAdminId) ?? null;
 
-  // Fetch shifts for the selected admin's stores in the current week
+  // Fetch ONLY the selected admin's personal shifts
   const { data: adminShifts = [], isLoading: loadingShifts } = useQuery({
-    queryKey: ["admin-viewer-shifts", selectedAdminId, weekStartStr, weekEndStr, storeFilter],
+    queryKey: ["admin-personal-shifts", selectedAdminId, weekStartStr, weekEndStr],
     queryFn: async () => {
-      if (!selectedAdmin) return [];
-      const targetStoreIds =
-        storeFilter !== "all"
-          ? [storeFilter]
-          : selectedAdmin.stores.map((s) => s.id);
-      if (targetStoreIds.length === 0) return [];
+      if (!selectedAdminId) return [];
 
       const { data, error } = await supabase
         .from("shifts")
         .select("*")
-        .in("store_id", targetStoreIds)
+        .eq("user_id", selectedAdminId)
         .gte("date", weekStartStr)
         .lte("date", weekEndStr)
         .order("date")
@@ -136,32 +128,8 @@ const AdminShiftsViewer = () => {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!selectedAdminId && !!selectedAdmin,
+    enabled: !!selectedAdminId,
   });
-
-  // Fetch employee profiles for shifts
-  const shiftUserIds = useMemo(
-    () => [...new Set(adminShifts.map((s) => s.user_id))],
-    [adminShifts]
-  );
-  const { data: shiftProfiles = [] } = useQuery({
-    queryKey: ["admin-viewer-profiles", shiftUserIds],
-    queryFn: async () => {
-      if (shiftUserIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", shiftUserIds);
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: shiftUserIds.length > 0,
-  });
-
-  const profileMap = useMemo(
-    () => new Map(shiftProfiles.map((p) => [p.id, p.full_name ?? "—"])),
-    [shiftProfiles]
-  );
 
   // Group shifts by date
   const shiftsByDate = useMemo(() => {
@@ -174,13 +142,11 @@ const AdminShiftsViewer = () => {
     return map;
   }, [adminShifts]);
 
-  // Store name map
   const storeMap = useMemo(
     () => new Map(stores.map((s) => [s.id, s.name])),
     [stores]
   );
 
-  // All unique stores from all admins for the filter dropdown
   const allAdminStores = useMemo(() => {
     const map = new Map<string, string>();
     admins.forEach((a) => a.stores.forEach((s) => map.set(s.id, s.name)));
@@ -189,7 +155,7 @@ const AdminShiftsViewer = () => {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-in fade-in duration-500">
-      <PageHeader title="Orari Admin" subtitle="Seleziona un admin per visualizzare i turni del suo store" />
+      <PageHeader title="Orari Admin" subtitle="Seleziona un admin per visualizzare il suo orario settimanale personale" />
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
         {/* Left panel: admin list */}
@@ -265,7 +231,7 @@ const AdminShiftsViewer = () => {
           </CardContent>
         </Card>
 
-        {/* Right panel: shifts view */}
+        {/* Right panel: personal weekly timeline */}
         <Card className="flex flex-col">
           <CardHeader className="p-4 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -273,7 +239,7 @@ const AdminShiftsViewer = () => {
                 <CalendarDays className="h-4 w-4 text-primary" />
               </div>
               {selectedAdmin
-                ? `Turni — ${selectedAdmin.full_name ?? "Admin"}`
+                ? `Orario — ${selectedAdmin.full_name ?? "Admin"}`
                 : "Seleziona un admin"}
               <div className="ml-auto flex items-center gap-1">
                 <button
@@ -306,67 +272,116 @@ const AdminShiftsViewer = () => {
             {!selectedAdmin ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
                 <Users className="h-12 w-12 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">Seleziona un admin dalla lista per visualizzare i turni</p>
+                <p className="text-sm text-muted-foreground">Seleziona un admin dalla lista per visualizzare il suo orario</p>
               </div>
             ) : loadingShifts ? (
               <div className="space-y-3">
                 {Array.from({ length: 7 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 rounded-xl" />
+                  <Skeleton key={i} className="h-8 rounded-xl" />
                 ))}
               </div>
             ) : (
-              <div className="space-y-2">
-                {weekDates.map((d, i) => {
-                  const dateStr = format(d, "yyyy-MM-dd");
-                  const dayShifts = shiftsByDate.get(dateStr) ?? [];
-                  const isToday = d.toDateString() === today.toDateString();
-
-                  return (
-                    <div key={i} className={`rounded-xl p-3 ${isToday ? "bg-primary/5 border border-primary/20" : "bg-secondary/50"}`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`text-xs font-bold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
-                          {DAYS_IT[i]} {format(d, "d MMM", { locale: it })}
-                        </span>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto">
-                          {dayShifts.length} turni
-                        </Badge>
+              <>
+                {/* Timeline header */}
+                <div className="flex mb-1">
+                  <div className="w-20 shrink-0" />
+                  <div className="flex-1 flex">
+                    {TIMELINE_HOURS.map((h) => (
+                      <div key={h} className="text-[10px] text-muted-foreground font-medium text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
+                        {String(h).padStart(2, "0")}
                       </div>
-                      {dayShifts.length === 0 ? (
-                        <p className="text-xs text-muted-foreground pl-1">Nessun turno</p>
-                      ) : (
-                        <div className="space-y-1">
-                          {dayShifts.map((s) => {
-                            const color = getShiftColor(s as ShiftRow);
-                            const empName = profileMap.get(s.user_id) ?? "—";
-                            const storeName = storeMap.get(s.store_id) ?? "";
-                            return (
-                              <div
-                                key={s.id}
-                                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${color.bg} border ${color.border}`}
-                              >
-                                <span className={`text-xs font-semibold ${color.text} min-w-[90px]`}>
-                                  {s.is_day_off
-                                    ? "RIPOSO"
-                                    : `${s.start_time?.slice(0, 5)} – ${formatEndTime(s.end_time)}`}
-                                </span>
-                                <span className="text-xs font-medium text-foreground truncate">
-                                  {empName}
-                                </span>
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 ml-auto shrink-0">
-                                  {s.department}
-                                </Badge>
-                                {storeName && (
-                                  <span className="text-[10px] text-muted-foreground shrink-0">{storeName}</span>
-                                )}
-                              </div>
-                            );
-                          })}
+                    ))}
+                  </div>
+                </div>
+
+                {/* Timeline rows */}
+                <div className="space-y-1">
+                  {weekDates.map((d, i) => {
+                    const isDayToday = d.toDateString() === today.toDateString();
+                    const dateStr = format(d, "yyyy-MM-dd");
+                    const dayShifts = shiftsByDate.get(dateStr) ?? [];
+                    const isDayOff = dayShifts.some((s) => s.is_day_off);
+
+                    return (
+                      <div key={i} className="flex items-center min-h-[28px]">
+                        <div className={`w-20 shrink-0 pr-2 text-right text-xs font-medium ${isDayToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                          <span className={isDayToday ? "bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[11px]" : ""}>
+                            {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        <div className="flex-1 relative h-6 bg-secondary rounded-lg overflow-hidden border border-border">
+                          {TIMELINE_HOURS.map((h, hi) => (
+                            <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
+                          ))}
+                          {isDayOff ? (
+                            <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                              <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
+                            </div>
+                          ) : dayShifts.length === 0 ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-[9px] text-muted-foreground/50">Nessun turno</span>
+                            </div>
+                          ) : (
+                            dayShifts.filter((s) => !s.is_day_off && s.start_time && s.end_time).map((s) => {
+                              const sH = parseInt(s.start_time!.split(":")[0]);
+                              let eH = parseInt(s.end_time!.split(":")[0]);
+                              if (eH === 0) eH = 24;
+                              const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
+                              const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
+                              const width = ((eH - sH) / totalSpan) * 100;
+                              const color = getShiftColor(s as ShiftRow);
+                              const storeName = storeMap.get(s.store_id) ?? "";
+
+                              return (
+                                <div
+                                  key={s.id}
+                                  className={`absolute top-0.5 bottom-0.5 rounded-md ${color.bg} border ${color.border} flex items-center justify-center gap-1`}
+                                  style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                                >
+                                  <span className={`text-[10px] font-semibold ${color.text}`}>
+                                    {s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}
+                                  </span>
+                                  {storeName && (
+                                    <span className={`text-[8px] font-medium ${color.text} opacity-70 truncate`}>
+                                      {storeName}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Weekly summary */}
+                {adminShifts.length > 0 && (
+                  <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                      {adminShifts.filter(s => !s.is_day_off).length} turni
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                      {adminShifts.filter(s => s.is_day_off).length} riposi
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                      {(() => {
+                        let total = 0;
+                        adminShifts.forEach(s => {
+                          if (!s.is_day_off && s.start_time && s.end_time) {
+                            const sH = parseInt(s.start_time.split(":")[0]);
+                            let eH = parseInt(s.end_time.split(":")[0]);
+                            if (eH === 0) eH = 24;
+                            total += eH - sH;
+                          }
+                        });
+                        return `${total}h totali`;
+                      })()}
+                    </Badge>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
