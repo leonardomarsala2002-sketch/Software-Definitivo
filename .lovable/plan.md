@@ -1,46 +1,26 @@
 
 
-## Piano: Correzione regole generazione per store
+## Analisi del problema
 
-### Problemi identificati
+Dalle screenshot:
+- **Alessandro Giordano**: 2 giorni liberi (Mar 3, Sab 7)
+- **Davide Fontana**: 1 giorno libero (Gio 5)
 
-1. **Log ambigui**: il testo "Ore settimanali: da contratto individuale (NON valore generico store)" e "Tolleranza massima: +5h/sett solo se approvato manualmente" sono fuorvianti. Le regole sono GIA per-store, ma il log non lo comunica chiaramente.
-2. **±5h manuale**: il prompt AI e i log dicono "solo se approvato manualmente", ma il comportamento corretto e che la tolleranza ±5h si applichi **automaticamente** se risolve buchi di copertura.
-3. **Giorni liberi**: il log mostra 0. Devono essere minimo 1, massimo 2, e **uguali per tutti** i dipendenti standard.
-4. **Spezzati**: il log mostra 0. Devono partire da minimo 1, massimo 3, **uguali per tutti**, e aumentare solo quando servono per coprire buchi.
+Il pre-planning assegna correttamente 1 giorno libero ciascuno (riga 1158-1159). Il problema nasce **dopo**, durante `autoCorrectViolations` (riga ~720-722): quando un dipendente supera le ore settimanali, il turno viene convertito in giorno libero (`is_day_off: true`), creando un **secondo riposo non pianificato** che rompe l'equità.
 
-### Modifiche
+`equalizeEquity` tenta di riparare tramite swap, ma fallisce perché le condizioni di copertura sono troppo restrittive (non trova un giorno dove togliere il riposo al donor senza scoprire slot).
 
-#### 1. Edge Function `generate-optimized-schedule/index.ts`
+## Piano di correzione
 
-**Log input** (riga ~1187-1195):
-- Sostituire testo generico con riferimento esplicito allo store: `REGOLE DI QUESTO STORE:`
-- Rimuovere "solo se approvato manualmente" → scrivere `Tolleranza: ±5h/sett automatica se necessaria per copertura`
-- Mostrare range: `Giorni liberi: min 1 — max 2 per dipendente (uguali per tutti)`
-- Mostrare range: `Spezzati: min 1 — max ${rules.max_split_shifts_per_employee_per_week} (uguali per tutti, aumentano solo se servono)`
+### 1. `autoCorrectViolations` — Non creare giorni liberi extra
 
-**Prompt AI Gemini** (riga ~464):
-- Rimuovere "con approvazione manuale" → `La tolleranza ±5h/sett si applica automaticamente se necessaria per coprire buchi di copertura`
+Quando si rimuove un turno per eccesso ore, **eliminare** lo shift (non convertirlo in `is_day_off: true`). Il giorno resta semplicemente senza turno per quel dipendente. Il sistema assegnerà il day-off marker solo nel post-processing finale, dopo che l'equità è stata verificata.
 
-**Logica giorni liberi** (pre-planning riga ~1132+):
-- Garantire che `mandatory_days_off_per_week` sia sempre >= 1 (floor clamp)
-- Il massimo giorni liberi assegnabili e 2 (cap)
+### 2. `equalizeEquity` — Fallback forzato
 
-**Logica spezzati** (escalation e iterazione):
-- Il minimo spezzati per strategia e 1 (non 0)
-- In `equalizeEquity`: garantire che tutti gli standard abbiano lo stesso numero di split, partendo da 1
+Se dopo 5 passaggi di swap i giorni liberi non sono uguali, aggiungere un **fallback forzato**: rimuovere i giorni liberi in eccesso dai donor (convertendoli in giorni lavorativi con un turno minimo template) anche se la copertura è già soddisfatta. L'equità è prioritaria rispetto all'ottimizzazione ore.
 
-**Auto-approvazione ±5h**:
-- Nella logica di deficit/surplus post-generazione, applicare automaticamente fino a ±5h per dipendente se il bilancio copertura lo richiede, senza generare suggerimento di approvazione manuale
+### 3. Post-processing finale — Assegnazione uniforme day-off
 
-#### 2. UI `RulesModal.tsx`
-
-- Aggiornare i limiti min/max dei NumberStepper:
-  - Giorni liberi: `min={1}` `max={2}`
-  - Spezzati: `min={1}` `max={3}`
-
-#### 3. Aggiornamento DB per lo store corrente
-
-- Migrazione SQL: per lo store `a0000001-0000-0000-0000-000000000001`, impostare `mandatory_days_off_per_week = 1` e `max_split_shifts_per_employee_per_week` al valore corretto se attualmente 0.
-- Aggiungere constraint CHECK su `store_rules` per garantire `mandatory_days_off_per_week >= 1` e `max_split_shifts_per_employee_per_week >= 1`.
+Dopo tutte le correzioni e l'equità, ricalcolare i giorni senza turno per ogni dipendente standard e assicurarsi che il conteggio `is_day_off` sia identico, rimuovendo marker day-off in eccesso o aggiungendoli dove mancano.
 
