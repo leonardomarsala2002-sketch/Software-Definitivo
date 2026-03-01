@@ -461,7 +461,9 @@ ANALISI OBBLIGATORIA PRIMA DI GENERARE:
 4. Per OGNI dipendente: il LIMITE SETTIMANALE è dato dalle ore_contrattuali individuali (es. 40h, 30h, 24h). NON usare un valore generico uguale per tutti.
 5. Se un giorno ha ZERO copertura richiesta, NON assegnare turni per quel giorno.
 6. Se il locale chiude alle X:00 (es. 23:00), NESSUN turno può terminare dopo le X:00. Solo se chiude a mezzanotte (00:00/24:00) si può arrivare alle 24:00.
-7. MAI superare automaticamente il limite contrattuale del singolo dipendente. Massimo +5h/sett solo in casi eccezionali e con approvazione manuale.
+7. PRIORITÀ ASSOLUTA: sfrutta al MASSIMO le ore contrattuali di ogni dipendente. Se un dipendente ha 40h, assegna il più vicino possibile a 40h. I giorni liberi extra (oltre il minimo obbligatorio) devono essere distribuiti SOLO se la copertura è già completamente soddisfatta e non ci sono più slot da riempire.
+8. La flessibilità ±5h deve essere usata SOLO in casi reali di necessità (buchi di copertura), MAI automaticamente o per comodità algoritmica.
+9. Se c'è surplus personale (ore contrattuali totali > domanda copertura), distribuisci i giorni liberi extra in modo EQUO a TUTTI, non solo a 1-2 dipendenti.
 
 Ogni strategia controlla l'algoritmo di generazione:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
@@ -1026,7 +1028,61 @@ function equalizeEquity(
     if (!swapped) break;
   }
 
-  // ── 3) GENERATE EQUITY REPORT ──
+  // ── 3) SURPLUS EQUALIZATION: When employees can't reach contract hours ──
+  // because coverage demand is fully met, distribute extra days off EQUALLY.
+  {
+    const surplusStats = computeStats(result);
+    const stdEmps = deptEmployees.filter(e => empConstraints.get(e.user_id)?.custom_days_off == null);
+    if (stdEmps.length > 1) {
+      const stdOffCounts = stdEmps.map(e => surplusStats.daysOffMap.get(e.user_id) ?? 0);
+      const maxOff = Math.max(...stdOffCounts);
+      const minOff = Math.min(...stdOffCounts);
+
+      if (maxOff > minOff) {
+        equityReport.push(`\n🔄 EQUITÀ GIORNI LIBERI (SURPLUS):`);
+        // Check if employees with fewer days off are already at their contract limit
+        // If so, they can't work more → give them equal days off
+        for (const emp of stdEmps) {
+          const empOff = surplusStats.daysOffMap.get(emp.user_id) ?? 0;
+          if (empOff >= maxOff) continue;
+          const empHours = surplusStats.hoursMap.get(emp.user_id) ?? 0;
+          const remainingCapacity = emp.weekly_contract_hours - empHours;
+          // If employee is already close to contract OR no more coverage to fill
+          // → equalize days off
+          const needMore = maxOff - empOff;
+          // Find work days with lowest demand to convert to rest
+          const empWorkDays = [...new Set(result.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time).map(s => s.date))];
+          const sortedByDemand = empWorkDays.sort((a, b) => {
+            const aDow = getDayOfWeek(a);
+            const bDow = getDayOfWeek(b);
+            const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+            const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+            return aDemand - bDemand;
+          });
+
+          let added = 0;
+          for (const dayOff of sortedByDemand) {
+            if (added >= needMore) break;
+            // Ensure minimum 1 day off remains after this date (don't take ALL work days)
+            const remainingWorkDays = empWorkDays.length - added - 1;
+            if (remainingWorkDays < 1) break; // keep at least 1 work day
+            const removed = result.filter(s => s.user_id === emp.user_id && s.department === department && s.date === dayOff && !s.is_day_off);
+            if (removed.length === 0) continue;
+            result = result.filter(s => !removed.includes(s));
+            result.push({
+              store_id: removed[0].store_id, user_id: emp.user_id, date: dayOff,
+              start_time: null, end_time: null, department, is_day_off: true,
+              status: "draft", generation_run_id: removed[0].generation_run_id,
+            });
+            added++;
+            equityReport.push(`  ${getEmpName(emp.user_id)}: aggiunto riposo ${dayOff} (da ${empOff} a ${empOff + added} riposi) — equità surplus`);
+          }
+        }
+      }
+    }
+  }
+
+  // ── 4) GENERATE EQUITY REPORT ──
   const finalStats = computeStats(result);
   equityReport.push(`\n📊 RIEPILOGO EQUITÀ (tolleranza ZERO per dipendenti standard):`);
   const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v, isCustom: empConstraints.get(uid)?.custom_days_off != null }));
@@ -1039,27 +1095,52 @@ function equalizeEquity(
   const avgSplits = stdSplits.reduce((a, b) => a + b.value, 0) / Math.max(stdSplits.length, 1);
   const avgHours = hoursValues.reduce((a, b) => a + b.value, 0) / Math.max(hoursValues.length, 1);
 
+  // Surplus analysis
+  const totalAssigned = hoursValues.reduce((a, b) => a + b.value, 0);
+  const totalContract = deptEmployees.reduce((a, b) => a + b.weekly_contract_hours, 0);
+  const totalCovDemand = weekDates.reduce((sum, dateStr) => {
+    const dow = getDayOfWeek(dateStr);
+    return sum + coverage.filter(c => c.department === department && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
+  }, 0);
+  const isSurplus = totalContract > totalCovDemand;
+  if (isSurplus) {
+    equityReport.push(`⚠️ SURPLUS PERSONALE: monteore contrattuale totale (${totalContract}h) > domanda copertura (${totalCovDemand}h). Non tutte le ore contrattuali possono essere assegnate.`);
+    equityReport.push(`   Ore assegnate: ${totalAssigned}h/${totalContract}h (deficit: ${totalContract - totalAssigned}h distribuito equamente)`);
+  }
+
   const stdOffEqual = stdOff.length > 0 && stdOff.every(v => v.value === stdOff[0].value);
   const stdSplitsEqual = stdSplits.length > 0 && stdSplits.every(v => v.value === stdSplits[0].value);
   equityReport.push(`Riposi standard: ${stdOffEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdOff.map(v => `${v.name}=${v.value}`).join(", ")})`);
   equityReport.push(`Spezzati standard: ${stdSplitsEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdSplits.map(v => `${v.name}=${v.value}`).join(", ")})`);
-  equityReport.push(`Media ore: ${avgHours.toFixed(1)}`);
+  equityReport.push(`Media ore: ${avgHours.toFixed(1)}h | Totale: ${totalAssigned}h/${totalContract}h contratto`);
 
   for (const emp of deptEmployees) {
     const off = finalStats.daysOffMap.get(emp.user_id) ?? 0;
     const splits = finalStats.splitsMap.get(emp.user_id) ?? 0;
     const hours = finalStats.hoursMap.get(emp.user_id) ?? 0;
     const empObj = employees.find(e => e.user_id === emp.user_id);
-    const hourDelta = hours - (empObj?.weekly_contract_hours ?? 40);
+    const contractH = empObj?.weekly_contract_hours ?? 40;
+    const hourDelta = hours - contractH;
     const isCustomOff = empConstraints.get(emp.user_id)?.custom_days_off != null;
     const isCustomSplit = empConstraints.get(emp.user_id)?.custom_max_split_shifts != null;
     const flags: string[] = [];
     if (!isCustomOff && Math.abs(off - avgOff) >= 0.5) flags.push(`riposi ${off} vs media ${avgOff.toFixed(0)}`);
     if (!isCustomSplit && Math.abs(splits - avgSplits) >= 0.5) flags.push(`spezzati ${splits} vs media ${avgSplits.toFixed(0)}`);
-    if (Math.abs(hourDelta) >= 3) flags.push(`${hourDelta > 0 ? "+" : ""}${hourDelta}h vs contratto`);
+    // Add reason for hour deviation
+    if (hourDelta < -3) {
+      if (isSurplus) {
+        flags.push(`${hourDelta}h vs contratto (surplus personale)`);
+      } else {
+        flags.push(`${hourDelta}h vs contratto (bassa copertura)`);
+      }
+    } else if (hourDelta > 3) {
+      flags.push(`+${hourDelta}h vs contratto (copertura critica)`);
+    } else if (Math.abs(hourDelta) >= 1) {
+      flags.push(`${hourDelta > 0 ? "+" : ""}${hourDelta}h vs contratto`);
+    }
     const customTag = (isCustomOff || isCustomSplit) ? " [personalizzato]" : "";
     const status = flags.length === 0 ? "✅" : `⚠️ ${flags.join(", ")}`;
-    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h/${empObj?.weekly_contract_hours ?? "?"}h${customTag} — ${status}`);
+    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h/${contractH}h${customTag} — ${status}`);
   }
 
   return { rebalancedShifts: result, equityReport };
@@ -2960,6 +3041,49 @@ Deno.serve(async (req) => {
         }
 
         // CASE 2: Employees with >5h deviation from contract — suggest lending
+        // Also detect surplus staff situation for targeted suggestions
+        const totalAssignedHoursForSugg = deptEmployees.reduce((sum, e) => sum + (weeklyHours_final.get(e.user_id) ?? 0), 0);
+        const totalContractHoursForSugg = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
+        const totalCovDemandForSugg = weekDates.reduce((sum, dateStr) => {
+          const dow = getDayOfWeek(dateStr);
+          return sum + coverageData.filter(c => c.department === dept && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
+        }, 0);
+        const isSurplusStaff = totalContractHoursForSugg > totalCovDemandForSugg;
+        const surplusHours = totalContractHoursForSugg - totalCovDemandForSugg;
+
+        // If surplus detected, add a single consolidated suggestion
+        if (isSurplusStaff && surplusHours > 5) {
+          const underContractEmps = deptEmployees.filter(e => {
+            const used = weeklyHours_final.get(e.user_id) ?? 0;
+            return (e.weekly_contract_hours - used) > 3;
+          });
+          if (underContractEmps.length > 0) {
+            const empNames = underContractEmps.map(e => nameMap.get(e.user_id) ?? "?").join(", ");
+            const totalDeficit = underContractEmps.reduce((s, e) => s + (e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0)), 0);
+            const lendingAlts = underContractEmps.map(e => ({
+              id: `lending-surplus-${e.user_id}`,
+              label: `Prestito: ${nameMap.get(e.user_id) ?? "?"} (${e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0)}h disponibili)`,
+              description: `${nameMap.get(e.user_id) ?? "?"} ha ${weeklyHours_final.get(e.user_id) ?? 0}h/${e.weekly_contract_hours}h. Le ore rimanenti possono essere utilizzate in un altro store della stessa città.`,
+              actionType: "lending",
+              userId: e.user_id,
+              userName: nameMap.get(e.user_id) ?? "?",
+              suggestedHours: e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0),
+            }));
+
+            deptSuggestions.push({
+              id: `surplus-${dept}`,
+              type: "surplus_staff",
+              severity: "info",
+              title: `📊 Surplus personale ${dept === "cucina" ? "Cucina" : "Sala"}: ${surplusHours}h ore contrattuali non assegnabili`,
+              description: `Il monteore contrattuale (${totalContractHoursForSugg}h) supera la domanda di copertura (${totalCovDemandForSugg}h). ${underContractEmps.length} dipendenti hanno ${totalDeficit}h totali sotto contratto. I giorni liberi extra sono stati distribuiti equamente. Consigliato: prestito inter-store per ${empNames}.`,
+              actionLabel: "Proponi prestiti",
+              declineLabel: "Compensa prossima settimana",
+              alternatives: lendingAlts,
+            });
+          }
+        }
+
+        // Individual >5h deviations
         for (const emp of deptEmployees) {
           const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
           const delta = weeklyUsed - emp.weekly_contract_hours;
@@ -2968,6 +3092,8 @@ Deno.serve(async (req) => {
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             const direction = delta > 0 ? "eccesso" : "deficit";
             const absDelta = Math.abs(delta);
+            // Skip individual deficit suggestions if already covered by surplus suggestion
+            if (delta < 0 && isSurplusStaff) continue;
 
             const lendingAlternatives: any[] = [];
             if (delta < 0) {
@@ -3050,19 +3176,47 @@ Deno.serve(async (req) => {
         // ── Add flex report to notes ──
         const flexSection = flexReport.length > 0 ? "\n\n--- FLEX ±5h ---\n" + flexReport.join("\n") : "";
 
-        // ── Hour deviation summary in report (for transparency, not as suggestion) ──
+        // ── Hour deviation summary in report (with reasons for transparency) ──
         const deviationReport: string[] = [];
+        const totalAssignedAllEmps = deptEmployees.reduce((sum, e) => sum + (weeklyHours_final.get(e.user_id) ?? 0), 0);
+        const totalContractAllEmps = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
+        const totalCovDemandForReport = weekDates.reduce((sum, dateStr) => {
+          const dow = getDayOfWeek(dateStr);
+          return sum + coverageData.filter(c => c.department === dept && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
+        }, 0);
+        const hasSurplus = totalContractAllEmps > totalCovDemandForReport;
+
+        if (hasSurplus) {
+          deviationReport.push(`⚠️ SURPLUS PERSONALE RILEVATO`);
+          deviationReport.push(`Monteore contrattuale: ${totalContractAllEmps}h | Domanda copertura: ${totalCovDemandForReport}h | Eccedenza: ${totalContractAllEmps - totalCovDemandForReport}h`);
+          deviationReport.push(`I giorni liberi extra sono stati distribuiti equamente a tutto il team.`);
+          deviationReport.push(`Suggerimento: considera il prestito inter-store per sfruttare le ore contrattuali inutilizzate.\n`);
+        }
+        deviationReport.push(`Totale ore assegnate: ${totalAssignedAllEmps}h/${totalContractAllEmps}h contratto\n`);
+
         for (const emp of deptEmployees) {
           const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
           const delta = weeklyUsed - emp.weekly_contract_hours;
-          if (Math.abs(delta) > 0) {
-            const empName = nameMap.get(emp.user_id) ?? emp.user_id.slice(0, 8);
-            deviationReport.push(`${empName}: ${weeklyUsed}h/${emp.weekly_contract_hours}h (${delta > 0 ? "+" : ""}${delta}h)${Math.abs(delta) > 5 ? " ⚠️ OLTRE SOGLIA" : ""}`);
+          const empName = nameMap.get(emp.user_id) ?? emp.user_id.slice(0, 8);
+          let reason = "";
+          if (delta < -5) {
+            reason = hasSurplus ? " — surplus personale, ore non assegnabili" : " — copertura insufficiente";
+            reason += " ⚠️ OLTRE SOGLIA";
+          } else if (delta < -1) {
+            reason = hasSurplus ? " — surplus personale" : " — bassa domanda copertura";
+          } else if (delta > 5) {
+            reason = " — copertura critica ⚠️ OLTRE SOGLIA";
+          } else if (delta > 1) {
+            reason = " — copertura extra necessaria";
           }
+          deviationReport.push(`${empName}: ${weeklyUsed}h/${emp.weekly_contract_hours}h (${delta > 0 ? "+" : ""}${delta}h)${reason}`);
         }
-        const deviationSection = deviationReport.length > 0
-          ? "\n\n--- BILANCIO ORE ---\n" + deviationReport.join("\n")
-          : "";
+
+        if (hasSurplus) {
+          deviationReport.push(`\n⏩ Le ore non assegnate verranno compensate la settimana successiva tramite riequilibrio automatico.`);
+        }
+
+        const deviationSection = "\n\n--- BILANCIO ORE ---\n" + deviationReport.join("\n");
 
         await adminClient.from("generation_runs").update({
           status: "completed",
