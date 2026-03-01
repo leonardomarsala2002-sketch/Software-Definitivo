@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   CalendarClock,
   LayoutGrid,
-  LogIn,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
@@ -21,18 +20,15 @@ import {
   useStoreRules,
   useOpeningHours,
   useCoverageRequirements,
-  useAllowedTimes,
   useInitStoreConfig,
   useUpdateStoreRules,
   useUpdateOpeningHours,
   useSaveCoverage,
-  useSaveAllowedTimes,
   DAY_LABELS,
 } from "@/hooks/useStoreSettings";
 import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
-import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
 
 function SettingsSkeleton() {
   return (
@@ -51,20 +47,17 @@ const StoreSettings = () => {
   const { data: rules, isLoading: loadingRules } = useStoreRules(storeId);
   const { data: hours = [], isLoading: loadingHours } = useOpeningHours(storeId);
   const { data: coverage = [], isLoading: loadingCoverage } = useCoverageRequirements(storeId);
-  const { data: allowedTimes = [], isLoading: loadingAllowed } = useAllowedTimes(storeId);
 
   const initConfig = useInitStoreConfig();
   const updateRules = useUpdateStoreRules();
   const updateHours = useUpdateOpeningHours();
   const saveCoverage = useSaveCoverage();
-  const saveAllowed = useSaveAllowedTimes();
 
   const [rulesOpen, setRulesOpen] = useState(false);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
-  const [allowedOpen, setAllowedOpen] = useState(false);
 
-  const isLoading = loadingRules || loadingHours || loadingCoverage || loadingAllowed;
+  const isLoading = loadingRules || loadingHours || loadingCoverage;
   const readOnly = role === "employee";
   const hasConfig = !!rules;
 
@@ -83,7 +76,7 @@ const StoreSettings = () => {
   const rulesSummary = useMemo(() => {
     if (!rules) return "Non configurate";
     const r = rules as any;
-    return `Sala ${r.max_team_hours_sala_per_week ?? "–"}h · Cucina ${r.max_team_hours_cucina_per_week ?? "–"}h / sett.`;
+    return genEnabled ? "Generazione automatica attiva" : "Generazione manuale";
   }, [rules]);
 
   const genEnabled = rules?.generation_enabled ?? false;
@@ -110,14 +103,6 @@ const StoreSettings = () => {
       summary: coverage.length > 0 ? `${coverage.length} slot configurati` : "Non configurata",
       configured: coverage.length > 0,
       onEdit: () => setCoverageOpen(true),
-    },
-    {
-      title: "Entrate / Uscite",
-      icon: LogIn,
-      summary: allowedTimes.length > 0 ? `${allowedTimes.length} ore configurate` : "Non configurate",
-      configured: allowedTimes.length > 0,
-      onEdit: () => setAllowedOpen(true),
-      optional: true,
     },
   ];
 
@@ -237,19 +222,6 @@ const StoreSettings = () => {
               readOnly={readOnly}
             />
           )}
-          <AllowedTimesModal
-            open={allowedOpen}
-            onOpenChange={setAllowedOpen}
-            allowedTimes={allowedTimes.map((t) => ({
-              department: t.department as "sala" | "cucina",
-              kind: t.kind as "entry" | "exit",
-              hour: t.hour,
-              is_active: t.is_active,
-            }))}
-            onSave={(times) => storeId && saveAllowed.mutate({ storeId, times })}
-            isSaving={saveAllowed.isPending}
-            readOnly={readOnly}
-          />
         </>
       )}
     </div>
