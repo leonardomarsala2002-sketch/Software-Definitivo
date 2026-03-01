@@ -6,7 +6,6 @@ import {
   X,
   Users,
   Clock,
-  AlertTriangle,
   Inbox,
   TrendingUp,
   TrendingDown,
@@ -198,43 +197,91 @@ const Dashboard = () => {
     enabled: !!user?.id,
   });
 
-  /* ── KPI data (placeholder – will be wired to real queries) ── */
+  /* ── Real KPI queries ── */
+  const { data: activeEmployeeCount = 0 } = useQuery({
+    queryKey: ["kpi-active-employees", activeStore?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("user_store_assignments")
+        .select("*", { count: "exact", head: true })
+        .eq("store_id", activeStore!.id);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!activeStore?.id,
+  });
+
+  const thisWeekStart = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - ((day + 6) % 7));
+    return `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`;
+  }, []);
+  const thisWeekEnd = useMemo(() => {
+    const d = new Date(thisWeekStart);
+    d.setDate(d.getDate() + 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, [thisWeekStart]);
+
+  const { data: weeklyTeamHours = 0 } = useQuery({
+    queryKey: ["kpi-weekly-hours", activeStore?.id, thisWeekStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shifts")
+        .select("start_time, end_time")
+        .eq("store_id", activeStore!.id)
+        .eq("is_day_off", false)
+        .gte("date", thisWeekStart)
+        .lte("date", thisWeekEnd);
+      if (error) throw error;
+      return (data ?? []).reduce((sum, s) => {
+        if (!s.start_time || !s.end_time) return sum;
+        const sh = parseInt(s.start_time.split(":")[0]);
+        let eh = parseInt(s.end_time.split(":")[0]);
+        if (eh === 0) eh = 24;
+        return sum + Math.max(0, eh - sh);
+      }, 0);
+    },
+    enabled: !!activeStore?.id,
+  });
+
+  const { data: pendingRequestsCount = 0 } = useQuery({
+    queryKey: ["kpi-pending-requests", activeStore?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("time_off_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("store_id", activeStore!.id)
+        .eq("status", "pending");
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!activeStore?.id && !isSuperAdmin,
+  });
+
   const kpis: KpiCardProps[] = [
     {
       title: "Dipendenti attivi",
-      value: 24,
-      trend: 4.5,
-      period: "vs mese scorso",
+      value: activeEmployeeCount,
+      trend: 0,
+      period: "store attuale",
       icon: <Users className="h-4 w-4" />,
     },
     {
       title: "Ore settimanali",
-      value: "312h",
-      trend: -2.1,
-      period: "vs sett. scorsa",
+      value: `${weeklyTeamHours}h`,
+      trend: 0,
+      period: "settimana corrente",
       icon: <Clock className="h-4 w-4" />,
-    },
-    {
-      title: "Turni scoperti",
-      value: 3,
-      trend: -25,
-      period: "vs sett. scorsa",
-      icon: <AlertTriangle className="h-4 w-4" />,
     },
     ...(isSuperAdmin ? [] : [{
       title: "Richieste pendenti",
-      value: 0,
+      value: pendingRequestsCount,
       trend: 0,
-      period: "questa settimana",
+      period: "in attesa",
       icon: <Inbox className="h-4 w-4" />,
     }]),
-    {
-      title: "Tasso copertura",
-      value: "94%",
-      trend: 1.8,
-      period: "vs sett. scorsa",
-      icon: <TrendingUp className="h-4 w-4" />,
-    },
   ];
 
   const appointmentDays = useMemo(() => {
@@ -519,7 +566,7 @@ const Dashboard = () => {
       )}
 
       {/* KPI Cards Row */}
-      <div className={`flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:overflow-visible ${isSuperAdmin ? "md:grid-cols-4" : "md:grid-cols-5"}`}>
+      <div className={`flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x snap-mandatory flex-shrink-0 -mx-6 px-6 md:mx-0 md:px-0 md:grid md:overflow-visible ${isSuperAdmin ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
         {kpis.map((kpi) => (
           <div key={kpi.title} className="min-w-[160px] snap-start md:min-w-0">
             <KpiCard {...kpi} />
