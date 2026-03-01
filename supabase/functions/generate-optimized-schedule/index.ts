@@ -718,10 +718,11 @@ function autoCorrectViolations(
         for (const shift of sortedByDemand) {
           if (excess <= 0) break;
           const dur = parseHour(shift.end_time!) - parseHour(shift.start_time!);
+          // IMPORTANT: just remove the shift, do NOT convert to is_day_off.
+          // Day-off markers will be assigned in post-processing after equity is verified.
           corrected = corrected.filter(s => s !== shift);
-          corrected.push({ ...shift, start_time: null, end_time: null, is_day_off: true });
           excess -= dur;
-          passCorrections.push(`FIX ore settimanali [pass ${pass+1}]: ${emp.user_id.slice(0,8)} rimosso turno ${shift.date} (${dur}h)`);
+          passCorrections.push(`FIX ore settimanali [pass ${pass+1}]: ${emp.user_id.slice(0,8)} rimosso turno ${shift.date} (${dur}h) — NO day-off marker`);
         }
       }
 
@@ -982,7 +983,67 @@ function equalizeEquity(
       }
       if (swapped) break;
     }
-    if (!swapped) break;
+    if (!swapped) {
+      // ── FALLBACK FORZATO: rimuovere giorni liberi in eccesso dai donor ──
+      // L'equità è prioritaria rispetto all'ottimizzazione ore.
+      const statsNow = computeStats(result);
+      const stdOffNow = standardEmps.map(e => ({ uid: e.user_id, off: statsNow.daysOffMap.get(e.user_id) ?? 0 }));
+      const targetOffForced = Math.min(...stdOffNow.map(v => v.off));
+      const donorsForced = stdOffNow.filter(v => v.off > targetOffForced);
+      let forcedAny = false;
+      for (const d of donorsForced) {
+        while (true) {
+          const currentOff = computeStats(result).daysOffMap.get(d.uid) ?? 0;
+          if (currentOff <= targetOffForced) break;
+          // Find a day-off marker for this donor and remove it, adding a minimal shift
+          const dayOffShift = result.find(s => s.user_id === d.uid && s.department === department && s.is_day_off);
+          if (!dayOffShift) {
+            // No explicit day-off marker — find a date where they have no shifts at all
+            const workedDatesD = new Set(result.filter(s => s.user_id === d.uid && s.department === department && !s.is_day_off && s.start_time).map(s => s.date));
+            const freeDays = weekDates.filter(wd => !workedDatesD.has(wd));
+            if (freeDays.length === 0) break;
+            // Pick lowest demand free day
+            freeDays.sort((a, b) => getDayDemand(a) - getDayDemand(b));
+            const pickDay = freeDays[freeDays.length - 1]; // highest demand = most useful
+            if (!isAvailable(d.uid, pickDay, availability, exceptions)) break;
+            // Add minimal shift from existing template
+            const templateShift = result.find(s => s.user_id === d.uid && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+            if (!templateShift) break;
+            result.push({
+              store_id: templateShift.store_id,
+              user_id: d.uid,
+              date: pickDay,
+              start_time: templateShift.start_time,
+              end_time: templateShift.end_time,
+              department, is_day_off: false, status: "draft",
+              generation_run_id: templateShift.generation_run_id,
+            });
+            equityReport.push(`FALLBACK FORZATO: ${getEmpName(d.uid)} lavora ${pickDay} (era libero, equità prioritaria)`);
+            forcedAny = true;
+          } else {
+            // Remove the day-off marker and add a working shift
+            result = result.filter(s => s !== dayOffShift);
+            const templateShift = result.find(s => s.user_id === d.uid && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+            if (templateShift && isAvailable(d.uid, dayOffShift.date, availability, exceptions)) {
+              result.push({
+                store_id: dayOffShift.store_id,
+                user_id: d.uid,
+                date: dayOffShift.date,
+                start_time: templateShift.start_time,
+                end_time: templateShift.end_time,
+                department, is_day_off: false, status: "draft",
+                generation_run_id: dayOffShift.generation_run_id,
+              });
+              equityReport.push(`FALLBACK FORZATO: ${getEmpName(d.uid)} lavora ${dayOffShift.date} (rimosso day-off extra, equità prioritaria)`);
+              forcedAny = true;
+            } else {
+              break; // can't fix this donor
+            }
+          }
+        }
+      }
+      if (!forcedAny) break;
+    }
   }
 
   // ── 2) EQUALIZE SPLIT SHIFTS ──
@@ -1026,7 +1087,43 @@ function equalizeEquity(
     if (!swapped) break;
   }
 
-  // ── 3) GENERATE EQUITY REPORT ──
+  // ── 3) POST-PROCESSING: Uniform day-off assignment ──
+  // Ensure all standard employees have exactly the same number of is_day_off markers.
+  // First, remove ALL existing day-off markers and recalculate from scratch.
+  result = result.filter(s => !(s.department === department && s.is_day_off));
+  
+  // Recalculate: for each standard employee, find days without any shift
+  const postStats = computeStats(result);
+  const postStdOffs = standardEmps.map(e => ({ uid: e.user_id, off: postStats.daysOffMap.get(e.user_id) ?? 0 }));
+  const targetDaysOff = postStdOffs.length > 0 ? Math.min(...postStdOffs.map(v => v.off)) : rules.mandatory_days_off_per_week;
+  // Clamp target between min 1 and max 2
+  const clampedTarget = Math.max(1, Math.min(2, targetDaysOff));
+  
+  // For each employee, add exactly clampedTarget day-off markers on their non-working days
+  for (const emp of deptEmployees) {
+    const ec = empConstraints.get(emp.user_id);
+    const empTargetOff = ec?.custom_days_off ?? clampedTarget;
+    const workDays = new Set(result.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time).map(s => s.date));
+    const freeDays = weekDates.filter(d => !workDays.has(d));
+    // Sort free days by demand (lowest demand = best for day off)
+    freeDays.sort((a, b) => getDayDemand(a) - getDayDemand(b));
+    // Add day-off markers for exactly empTargetOff days
+    const toMark = Math.min(empTargetOff, freeDays.length);
+    for (let i = 0; i < toMark; i++) {
+      const existingShift = result.find(s => s.user_id === emp.user_id && s.department === department && s.start_time);
+      result.push({
+        store_id: existingShift?.store_id ?? "",
+        user_id: emp.user_id,
+        date: freeDays[i],
+        start_time: null, end_time: null,
+        department, is_day_off: true, status: "draft",
+        generation_run_id: existingShift?.generation_run_id ?? "",
+      });
+    }
+  }
+  equityReport.push(`POST-PROCESSING: day-off uniformi assegnati (target=${clampedTarget} per standard)`);
+
+  // ── 4) GENERATE EQUITY REPORT ──
   const finalStats = computeStats(result);
   equityReport.push(`\n📊 RIEPILOGO EQUITÀ (tolleranza ZERO per dipendenti standard):`);
   const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v, isCustom: empConstraints.get(uid)?.custom_days_off != null }));
