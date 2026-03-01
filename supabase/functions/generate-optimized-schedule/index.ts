@@ -1548,49 +1548,23 @@ function runIteration(
     const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
 
     const hourCoverage = new Map<number, number>();
+    const maxStaffMap = new Map<number, number>();
     for (const c of dayCoverage) {
       const h = parseInt(c.hour_slot.split(":")[0], 10);
       hourCoverage.set(h, c.min_staff_required);
+      maxStaffMap.set(h, c.max_staff_required ?? c.min_staff_required);
     }
 
-    // ── Dynamic entry/exit points from coverage transitions ──
-    // Add every hour where coverage demand changes as a valid entry/exit point.
-    // This lets the engine create targeted short shifts (e.g. 13-15) that don't
-    // cross into already-saturated hours, solving the overbooking deadlock.
+    // ── Entry/exit points: STRICTLY use configured allowed times only ──
+    // Dynamic transition points were causing shifts to end at disallowed hours.
+    // Only the explicitly configured allowed entry/exit hours are valid.
     const covHoursSorted = [...hourCoverage.keys()].sort((a, b) => a - b);
-    const dynamicEntries = new Set<number>(
-      entries.length > 0 ? entries.filter(e => e >= dayOpenH && e < effectiveClose) : [dayOpenH]
-    );
-    const dynamicExits = new Set<number>(
-      exits.length > 0 ? exits.filter(e => e > dayOpenH && e <= effectiveClose) : [effectiveClose]
-    );
-    // Add coverage boundary hours as entry/exit points
-    for (const h of covHoursSorted) {
-      if (h >= dayOpenH && h < effectiveClose) dynamicEntries.add(h);
-      if (h > dayOpenH && h <= effectiveClose) dynamicExits.add(h);
-    }
-    // Also add h+1 for the last coverage hour (shift can end there)
-    if (covHoursSorted.length > 0) {
-      const lastCovH = covHoursSorted[covHoursSorted.length - 1];
-      if (lastCovH + 1 <= effectiveClose) dynamicExits.add(lastCovH + 1);
-    }
-    // Add transition points: where demand changes significantly
-    for (let idx = 1; idx < covHoursSorted.length; idx++) {
-      const prevH = covHoursSorted[idx - 1];
-      const currH = covHoursSorted[idx];
-      if (currH === prevH + 1) {
-        const prevNeed = hourCoverage.get(prevH) ?? 0;
-        const currNeed = hourCoverage.get(currH) ?? 0;
-        if (Math.abs(prevNeed - currNeed) >= 1) {
-          // Transition point: add as both entry and exit
-          if (currH >= dayOpenH && currH < effectiveClose) dynamicEntries.add(currH);
-          if (currH > dayOpenH && currH <= effectiveClose) dynamicExits.add(currH);
-        }
-      }
-    }
-
-    const effectiveEntries = [...dynamicEntries].sort((a, b) => a - b);
-    const effectiveExits = [...dynamicExits].sort((a, b) => a - b);
+    const effectiveEntries = entries.length > 0
+      ? entries.filter(e => e >= dayOpenH && e < effectiveClose).sort((a, b) => a - b)
+      : [dayOpenH];
+    const effectiveExits = exits.length > 0
+      ? exits.filter(e => e > dayOpenH && e <= effectiveClose).sort((a, b) => a - b)
+      : [effectiveClose];
     if (effectiveEntries.length === 0 || effectiveExits.length === 0) continue;
 
     // Day header log
@@ -1769,15 +1743,16 @@ function runIteration(
           const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
           if (!withinAvail) continue;
 
-          // Exact coverage: reject shifts that would cause ANY tracked hour to exceed its required staff
+          // Exact coverage: reject shifts that would cause ANY tracked hour to exceed its MAX staff
           let wouldOverbook = false;
           let coverCount = 0;
           for (let h = entry; h < exit; h++) {
-            const needed = hourCoverage.get(h);
-            if (needed !== undefined) {
+            const maxNeeded = maxStaffMap.get(h);
+            const minNeeded = hourCoverage.get(h);
+            if (maxNeeded !== undefined) {
               const current = staffAssigned.get(h) ?? 0;
-              if (current >= needed) { wouldOverbook = true; break; }
-              if (current < needed) coverCount++;
+              if (current >= maxNeeded) { wouldOverbook = true; break; }
+              if (minNeeded !== undefined && current < minNeeded) coverCount++;
             }
           }
           if (wouldOverbook) continue;
@@ -1955,15 +1930,16 @@ function runIteration(
             const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
             if (!withinAvail) continue;
 
-            // Exact coverage: reject if any hour would exceed required staff
+            // Exact coverage: reject if any hour would exceed MAX staff
             let wouldOverbook = false;
             let coverCount = 0;
             for (let h = entry; h < exit; h++) {
-              const needed = hourCoverage.get(h);
-              if (needed !== undefined) {
+              const maxNeeded = maxStaffMap.get(h);
+              const minNeeded = hourCoverage.get(h);
+              if (maxNeeded !== undefined) {
                 const current = staffAssigned.get(h) ?? 0;
-                if (current >= needed) { wouldOverbook = true; break; }
-                if (current < needed) coverCount++;
+                if (current >= maxNeeded) { wouldOverbook = true; break; }
+                if (minNeeded !== undefined && current < minNeeded) coverCount++;
               }
             }
             if (wouldOverbook) continue;
@@ -2108,15 +2084,16 @@ function runIteration(
             const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
             if (!withinAvail) continue;
 
-            // STRICT no overbooking
+            // STRICT no overbooking (use max staff)
             let wouldOverbook = false;
             let coverCount = 0;
             for (let h = entry; h < exit; h++) {
-              const needed = hourCoverage.get(h);
-              if (needed !== undefined) {
+              const maxNeeded = maxStaffMap.get(h);
+              const minNeeded = hourCoverage.get(h);
+              if (maxNeeded !== undefined) {
                 const current = staffAssigned.get(h) ?? 0;
-                if (current >= needed) { wouldOverbook = true; break; }
-                if (current < needed) coverCount++;
+                if (current >= maxNeeded) { wouldOverbook = true; break; }
+                if (minNeeded !== undefined && current < minNeeded) coverCount++;
               }
             }
             if (wouldOverbook) continue;
@@ -2231,9 +2208,44 @@ function runIteration(
     dayLogs.push(`${getEmpName(emp.user_id)}: ${wh}h/${emp.weekly_contract_hours}h contratto | ${ws}/${maxSplitsWeek} spezzati | ${daysOff}/${minDaysOff}+ riposi${issues.length > 0 ? " " + issues.join(" ") : " ✅"}`);
   }
 
-  const { score, hourAdjustments } = computeFitness(shifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department);
+  // ── MERGE CONTIGUOUS SHIFTS ──
+  // Combine adjacent shifts for the same employee on the same day where
+  // end_time of one equals start_time of the next (e.g. 09-12 + 12-15 → 09-15).
+  // This prevents unnecessary visual splitting in the UI.
+  const mergedShifts: GeneratedShift[] = [];
+  const shiftsByEmpDate = new Map<string, GeneratedShift[]>();
+  for (const s of shifts) {
+    if (s.is_day_off || !s.start_time || !s.end_time) {
+      mergedShifts.push(s);
+      continue;
+    }
+    const key = `${s.user_id}|${s.date}|${s.department}`;
+    if (!shiftsByEmpDate.has(key)) shiftsByEmpDate.set(key, []);
+    shiftsByEmpDate.get(key)!.push(s);
+  }
+  for (const [, group] of shiftsByEmpDate) {
+    // Sort by start time
+    group.sort((a, b) => parseHour(a.start_time!) - parseHour(b.start_time!));
+    let current = { ...group[0] };
+    for (let i = 1; i < group.length; i++) {
+      const next = group[i];
+      const currentEnd = parseHour(current.end_time!);
+      const nextStart = parseHour(next.start_time!);
+      if (currentEnd === nextStart) {
+        // Merge: extend current shift to cover next
+        current = { ...current, end_time: next.end_time };
+        dayLogs.push(`MERGE: ${current.user_id.slice(0,8)} ${current.date} ${current.start_time}-${next.end_time} (uniti 2 turni contigui)`);
+      } else {
+        mergedShifts.push(current);
+        current = { ...next };
+      }
+    }
+    mergedShifts.push(current);
+  }
 
-  return { shifts, uncoveredSlots, fitnessScore: score, hourAdjustments, dayLogs };
+  const { score, hourAdjustments } = computeFitness(mergedShifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department);
+
+  return { shifts: mergedShifts, uncoveredSlots, fitnessScore: score, hourAdjustments, dayLogs };
 }
 
 // ─── Main Handler ────────────────────────────────────────────────────────────
