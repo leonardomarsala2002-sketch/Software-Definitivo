@@ -315,6 +315,232 @@ function applyPartialBlocks(
   return result.filter(r => r.end - r.start >= 1); // At least 1h slot
 }
 
+// ─── AI Strategy Types & Functions ───────────────────────────────────────────
+
+interface AIStrategy {
+  maxSplits: number;
+  preferShort: boolean;
+  randomize: boolean;
+  reserveForSplit: number;
+  description: string;
+}
+
+function getDefaultStrategies(): AIStrategy[] {
+  const strategies: AIStrategy[] = [];
+  let id = 0;
+  for (const maxSplits of [0, 1, 2, 3]) {
+    for (const preferShort of [true, false]) {
+      for (const reserve of [0, 2, 3]) {
+        for (const randomize of [true, false]) {
+          strategies.push({
+            maxSplits,
+            preferShort,
+            randomize,
+            reserveForSplit: maxSplits > 0 && preferShort ? reserve : 0,
+            description: `default-${id++}`,
+          });
+          if (strategies.length >= 40) return strategies;
+        }
+      }
+    }
+  }
+  return strategies;
+}
+
+async function generateAIStrategies(context: {
+  rules: StoreRules;
+  employees: { department: string; weekly_contract_hours: number }[];
+  coverageSummary: string;
+  department: string;
+  smartMemorySummary: string;
+  totalCoverageHours: number;
+  totalEmployeeHours: number;
+}): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.log("[AI] No LOVABLE_API_KEY, using default strategies");
+    return { strategies: getDefaultStrategies(), aiUsed: false };
+  }
+
+  try {
+    const ratio = (context.totalCoverageHours / Math.max(context.totalEmployeeHours, 1)).toFixed(2);
+    const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti. Genera 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
+
+Ogni strategia controlla l'algoritmo:
+- maxSplits (0-3): max turni spezzati per dipendente a settimana
+- preferShort (bool): turni corti per lasciare spazio a spezzati
+- randomize (bool): ordine dipendenti casuale vs fill-ratio
+- reserveForSplit (0-4): ore riservate nel primo turno per spezzato serale
+- description: breve (max 30 char)
+
+REGOLE:
+- Almeno 10 strategie con maxSplits=0 (turni pieni)
+- Almeno 10 con maxSplits>=2 (spezzati)
+- Almeno 5 con randomize=true
+- Almeno 5 con preferShort=true e reserveForSplit>=2
+- Se rapporto copertura/disponibilità >0.8: più spezzati
+- Se <0.5: più turni lunghi
+- Distribuisci equamente giorni liberi e spezzati`;
+
+    const userPrompt = `CONTESTO:
+- Reparto: ${context.department}
+- Dipendenti: ${context.employees.length} (ore: ${context.employees.map(e => e.weekly_contract_hours).join(', ')})
+- Max ore giornaliere: ${context.rules.max_daily_hours_per_employee}h
+- Max ore settimanali: ${context.rules.max_weekly_hours_per_employee}h
+- Giorni liberi: ${context.rules.mandatory_days_off_per_week}/sett
+- Max spezzati: ${context.rules.max_split_shifts_per_employee_per_week}/sett
+- Ore copertura: ${context.totalCoverageHours}h
+- Ore disponibili: ${context.totalEmployeeHours}h
+- Rapporto: ${ratio}
+${context.coverageSummary}
+${context.smartMemorySummary}
+
+Genera ESATTAMENTE 40 strategie diverse.`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "submit_strategies",
+            description: "Submit 40 diverse scheduling strategies",
+            parameters: {
+              type: "object",
+              properties: {
+                strategies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      maxSplits: { type: "number" },
+                      preferShort: { type: "boolean" },
+                      randomize: { type: "boolean" },
+                      reserveForSplit: { type: "number" },
+                      description: { type: "string" },
+                    },
+                    required: ["maxSplits", "preferShort", "randomize", "reserveForSplit", "description"],
+                  },
+                },
+              },
+              required: ["strategies"],
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "submit_strategies" } },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`[AI] Gemini error ${response.status}: ${errText}`);
+      return { strategies: getDefaultStrategies(), aiUsed: false };
+    }
+
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) {
+      console.log("[AI] No tool call in response, using defaults");
+      return { strategies: getDefaultStrategies(), aiUsed: false };
+    }
+
+    const args = JSON.parse(toolCall.function.arguments);
+    const strategies: AIStrategy[] = (args.strategies ?? []).map((s: any) => ({
+      maxSplits: Math.min(3, Math.max(0, Number(s.maxSplits) || 0)),
+      preferShort: Boolean(s.preferShort),
+      randomize: Boolean(s.randomize),
+      reserveForSplit: Math.min(4, Math.max(0, Number(s.reserveForSplit) || 0)),
+      description: String(s.description ?? "").slice(0, 50),
+    }));
+
+    console.log(`[AI] Gemini generated ${strategies.length} strategies`);
+
+    // Pad to 40 if needed
+    while (strategies.length < 40) {
+      const defaults = getDefaultStrategies();
+      strategies.push(defaults[strategies.length % defaults.length]);
+    }
+
+    return { strategies: strategies.slice(0, 40), aiUsed: true };
+  } catch (err) {
+    console.error("[AI] Strategy generation failed:", err);
+    return { strategies: getDefaultStrategies(), aiUsed: false };
+  }
+}
+
+function postValidateShifts(
+  shifts: GeneratedShift[],
+  employees: EmployeeData[],
+  rules: StoreRules,
+  empConstraints: Map<string, EmployeeConstraints>,
+  department: "sala" | "cucina",
+): { valid: boolean; violations: string[] } {
+  const violations: string[] = [];
+  const deptShifts = shifts.filter(s => s.department === department);
+  const deptEmployees = employees.filter(e => e.department === department && e.is_active);
+
+  for (const emp of deptEmployees) {
+    const empShifts = deptShifts.filter(s => s.user_id === emp.user_id && !s.is_day_off && s.start_time && s.end_time);
+    const ec = empConstraints.get(emp.user_id);
+
+    // Weekly hours
+    const weeklyH = empShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+    const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+    if (weeklyH > maxWeekly) violations.push(`${emp.user_id}: ${weeklyH}h > max ${maxWeekly}h/sett`);
+
+    // Daily hours
+    const byDate = new Map<string, typeof empShifts>();
+    for (const s of empShifts) {
+      const arr = byDate.get(s.date) ?? [];
+      arr.push(s);
+      byDate.set(s.date, arr);
+    }
+    const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+    for (const [date, dayShifts] of byDate) {
+      const dailyH = dayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+      if (dailyH > maxDaily) violations.push(`${emp.user_id} ${date}: ${dailyH}h > max ${maxDaily}h/giorno`);
+    }
+
+    // Weekly splits
+    let weeklySplits = 0;
+    for (const [, dayShifts] of byDate) {
+      if (dayShifts.length > 1) weeklySplits += dayShifts.length - 1;
+    }
+    const maxSplitsWeek = ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week;
+    if (weeklySplits > maxSplitsWeek) violations.push(`${emp.user_id}: ${weeklySplits} spezzati > max ${maxSplitsWeek}/sett`);
+
+    // Days off
+    const daysWorked = byDate.size;
+    const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+    if (7 - daysWorked < minDaysOff) violations.push(`${emp.user_id}: ${7 - daysWorked} giorni liberi < min ${minDaysOff}`);
+
+    // 11h rest between days
+    const sorted = empShifts.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return parseHour(a.start_time!) - parseHour(b.start_time!);
+    });
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].date !== sorted[i + 1].date) {
+        const endH = parseHour(sorted[i].end_time!);
+        const nextStartH = parseHour(sorted[i + 1].start_time!);
+        const rest = (24 - endH) + nextStartH;
+        if (rest < 11) violations.push(`${emp.user_id}: ${rest}h riposo < 11h tra ${sorted[i].date} e ${sorted[i + 1].date}`);
+      }
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ─── Single Iteration Generator ──────────────────────────────────────────────
 
 // Smart memory score map: key = `${userId}-${dow}-${hour}` -> score (positive = good, negative = bad)
@@ -343,6 +569,7 @@ function runIteration(
   partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
   smartMemory: SmartMemoryScores,
   preferShortShifts: boolean = false,
+  reserveForSplit: number = 0,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -494,10 +721,16 @@ function runIteration(
       const adjustedTarget = emp.weekly_contract_hours - balance;
       const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
       const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      // If reserveForSplit > 0 and this is the first shift today, cap daily hours
+      // to leave room for a potential split shift later
+      const empDaySplitCount0 = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
+      const cappedDaily = reserveForSplit > 0 && empDaySplitCount0 === 0
+        ? Math.max(empMaxDaily - reserveForSplit, 3)
+        : empMaxDaily;
       const maxRemaining = Math.min(
         Math.max(adjustedTarget - empWeeklyUsed, 0),
         empMaxWeekly - empWeeklyUsed,
-        empMaxDaily,
+        cappedDaily,
       );
       if (maxRemaining <= 0) continue;
       if (weeklyTeamHoursUsed >= maxWeeklyTeamHours) break;
@@ -1231,39 +1464,98 @@ Deno.serve(async (req) => {
 
         let bestResult: IterationResult | null = null;
         let fallbackUsed = false;
+        let aiStrategiesUsed = false;
+        const strategyReport: string[] = [];
 
         // Use effective dates for iterations (in patch mode, only cover the affected range)
         const iterDates = isPatchMode ? effectiveWeekDates : weekDates;
 
-        // Progressive split strategy: start with 0 splits, increase up to 3 only if needed
-        const MAX_SPLITS_PROGRESSION = [0, 1, 2, 3];
+        // ─── AI Strategy Generation via Gemini 2.5 ───────────────────────
+        const deptCoverageForAI = coverageData.filter(c => c.department === dept);
+        const totalCoverageHours = weekDates.reduce((sum, dateStr) => {
+          const dow = getDayOfWeek(dateStr);
+          return sum + deptCoverageForAI.filter(c => c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
+        }, 0);
+        const totalEmployeeHours = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
 
-        for (const maxSplits of MAX_SPLITS_PROGRESSION) {
-          if (!isTimeBudgetOk()) break;
-          if (maxSplits > 0) {
-            fallbackUsed = true;
-            console.log(`[${dept}] Escalating: allowing ${maxSplits} split(s)/week per employee`);
+        const covByDay = new Map<number, number>();
+        for (const c of deptCoverageForAI) {
+          covByDay.set(c.day_of_week, (covByDay.get(c.day_of_week) ?? 0) + c.min_staff_required);
+        }
+        const covSummary = [...covByDay.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([dow, staff]) => `  Giorno ${dow}: ${staff} slot-persona`)
+          .join("\n");
+
+        const memoryEntries = [...smartMemory.entries()];
+        const goodP = memoryEntries.filter(([, v]) => v > 0).length;
+        const badP = memoryEntries.filter(([, v]) => v < 0).length;
+        const memorySummary = memoryEntries.length > 0
+          ? `MEMORIA STORICA: ${goodP} pattern positivi, ${badP} negativi su ${memoryEntries.length}`
+          : "MEMORIA STORICA: nessun dato";
+
+        let strategies: AIStrategy[];
+        try {
+          const aiResult = await generateAIStrategies({
+            rules,
+            employees: deptEmployees.map(e => ({ department: e.department, weekly_contract_hours: e.weekly_contract_hours })),
+            coverageSummary: `COPERTURA (${dept}):\n${covSummary}`,
+            department: dept,
+            smartMemorySummary: memorySummary,
+            totalCoverageHours,
+            totalEmployeeHours,
+          });
+          strategies = aiResult.strategies;
+          aiStrategiesUsed = aiResult.aiUsed;
+          console.log(`[${dept}] ${aiStrategiesUsed ? "AI" : "Default"} generated ${strategies.length} strategies`);
+        } catch (err) {
+          console.error(`[${dept}] AI failed, using defaults:`, err);
+          strategies = getDefaultStrategies();
+        }
+
+        strategyReport.push(`=== ${dept.toUpperCase()} ===`);
+        strategyReport.push(`Dipendenti: ${deptEmployees.length} | Copertura: ${totalCoverageHours}h | Disponibili: ${totalEmployeeHours}h`);
+        strategyReport.push(`Strategie: ${aiStrategiesUsed ? "Gemini 2.5" : "Fallback algoritmico"} (${strategies.length})`);
+
+        let bestStrategyIdx = -1;
+        let iterationsRun = 0;
+        for (let i = 0; i < strategies.length && isTimeBudgetOk(); i++) {
+          const strat = strategies[i];
+          if (strat.maxSplits > 0) fallbackUsed = true;
+          iterationsRun++;
+
+          const result = runIteration(
+            store_id, dept, iterDates, employees, availability,
+            allExceptions, coverageData, allowedData, rules, run.id,
+            openingHoursData, hourBalances, empConstraints, strat.maxSplits,
+            strat.randomize, partialDayBlocks, smartMemory, strat.preferShort,
+            strat.reserveForSplit,
+          );
+
+          if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
+            bestResult = result;
+            bestStrategyIdx = i;
           }
 
-          for (let i = 0; i < MAX_ITERATIONS && isTimeBudgetOk(); i++) {
-            // Alternate strategy: even iterations use max-coverage, odd use short-shift density
-            const preferShort = i % 2 === 1;
-            const result = runIteration(
-              store_id, dept, iterDates, employees, availability,
-              allExceptions, coverageData, allowedData, rules, run.id,
-              openingHoursData, hourBalances, empConstraints, maxSplits,
-              i > 0, partialDayBlocks, smartMemory, preferShort,
-            );
-
-            if (!bestResult || result.fitnessScore > bestResult.fitnessScore) {
-              bestResult = result;
-            }
-
-            if (result.uncoveredSlots.length === 0 && result.fitnessScore >= 0) break;
+          if (result.uncoveredSlots.length === 0 && result.fitnessScore >= 0) {
+            strategyReport.push(`✅ #${i + 1} "${strat.description}" PERFETTA (fitness: ${result.fitnessScore.toFixed(1)})`);
+            break;
           }
+        }
 
-          // Stop escalating if coverage is fully satisfied
-          if (bestResult && bestResult.uncoveredSlots.length === 0) break;
+        if (bestStrategyIdx >= 0) {
+          const w = strategies[bestStrategyIdx];
+          strategyReport.push(`🏆 Vincente: #${bestStrategyIdx + 1} "${w.description}" (splits=${w.maxSplits} short=${w.preferShort} reserve=${w.reserveForSplit})`);
+          strategyReport.push(`   Fitness: ${bestResult!.fitnessScore.toFixed(1)} | Scoperti: ${bestResult!.uncoveredSlots.length} | Iterazioni: ${iterationsRun}/${strategies.length}`);
+        }
+
+        // Post-validation
+        const validation = postValidateShifts(bestResult!.shifts, employees, rules, empConstraints, dept);
+        if (!validation.valid) {
+          strategyReport.push(`⚠️ Violazioni post-validazione: ${validation.violations.length}`);
+          for (const v of validation.violations.slice(0, 5)) strategyReport.push(`   - ${v}`);
+        } else {
+          strategyReport.push(`✅ Post-validazione: tutte le regole rispettate`);
         }
 
         const { shifts, uncoveredSlots, fitnessScore, hourAdjustments } = bestResult!;
@@ -1676,20 +1968,22 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update run with notes AND suggestions
-        const notes = [
+        // Update run with notes (including AI strategy report) AND suggestions
+        const statusNotes = [
           uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
           `fitness: ${fitnessScore.toFixed(1)}`,
-          fallbackUsed ? "fallback spezzati +1 attivato" : null,
-          isPatchMode ? "modalità patch (solo buchi)" : null,
+          aiStrategiesUsed ? "Gemini 2.5 AI" : "algoritmo classico",
+          fallbackUsed ? "spezzati attivati" : null,
+          isPatchMode ? "modalità patch" : null,
         ].filter(Boolean).join(" | ");
+        const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n");
 
         await adminClient.from("generation_runs").update({
           status: "completed",
           completed_at: new Date().toISOString(),
-          notes,
+          notes: fullNotes,
           fitness_score: fitnessScore,
-          iterations_run: fallbackUsed ? MAX_ITERATIONS * 2 : MAX_ITERATIONS,
+          iterations_run: iterationsRun,
           hour_adjustments: hourAdjustments,
           suggestions: deptSuggestions,
         } as any).eq("id", run.id);
