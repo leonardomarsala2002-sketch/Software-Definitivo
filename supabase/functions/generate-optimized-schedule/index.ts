@@ -1156,6 +1156,94 @@ function runIteration(
     }
   }
 
+  // ── LOG: INPUT DATA SUMMARY ───────────────────────────────────────────
+  {
+    const DAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+    dayLogs.push(`=== 📋 DATI INPUT GENERAZIONE — ${department.toUpperCase()} ===`);
+
+    // Rules summary
+    dayLogs.push(`\n📏 REGOLE STORE:`);
+    dayLogs.push(`  Max ore giornaliere/dipendente: ${rules.max_daily_hours_per_employee}h`);
+    dayLogs.push(`  Max ore settimanali/dipendente: ${rules.max_weekly_hours_per_employee}h`);
+    dayLogs.push(`  Giorni liberi obbligatori/settimana: ${rules.mandatory_days_off_per_week}`);
+    dayLogs.push(`  Max spezzati/dipendente/settimana: ${maxSplitsAllowed}`);
+    dayLogs.push(`  Max ore team ${department}/giorno: ${maxDailyTeamHours}h`);
+    dayLogs.push(`  Max ore team ${department}/settimana: ${maxWeeklyTeamHours}h`);
+
+    // Opening hours per day
+    dayLogs.push(`\n🕐 ORARI APERTURA:`);
+    for (const dateStr of weekDates) {
+      const dow = getDayOfWeek(dateStr);
+      const oh = openingHours.find(h => h.day_of_week === dow);
+      const dayLabel = DAY_NAMES[dow] ?? `Giorno ${dow}`;
+      if (oh) {
+        dayLogs.push(`  ${dayLabel} (${dateStr}): ${oh.opening_time.slice(0,5)}-${oh.closing_time.slice(0,5)}`);
+      } else {
+        dayLogs.push(`  ${dayLabel} (${dateStr}): nessun orario configurato`);
+      }
+    }
+
+    // Allowed entry/exit times
+    if (entries.length > 0 || exits.length > 0) {
+      dayLogs.push(`\n🚪 ENTRATE/USCITE CONSENTITE:`);
+      if (entries.length > 0) dayLogs.push(`  Entrate: ${entries.map(h => `${h}:00`).join(", ")}`);
+      if (exits.length > 0) dayLogs.push(`  Uscite: ${exits.map(h => `${h}:00`).join(", ")}`);
+    }
+
+    // Coverage requirements summary per day
+    dayLogs.push(`\n📊 COPERTURA RICHIESTA PER GIORNO:`);
+    for (const dateStr of weekDates) {
+      const dow = getDayOfWeek(dateStr);
+      const dayLabel = DAY_NAMES[dow] ?? `Giorno ${dow}`;
+      const dayCov = deptCoverage.filter(c => c.day_of_week === dow);
+      if (dayCov.length === 0) {
+        dayLogs.push(`  ${dayLabel}: nessuna copertura richiesta`);
+      } else {
+        const slots = dayCov.sort((a,b) => parseInt(a.hour_slot) - parseInt(b.hour_slot))
+          .map(c => `${c.hour_slot.slice(0,5)}=${c.min_staff_required}p`).join(" ");
+        const totalStaffH = dayCov.reduce((s,c) => s + c.min_staff_required, 0);
+        dayLogs.push(`  ${dayLabel}: ${slots} (tot: ${totalStaffH} staff-ore)`);
+      }
+    }
+
+    // Staff summary
+    dayLogs.push(`\n👥 PERSONALE ${department.toUpperCase()} (${deptEmployees.length} dipendenti):`);
+    for (const emp of deptEmployees) {
+      const ec = empConstraints.get(emp.user_id);
+      const balance = hourBalances.get(emp.user_id) ?? 0;
+      const customParts: string[] = [];
+      if (ec?.custom_max_daily_hours != null) customParts.push(`max giorn: ${ec.custom_max_daily_hours}h`);
+      if (ec?.custom_max_weekly_hours != null) customParts.push(`max sett: ${ec.custom_max_weekly_hours}h`);
+      if (ec?.custom_max_split_shifts != null) customParts.push(`max spezz: ${ec.custom_max_split_shifts}`);
+      if (ec?.custom_days_off != null) customParts.push(`gg liberi: ${ec.custom_days_off}`);
+      const customStr = customParts.length > 0 ? ` | personalizzati: ${customParts.join(", ")}` : "";
+      const balanceStr = balance !== 0 ? ` | bilancio: ${balance > 0 ? "+" : ""}${balance}h` : "";
+      dayLogs.push(`  ${getEmpName(emp.user_id)}: contratto ${emp.weekly_contract_hours}h/sett${balanceStr}${customStr}`);
+
+      // Availability
+      const empAvail = availability.filter(a => a.user_id === emp.user_id);
+      if (empAvail.length > 0) {
+        const availByDay = new Map<number, string[]>();
+        for (const a of empAvail) {
+          if (!availByDay.has(a.day_of_week)) availByDay.set(a.day_of_week, []);
+          availByDay.get(a.day_of_week)!.push(`${a.start_time.slice(0,5)}-${a.end_time.slice(0,5)}`);
+        }
+        const availStr = [...availByDay.entries()].sort((a,b)=>a[0]-b[0])
+          .map(([d, ranges]) => `${DAY_NAMES[d]?.slice(0,3) ?? d}: ${ranges.join(",")}`).join(" | ");
+        dayLogs.push(`    📅 Disponibilità: ${availStr}`);
+      }
+
+      // Exceptions in this week
+      const empExc = exceptions.filter(ex => ex.user_id === emp.user_id && ex.end_date >= weekDates[0] && ex.start_date <= weekDates[6]);
+      if (empExc.length > 0) {
+        const excStr = empExc.map(ex => `${ex.start_date}→${ex.end_date}`).join(", ");
+        dayLogs.push(`    🚫 Eccezioni: ${excStr}`);
+      }
+    }
+
+    dayLogs.push(``); // blank line separator
+  }
+
   // Log pre-planned days off
   {
     const doffSummary: string[] = [];

@@ -31,7 +31,7 @@ export function GenerationLogPanel({ generationRuns, department }: GenerationLog
 
   // Parse into day sections for visual grouping
   const sections = useMemo(() => {
-    const result: { title: string; lines: { text: string; type: "success" | "skip" | "error" | "info" | "header" }[] }[] = [];
+    const result: { title: string; lines: { text: string; type: "success" | "skip" | "error" | "info" | "header" | "rule" }[] }[] = [];
     let current: typeof result[0] | null = null;
 
     for (const line of lines) {
@@ -46,11 +46,12 @@ export function GenerationLogPanel({ generationRuns, department }: GenerationLog
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      let type: "success" | "skip" | "error" | "info" | "header" = "info";
+      let type: "success" | "skip" | "error" | "info" | "header" | "rule" = "info";
       if (trimmed.includes("✅")) type = "success";
       else if (trimmed.includes("⏭️")) type = "skip";
       else if (trimmed.includes("❌")) type = "error";
       else if (trimmed.includes("📊") || trimmed.includes("📈") || trimmed.includes("💡")) type = "header";
+      else if (trimmed.includes("📏") || trimmed.includes("🕐") || trimmed.includes("🚪") || trimmed.includes("👥") || trimmed.includes("📅") || trimmed.includes("🚫") || trimmed.includes("📋")) type = "rule";
 
       current.lines.push({ text: trimmed, type });
     }
@@ -169,6 +170,7 @@ function DaySection({ section }: { section: { title: string; lines: { text: stri
                 line.type === "error" && "text-destructive font-medium",
                 line.type === "info" && "text-foreground",
                 line.type === "header" && "text-primary font-medium",
+                line.type === "rule" && "text-accent-foreground/80",
               )}
             >
               {line.text}
