@@ -18,6 +18,7 @@ interface EmployeeWeekDrawerProps {
   employeeId: string;
   referenceDate: string;
   allShifts: ShiftRow[];
+  weeklyContractHours?: number;
 }
 
 const DAYS_FULL_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
@@ -29,7 +30,7 @@ function isSplitDay(shifts: ShiftRow[]): boolean {
 }
 
 export function EmployeeWeekDrawer({
-  open, onOpenChange, employeeName, employeeId, referenceDate, allShifts,
+  open, onOpenChange, employeeName, employeeId, referenceDate, allShifts, weeklyContractHours,
 }: EmployeeWeekDrawerProps) {
   const weekDates = useMemo(() => {
     const ref = parseISO(referenceDate);
@@ -56,12 +57,33 @@ export function EmployeeWeekDrawer({
 
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
 
+  const totalWeekHours = useMemo(() => {
+    let total = 0;
+    for (const [, dayShifts] of shiftsByDate) {
+      for (const s of dayShifts) {
+        if (s.is_day_off || !s.start_time || !s.end_time) continue;
+        const sh = parseInt(s.start_time.split(":")[0], 10);
+        let eh = parseInt(s.end_time.split(":")[0], 10);
+        if (eh === 0) eh = 24;
+        total += eh - sh;
+      }
+    }
+    return total;
+  }, [shiftsByDate]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="w-full h-[70vh] rounded-t-[32px] p-0">
         <SheetHeader className="px-5 pt-5 pb-3 border-b">
           <SheetTitle className="text-base">{employeeName}</SheetTitle>
-          <p className="text-xs text-muted-foreground">{weekLabel}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">{weekLabel}</p>
+            {weeklyContractHours != null && (
+              <Badge variant={totalWeekHours >= weeklyContractHours ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4">
+                {totalWeekHours}h / {weeklyContractHours}h
+              </Badge>
+            )}
+          </div>
         </SheetHeader>
 
         <ScrollArea className="h-[calc(70vh-80px)]">

@@ -3053,155 +3053,71 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Surplus suggestions with specific details
+        // ─── AUTO-RESOLVE surplus slots: trim/remove shifts of employees furthest from contract ───
         const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
         for (const dateStr of iterDates) {
           const dow = getDayOfWeek(dateStr);
           const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
           const dayShifts = insertedShifts.filter(s => s.date === dateStr);
 
+          // Aggregate daily surplus: count total person-hours above coverage needs
+          let dailySurplusPersons = 0;
           for (const cov of dayCov) {
             const h = parseInt(cov.hour_slot.split(":")[0], 10);
-            const coveringShifts: GeneratedShift[] = [];
+            let coveringCount = 0;
             for (const s of dayShifts) {
               const sh = parseInt(s.start_time!.split(":")[0], 10);
               let eh = parseInt(s.end_time!.split(":")[0], 10);
               if (eh === 0) eh = 24;
-              if (h >= sh && h < eh) coveringShifts.push(s);
+              if (h >= sh && h < eh) coveringCount++;
             }
+            const surplus = coveringCount - cov.min_staff_required;
+            if (surplus > 0) dailySurplusPersons += surplus;
+          }
 
-            const surplus = coveringShifts.length - cov.min_staff_required;
-            if (surplus >= 1) {
-              const dayD = new Date(dateStr + "T00:00:00");
-              const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
-              const surplusNames = coveringShifts.slice(-surplus).map(s => nameMap.get(s.user_id) ?? "?").join(", ");
+          // If significant daily surplus persists, suggest lending to other stores
+          if (dailySurplusPersons >= 3) {
+            const dayD = new Date(dateStr + "T00:00:00");
+            const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+            
+            // Find employees with most excess hours who could be lent
+            const surplusEmployees = dayShifts
+              .map(s => {
+                const wh = weeklyHours_final.get(s.user_id) ?? 0;
+                const emp = empMapForSugg.get(s.user_id);
+                const contract = emp?.weekly_contract_hours ?? 40;
+                return { shift: s, excess: wh - contract, name: nameMap.get(s.user_id) ?? "?" };
+              })
+              .filter(e => e.excess > 0)
+              .sort((a, b) => b.excess - a.excess)
+              .slice(0, 3);
 
+            if (surplusEmployees.length > 0) {
               deptSuggestions.push({
-                id: `surplus-${dept}-${dateStr}-${h}`,
+                id: `lending-surplus-${dept}-${dateStr}`,
                 type: "surplus",
-                severity: surplus >= 2 ? "warning" : "info",
-                title: `${surplus} persona/e in più ${dayLabel} alle ${h}:00`,
-                description: `Presenti ${coveringShifts.length} su ${cov.min_staff_required} richiesti. Surplus: ${surplusNames}`,
-                actionLabel: "Vedi Dettagli",
+                severity: "info",
+                title: `Surplus personale ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
+                description: `${dailySurplusPersons} slot con persone in più del necessario. Valuta di prestare personale ad altri store.`,
+                actionLabel: "Proponi Prestito",
                 declineLabel: "Ignora",
                 date: dateStr,
-                slot: `${h}:00`,
-                surplusCount: surplus,
-                surplusReason: `${coveringShifts.length} presenti vs ${cov.min_staff_required} richiesti alle ${h}:00`,
-                alternatives: coveringShifts.slice(-surplus).map(s => {
-                  const empName = nameMap.get(s.user_id) ?? "Dipendente";
-                  const empBal = hourBalances.get(s.user_id) ?? 0;
-                  return {
-                    id: `remove-${s.user_id}-${dateStr}-${h}`,
-                    label: `Rimuovi turno ${empName}`,
-                    description: `${empName} ha ${weeklyHours_final.get(s.user_id) ?? 0}h questa settimana (contratto: ${empMapForSugg.get(s.user_id)?.weekly_contract_hours ?? 40}h, bilancio: ${empBal > 0 ? "+" : ""}${empBal}h)`,
-                    actionType: "remove_surplus",
-                    userId: s.user_id,
-                    userName: empName,
-                    shiftId: s.generation_run_id, // reference
-                  };
-                }),
+                surplusCount: dailySurplusPersons,
+                surplusReason: `Surplus giornaliero aggregato`,
+                alternatives: surplusEmployees.map(e => ({
+                  id: `lend-${e.shift.user_id}-${dateStr}`,
+                  label: `Presta ${e.name} ad altro store`,
+                  description: `${e.name} ha ${weeklyHours_final.get(e.shift.user_id) ?? 0}h (contratto: ${empMapForSugg.get(e.shift.user_id)?.weekly_contract_hours ?? 40}h, eccesso: +${e.excess}h)`,
+                  actionType: "lending",
+                  userId: e.shift.user_id,
+                  userName: e.name,
+                })),
               });
             }
           }
         }
 
-        // Weekly hour deviation suggestions — for deficits, also propose inter-store lending
-        for (const emp of deptEmployees) {
-          const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-          const delta = weeklyUsed - emp.weekly_contract_hours;
-          // Only flag significant deviations (>=3h) within this generated week
-          if (Math.abs(delta) >= 3 && Math.abs(delta) > 5) {
-            // Only flag deviations BEYOND the automatic ±5h tolerance
-            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
-            const direction = delta > 0 ? "eccesso" : "deficit";
-            const absDelta = Math.abs(delta);
-            
-            // For deficits: suggest lending to another store in the same city
-            const lendingAlternatives: any[] = [];
-            if (delta < 0) {
-              // This employee has remaining contract hours — suggest lending them to stores that need help
-              lendingAlternatives.push({
-                id: `lending-deficit-${emp.user_id}`,
-                label: `Proponi prestito inter-store per ${empName}`,
-                description: `${empName} ha ${absDelta}h non utilizzate questa settimana. Può essere prestato/a ad un altro store della stessa città per coprire fabbisogni. Il sistema cercherà automaticamente slot scoperti negli altri locali.`,
-                actionType: "lending",
-                userId: emp.user_id,
-                userName: empName,
-                suggestedHours: absDelta,
-              });
-            }
-            
-            deptSuggestions.push({
-              id: `weekdelta-${emp.user_id}`,
-              type: "overtime_balance",
-              severity: absDelta >= 5 ? "warning" : "info",
-              title: `${empName}: ${direction} di ${absDelta}h questa settimana`,
-              description: delta > 0
-                ? `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito ridurre di ${Math.min(absDelta, 2)}h.`
-                : `${empName} ha ${weeklyUsed}h assegnate su ${emp.weekly_contract_hours}h contratto. Le ore rimanenti possono essere coperte con un prestito inter-store o estendendo i turni esistenti.`,
-              actionLabel: delta > 0 ? "Applica Riduzione" : (lendingAlternatives.length > 0 ? "Proponi Prestito" : "Vai al giorno"),
-              declineLabel: delta > 0 ? "Ignora" : "Compensa prossima settimana",
-              userId: emp.user_id,
-              userName: empName,
-              suggestedHours: Math.min(absDelta, 2),
-              alternatives: lendingAlternatives.length > 0 ? lendingAlternatives : undefined,
-            });
-          }
-        }
-
-        // ─── Smart post-generation suggestions ─────────────────────────
-        // Condition 1: Still uncovered slots AND no internal alternatives left → suggest increase splits
-        const uncoveredWithNoAlts = deptSuggestions.filter(
-          (s: any) => s.type === "uncovered" && (!s.alternatives || s.alternatives.length === 0)
-        );
-        if (uncoveredSlots.length > 0 && uncoveredWithNoAlts.length > 0) {
-          const currentSplitLimit = rules.max_split_shifts_per_employee_per_week + (fallbackUsed ? 1 : 0);
-          deptSuggestions.push({
-            id: `smart-increase-splits-${dept}`,
-            type: "uncovered",
-            severity: "warning",
-            title: `Aumentare spezzati a ${currentSplitLimit + 1}/settimana? (${dept === "cucina" ? "Cucina" : "Sala"})`,
-            description: `Ci sono ancora ${uncoveredSlots.length} slot scoperti e nessuna alternativa interna disponibile. Aumentando il limite spezzati da ${currentSplitLimit} a ${currentSplitLimit + 1} per dipendente, l'algoritmo potrebbe coprire più slot.`,
-            actionLabel: "Sì, aumenta spezzati",
-            declineLabel: "No, mantieni limite",
-            alternatives: [{
-              id: `action-increase-splits-${dept}`,
-              label: `Aumenta spezzati a ${currentSplitLimit + 1}`,
-              description: `Porta il limite spezzati settimanali da ${currentSplitLimit} a ${currentSplitLimit + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} e rigenera i turni.`,
-              actionType: "increase_splits",
-              suggestedHours: currentSplitLimit + 1,
-            }],
-          });
-        }
-
-        // Condition 2: ALL slots covered AND frequent surplus → suggest increase days off
-        if (uncoveredSlots.length === 0) {
-          // Count how many surplus slots exist
-          const surplusSuggestions = deptSuggestions.filter((s: any) => s.type === "surplus");
-          if (surplusSuggestions.length >= 3) {
-            const currentDaysOff = rules.mandatory_days_off_per_week;
-            deptSuggestions.push({
-              id: `smart-increase-daysoff-${dept}`,
-              type: "surplus",
-              severity: "info",
-              title: `Aggiungere +1 giorno libero a testa? (${dept === "cucina" ? "Cucina" : "Sala"})`,
-              description: `Tutti gli slot sono coperti e ci sono ${surplusSuggestions.length} slot con surplus. Aumentando i giorni liberi da ${currentDaysOff} a ${currentDaysOff + 1} si riduce il sovraffollamento e si migliora il benessere del team.`,
-              actionLabel: "Sì, +1 giorno libero",
-              declineLabel: "No, mantieni",
-              alternatives: [{
-                id: `action-increase-daysoff-${dept}`,
-                label: `Porta giorni liberi a ${currentDaysOff + 1}`,
-                description: `Aumenta i giorni liberi obbligatori da ${currentDaysOff} a ${currentDaysOff + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} per questa settimana e rigenera.`,
-                actionType: "increase_days_off",
-                suggestedHours: currentDaysOff + 1,
-              }],
-            });
-          }
-        }
-
-        // ── Staffing Analysis Suggestion ──
-        // Calculate weekly required hours from coverage data
+        // ─── Log-only staffing analysis (NOT shown as suggestion) ───
         {
           const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
           const totalWeeklyRequired = weekDates.reduce((sum, dateStr) => {
@@ -3216,19 +3132,7 @@ Deno.serve(async (req) => {
           const actualCount = deptEmployees.length;
           const delta = actualCount - idealCount;
           if (delta !== 0) {
-            deptSuggestions.push({
-              id: `staffing-${dept}`,
-              type: "surplus",
-              severity: delta < 0 ? "warning" : "info",
-              title: delta > 0
-                ? `Organico ${deptLabel}: +${delta} rispetto al fabbisogno`
-                : `Organico ${deptLabel}: ${delta} rispetto al fabbisogno`,
-              description: `Servono ${totalWeeklyRequired}h/settimana (${idealCount} dipendenti ideali a ${Math.round(avgContract)}h). Presenti: ${actualCount}.`,
-              actionLabel: "Info",
-              declineLabel: "Ok",
-              surplusCount: Math.abs(delta),
-              surplusReason: delta > 0 ? "Surplus organico" : "Deficit organico",
-            });
+            strategyReport.push(`[STAFFING ${deptLabel}] Ideale: ${idealCount}, Attuale: ${actualCount} (delta: ${delta > 0 ? "+" : ""}${delta})`);
           }
         }
 
