@@ -9,6 +9,7 @@ import {
   LogIn,
   CheckCircle2,
   AlertCircle,
+  Info,
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
@@ -33,6 +34,27 @@ import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
 import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
+
+const isPreview =
+  typeof window !== "undefined" &&
+  (window.location.hostname.includes("-preview--") ||
+    window.location.hostname.includes("lovableproject.com") ||
+    window.location.hostname === "localhost");
+
+const ENGINE_RULES = [
+  { label: "Tolleranza ore contrattuali", desc: "Il motore accetta deviazioni entro ±5h dal contratto settimanale senza penalità. Oltre viene applicata una penalità di -30/h per forzare il rientro." },
+  { label: "Compensazione automatica", desc: "Se l'admin accetta una deviazione ±5h, la differenza viene compensata automaticamente nella settimana successiva." },
+  { label: "Riposo minimo 11h", desc: "Tra la fine di un turno e l'inizio del successivo devono passare almeno 11 ore (vincolo inviolabile)." },
+  { label: "Durata minima turno", desc: "Ogni turno deve durare almeno 3 ore." },
+  { label: "40 tentativi di generazione", desc: "Il motore esegue fino a 40 iterazioni per trovare la soluzione ottimale." },
+  { label: "Fallback se fallisce", desc: "Se la generazione fallisce: 1) aumenta gli spezzati di +1 a testa, 2) propone deviazioni ±5h con motivazione." },
+  { label: "Cutoff richieste", desc: "Le richieste inviate dopo il giovedì valgono dalla settimana successiva." },
+  { label: "Generazione automatica", desc: "Ogni giovedì alle 03:00 UTC viene generata la bozza dei turni per la settimana ISO successiva." },
+  { label: "Prestiti inter-store", desc: "L'unico tipo di suggerimento mostrato in UI riguarda i prestiti tra store (mancanza personale o surplus ≥3h)." },
+  { label: "Merge turni contigui", desc: "Turni adiacenti dello stesso dipendente nello stesso giorno vengono automaticamente uniti in un unico turno." },
+  { label: "Rispetto orari consentiti", desc: "Il motore usa esclusivamente gli orari di entrata/uscita configurati nello store. Non crea orari dinamici." },
+  { label: "Copertura min-max", desc: "Il motore riempie prima fino al minimo richiesto, poi continua fino al massimo se i dipendenti hanno ore contrattuali da completare." },
+];
 
 function SettingsSkeleton() {
   return (
@@ -251,6 +273,29 @@ const StoreSettings = () => {
             readOnly={readOnly}
           />
         </>
+      )}
+
+      {/* Engine rules card – preview only */}
+      {isPreview && hasConfig && !isLoading && (
+        <Card className="mt-6 border-dashed border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="rounded-lg bg-primary/10 p-1.5">
+                <Info className="h-4 w-4 text-primary" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">Regole Motore (solo preview)</h3>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">DEV</Badge>
+            </div>
+            <ul className="space-y-2">
+              {ENGINE_RULES.map((rule) => (
+                <li key={rule.label} className="text-xs">
+                  <span className="font-medium text-foreground">{rule.label}:</span>{" "}
+                  <span className="text-muted-foreground">{rule.desc}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
