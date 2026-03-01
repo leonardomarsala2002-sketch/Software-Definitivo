@@ -158,6 +158,7 @@ const PENALTY_UNCOVERED = -100;
 const PENALTY_OVERCROWDED = -10;
 const PENALTY_DRIFT_PER_H = -5;
 const PENALTY_REST_VIOLATION = -200;  // 11h rest violation (HARD)
+const PENALTY_NO_DAY_OFF = -500;      // Employee has 0 days off (HARD)
 const PENALTY_EQUITY_SPLIT = -30;     // Spezzati equity
 const PENALTY_EQUITY_DAYSOFF = -30;   // Days off equity
 const BONUS_BALANCED = 3;
@@ -272,11 +273,17 @@ function computeFitness(
     }
   }
 
-  // 6) EQUITY: penalize days off imbalance (soft)
+  // 6) EQUITY: penalize days off imbalance (soft) + HARD penalty for 0 days off
   const daysOffCounts = new Map<string, number>();
   for (const emp of deptEmployees) {
-    const offCount = deptShifts.filter(s => s.user_id === emp.user_id && s.is_day_off).length;
+    // Count days off = days where employee has a day_off shift OR simply doesn't work
+    const workDays = new Set(deptShifts.filter(s => s.user_id === emp.user_id && !s.is_day_off && s.start_time).map(s => s.date));
+    const offCount = weekDates.length - workDays.size;
     daysOffCounts.set(emp.user_id, offCount);
+    // HARD penalty: if employee has 0 days off, massive penalty
+    if (offCount === 0) {
+      score += PENALTY_NO_DAY_OFF;
+    }
   }
 
   if (deptEmployees.length > 1) {
@@ -643,157 +650,161 @@ function autoCorrectViolations(
   coverage: CoverageReq[],
   weekDates: string[],
 ): { correctedShifts: GeneratedShift[]; corrections: string[] } {
-  const corrections: string[] = [];
+  const allCorrections: string[] = [];
   let corrected = [...shifts];
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
+  const MAX_CORRECTION_PASSES = 5;
 
-  for (const emp of deptEmployees) {
-    const ec = empConstraints.get(emp.user_id);
-    const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-    const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
-    const maxSplitsWeek = ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week;
-    const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+  for (let pass = 0; pass < MAX_CORRECTION_PASSES; pass++) {
+    const passCorrections: string[] = [];
 
-    const empShifts = () => corrected.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+    for (const emp of deptEmployees) {
+      const ec = empConstraints.get(emp.user_id);
+      const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+      const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      const maxSplitsWeek = ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week;
+      const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
 
-    // 1) Fix excessive daily hours: shorten the longest shift on that day
-    const byDate = new Map<string, GeneratedShift[]>();
-    for (const s of empShifts()) {
-      const arr = byDate.get(s.date) ?? [];
-      arr.push(s);
-      byDate.set(s.date, arr);
-    }
-    for (const [date, dayShifts] of byDate) {
-      const dailyH = dayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
-      if (dailyH > maxDaily) {
-        const excess = dailyH - maxDaily;
-        // Shorten the longest shift
-        const longest = dayShifts.sort((a, b) => (parseHour(b.end_time!) - parseHour(b.start_time!)) - (parseHour(a.end_time!) - parseHour(a.start_time!)))[0];
-        const endH = parseHour(longest.end_time!);
-        const newEnd = endH - excess;
-        if (newEnd > parseHour(longest.start_time!)) {
-          const idx = corrected.indexOf(longest);
-          if (idx >= 0) {
-            corrected[idx] = { ...longest, end_time: `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00` };
-            corrections.push(`FIX ore giornaliere: ${emp.user_id.slice(0,8)} ${date} accorciato di ${excess}h`);
+      const empShifts = () => corrected.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+
+      // 1) Fix excessive daily hours: shorten the longest shift on that day
+      const byDate = new Map<string, GeneratedShift[]>();
+      for (const s of empShifts()) {
+        const arr = byDate.get(s.date) ?? [];
+        arr.push(s);
+        byDate.set(s.date, arr);
+      }
+      for (const [date, dayShifts] of byDate) {
+        const dailyH = dayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+        if (dailyH > maxDaily) {
+          const excess = dailyH - maxDaily;
+          const longest = dayShifts.sort((a, b) => (parseHour(b.end_time!) - parseHour(b.start_time!)) - (parseHour(a.end_time!) - parseHour(a.start_time!)))[0];
+          const endH = parseHour(longest.end_time!);
+          const newEnd = endH - excess;
+          if (newEnd > parseHour(longest.start_time!)) {
+            const idx = corrected.indexOf(longest);
+            if (idx >= 0) {
+              corrected[idx] = { ...longest, end_time: `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00` };
+              passCorrections.push(`FIX ore giornaliere [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${date} accorciato di ${excess}h`);
+            }
           }
         }
       }
-    }
 
-    // 2) Fix excessive weekly hours: remove shifts from lowest-demand days
-    const weeklyH = empShifts().reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
-    if (weeklyH > maxWeekly) {
-      let excess = weeklyH - maxWeekly;
-      // Sort employee's shifts by daily coverage demand (ascending) to remove from least-needed days
-      const sortedByDemand = empShifts().sort((a, b) => {
-        const aDow = getDayOfWeek(a.date);
-        const bDow = getDayOfWeek(b.date);
-        const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-        const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-        return aDemand - bDemand;
-      });
-      for (const shift of sortedByDemand) {
-        if (excess <= 0) break;
-        const dur = parseHour(shift.end_time!) - parseHour(shift.start_time!);
-        corrected = corrected.filter(s => s !== shift);
-        // Replace with day off
-        corrected.push({ ...shift, start_time: null, end_time: null, is_day_off: true });
-        excess -= dur;
-        corrections.push(`FIX ore settimanali: ${emp.user_id.slice(0,8)} rimosso turno ${shift.date} (${dur}h)`);
-      }
-    }
-
-    // 3) Fix excessive weekly splits: remove splits from lowest-demand days
-    const dateShiftCounts = new Map<string, number>();
-    for (const s of empShifts()) {
-      dateShiftCounts.set(s.date, (dateShiftCounts.get(s.date) ?? 0) + 1);
-    }
-    let weeklySplitCount = 0;
-    for (const [, count] of dateShiftCounts) {
-      if (count > 1) weeklySplitCount += count - 1;
-    }
-    if (weeklySplitCount > maxSplitsWeek) {
-      // Find days with splits, sorted by demand ascending
-      const splitDays = [...dateShiftCounts.entries()]
-        .filter(([, c]) => c > 1)
-        .sort((a, b) => {
-          const aDow = getDayOfWeek(a[0]);
-          const bDow = getDayOfWeek(b[0]);
+      // 2) Fix excessive weekly hours: remove shifts from lowest-demand days
+      const weeklyH = empShifts().reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+      if (weeklyH > maxWeekly) {
+        let excess = weeklyH - maxWeekly;
+        const sortedByDemand = empShifts().sort((a, b) => {
+          const aDow = getDayOfWeek(a.date);
+          const bDow = getDayOfWeek(b.date);
           const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
           const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
           return aDemand - bDemand;
         });
-      for (const [date] of splitDays) {
-        if (weeklySplitCount <= maxSplitsWeek) break;
-        // Remove the shortest shift on this day (the split part)
-        const dayShifts = empShifts().filter(s => s.date === date).sort((a, b) =>
-          (parseHour(a.end_time!) - parseHour(a.start_time!)) - (parseHour(b.end_time!) - parseHour(b.start_time!))
-        );
-        if (dayShifts.length > 1) {
-          corrected = corrected.filter(s => s !== dayShifts[0]);
-          weeklySplitCount--;
-          corrections.push(`FIX spezzati: ${emp.user_id.slice(0,8)} rimosso spezzato ${date}`);
+        for (const shift of sortedByDemand) {
+          if (excess <= 0) break;
+          const dur = parseHour(shift.end_time!) - parseHour(shift.start_time!);
+          corrected = corrected.filter(s => s !== shift);
+          corrected.push({ ...shift, start_time: null, end_time: null, is_day_off: true });
+          excess -= dur;
+          passCorrections.push(`FIX ore settimanali [pass ${pass+1}]: ${emp.user_id.slice(0,8)} rimosso turno ${shift.date} (${dur}h)`);
         }
       }
-    }
 
-    // 4) Fix insufficient days off: remove all shifts on lowest-demand day
-    const workedDates = new Set(empShifts().map(s => s.date));
-    const daysOff = 7 - workedDates.size;
-    if (daysOff < minDaysOff) {
-      const needMore = minDaysOff - daysOff;
-      // Sort worked dates by demand ascending
-      const sortedWorked = [...workedDates].sort((a, b) => {
-        const aDow = getDayOfWeek(a);
-        const bDow = getDayOfWeek(b);
-        const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-        const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-        return aDemand - bDemand;
-      });
-      for (let i = 0; i < needMore && i < sortedWorked.length; i++) {
-        const date = sortedWorked[i];
-        const removed = corrected.filter(s => s.user_id === emp.user_id && s.department === department && s.date === date && !s.is_day_off);
-        corrected = corrected.filter(s => !removed.includes(s));
-        corrected.push({
-          store_id: removed[0]?.store_id ?? "",
-          user_id: emp.user_id,
-          date,
-          start_time: null,
-          end_time: null,
-          department,
-          is_day_off: true,
-          status: "draft",
-          generation_run_id: removed[0]?.generation_run_id ?? "",
-        });
-        corrections.push(`FIX giorni liberi: ${emp.user_id.slice(0,8)} giorno libero forzato ${date}`);
+      // 3) Fix excessive weekly splits: remove splits from lowest-demand days
+      const dateShiftCounts = new Map<string, number>();
+      for (const s of empShifts()) {
+        dateShiftCounts.set(s.date, (dateShiftCounts.get(s.date) ?? 0) + 1);
       }
-    }
+      let weeklySplitCount = 0;
+      for (const [, count] of dateShiftCounts) {
+        if (count > 1) weeklySplitCount += count - 1;
+      }
+      if (weeklySplitCount > maxSplitsWeek) {
+        const splitDays = [...dateShiftCounts.entries()]
+          .filter(([, c]) => c > 1)
+          .sort((a, b) => {
+            const aDow = getDayOfWeek(a[0]);
+            const bDow = getDayOfWeek(b[0]);
+            const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+            const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+            return aDemand - bDemand;
+          });
+        for (const [date] of splitDays) {
+          if (weeklySplitCount <= maxSplitsWeek) break;
+          const dayShifts = empShifts().filter(s => s.date === date).sort((a, b) =>
+            (parseHour(a.end_time!) - parseHour(a.start_time!)) - (parseHour(b.end_time!) - parseHour(b.start_time!))
+          );
+          if (dayShifts.length > 1) {
+            corrected = corrected.filter(s => s !== dayShifts[0]);
+            weeklySplitCount--;
+            passCorrections.push(`FIX spezzati [pass ${pass+1}]: ${emp.user_id.slice(0,8)} rimosso spezzato ${date}`);
+          }
+        }
+      }
 
-    // 5) Fix 11h rest violations: postpone next day's start
-    const allEmpShifts = empShifts().sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return parseHour(a.start_time!) - parseHour(b.start_time!);
-    });
-    for (let i = 0; i < allEmpShifts.length - 1; i++) {
-      if (allEmpShifts[i].date !== allEmpShifts[i + 1].date) {
-        const endH = parseHour(allEmpShifts[i].end_time!);
-        const nextStartH = parseHour(allEmpShifts[i + 1].start_time!);
-        const rest = (24 - endH) + nextStartH;
-        if (rest < 11) {
-          const needed = 11 - rest;
-          const newStart = nextStartH + needed;
-          const idx = corrected.indexOf(allEmpShifts[i + 1]);
-          if (idx >= 0 && newStart < parseHour(corrected[idx].end_time!)) {
-            corrected[idx] = { ...corrected[idx], start_time: `${String(newStart).padStart(2, "0")}:00` };
-            corrections.push(`FIX riposo 11h: ${emp.user_id.slice(0,8)} ${allEmpShifts[i + 1].date} posticipato ingresso a ${newStart}:00`);
+      // 4) Fix insufficient days off: remove all shifts on lowest-demand day
+      const workedDates = new Set(empShifts().map(s => s.date));
+      const daysOff = 7 - workedDates.size;
+      if (daysOff < minDaysOff) {
+        const needMore = minDaysOff - daysOff;
+        const sortedWorked = [...workedDates].sort((a, b) => {
+          const aDow = getDayOfWeek(a);
+          const bDow = getDayOfWeek(b);
+          const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+          const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+          return aDemand - bDemand;
+        });
+        for (let i = 0; i < needMore && i < sortedWorked.length; i++) {
+          const date = sortedWorked[i];
+          const removed = corrected.filter(s => s.user_id === emp.user_id && s.department === department && s.date === date && !s.is_day_off);
+          corrected = corrected.filter(s => !removed.includes(s));
+          corrected.push({
+            store_id: removed[0]?.store_id ?? "",
+            user_id: emp.user_id,
+            date,
+            start_time: null,
+            end_time: null,
+            department,
+            is_day_off: true,
+            status: "draft",
+            generation_run_id: removed[0]?.generation_run_id ?? "",
+          });
+          passCorrections.push(`FIX giorni liberi [pass ${pass+1}]: ${emp.user_id.slice(0,8)} giorno libero forzato ${date}`);
+        }
+      }
+
+      // 5) Fix 11h rest violations: postpone next day's start
+      const allEmpShifts = empShifts().sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return parseHour(a.start_time!) - parseHour(b.start_time!);
+      });
+      for (let i = 0; i < allEmpShifts.length - 1; i++) {
+        if (allEmpShifts[i].date !== allEmpShifts[i + 1].date) {
+          const endH = parseHour(allEmpShifts[i].end_time!);
+          const nextStartH = parseHour(allEmpShifts[i + 1].start_time!);
+          const rest = (24 - endH) + nextStartH;
+          if (rest < 11) {
+            const needed = 11 - rest;
+            const newStart = nextStartH + needed;
+            const idx = corrected.indexOf(allEmpShifts[i + 1]);
+            if (idx >= 0 && newStart < parseHour(corrected[idx].end_time!)) {
+              corrected[idx] = { ...corrected[idx], start_time: `${String(newStart).padStart(2, "0")}:00` };
+              passCorrections.push(`FIX riposo 11h [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${allEmpShifts[i + 1].date} posticipato ingresso a ${newStart}:00`);
+            }
           }
         }
       }
     }
+
+    allCorrections.push(...passCorrections);
+
+    // If no corrections were needed in this pass, we're done
+    if (passCorrections.length === 0) break;
   }
 
-  return { correctedShifts: corrected, corrections };
+  return { correctedShifts: corrected, corrections: allCorrections };
 }
 
 // ─── Single Iteration Generator ──────────────────────────────────────────────
@@ -1584,11 +1595,19 @@ function runIteration(
 
   // Weekly summary
   dayLogs.push(`\n=== RIEPILOGO SETTIMANALE ===`);
+  const ec_rules = rules;
   for (const emp of deptEmployees) {
     const wh = weeklyHours.get(emp.user_id) ?? 0;
     const ws = weeklySplits.get(emp.user_id) ?? 0;
+    const ec = empConstraints.get(emp.user_id);
+    const maxSplitsWeek = ec?.custom_max_split_shifts ?? ec_rules.max_split_shifts_per_employee_per_week;
+    const minDaysOff = ec?.custom_days_off ?? ec_rules.mandatory_days_off_per_week;
     const daysOff = [...weekDates].filter(d => !daysWorked.get(emp.user_id)?.has(d)).length;
-    dayLogs.push(`${getEmpName(emp.user_id)}: ${wh}h/${emp.weekly_contract_hours}h contratto | ${ws} spezzati | ${daysOff} riposi`);
+    const issues: string[] = [];
+    if (daysOff < minDaysOff) issues.push(`⚠️ riposi ${daysOff}<${minDaysOff}`);
+    if (ws > maxSplitsWeek) issues.push(`⚠️ spezzati ${ws}>${maxSplitsWeek}`);
+    if (wh > (ec?.custom_max_weekly_hours ?? ec_rules.max_weekly_hours_per_employee)) issues.push(`⚠️ ore eccessive`);
+    dayLogs.push(`${getEmpName(emp.user_id)}: ${wh}h/${emp.weekly_contract_hours}h contratto | ${ws}/${maxSplitsWeek} spezzati | ${daysOff}/${minDaysOff}+ riposi${issues.length > 0 ? " " + issues.join(" ") : " ✅"}`);
   }
 
   const { score, hourAdjustments } = computeFitness(shifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department);
@@ -1988,26 +2007,28 @@ Deno.serve(async (req) => {
 
         // ─── ADAPTIVE ESCALATION LOOP ──────────────────────────────────
         // Priority: fill gaps FIRST by increasing splits & reducing days off.
-        // Only add days off when there's surplus (all coverage met).
-        // Round 1: original rules
-        // Round 2: spezzati +1 (more splits to fill gaps)
-        // Round 3: spezzati +2 (even more splits)
-        // Round 4: spezzati +1 AND giorni liberi -1 (reduce rest to free up staff)
-        // Round 5: only if ALL covered & surplus → giorni liberi +1
+        // Round 1: original rules (all strategies)
+        // Round 2: spezzati +1
+        // Round 3: spezzati +2
+        // Round 4: spezzati +1 AND giorni liberi -1
+        // Round 5: spezzati +3 (maximum flexibility)
+        // Round 6: spezzati +2 AND giorni liberi -1 (last resort)
         const escalationRounds = [
           { label: "Round 1 (regole originali)", daysOffDelta: 0, splitsDelta: 0, stratSlice: strategies.length },
           { label: "Round 2 (spezzati +1)", daysOffDelta: 0, splitsDelta: 1, stratSlice: 10 },
           { label: "Round 3 (spezzati +2)", daysOffDelta: 0, splitsDelta: 2, stratSlice: 10 },
           { label: "Round 4 (spezzati +1, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 1, stratSlice: 10 },
+          { label: "Round 5 (spezzati +3)", daysOffDelta: 0, splitsDelta: 3, stratSlice: 8 },
+          { label: "Round 6 (spezzati +2, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 2, stratSlice: 8 },
         ];
 
         for (const round of escalationRounds) {
           if (!isTimeBudgetOk()) break;
-          // Skip escalation rounds if we already have a perfect solution
+          // Skip escalation rounds if we already have a perfect solution (0 violations AND 0 uncovered)
           if (bestResult && round.daysOffDelta === 0 && round.splitsDelta === 0) {
             // This is round 1, always run
           } else if (bestResult) {
-            // Only run escalation if current best still has violations
+            // Only run escalation if current best still has violations or uncovered slots
             const preCheck = postValidateShifts(bestResult.shifts, employees, rules, empConstraints, dept);
             if (preCheck.valid && bestResult.uncoveredSlots.length === 0) break;
           }
@@ -2025,7 +2046,7 @@ Deno.serve(async (req) => {
             ? strategies
             : strategies.slice(0, round.stratSlice);
 
-          if (round.daysOffDelta > 0 || round.splitsDelta > 0) {
+          if (round.daysOffDelta !== 0 || round.splitsDelta !== 0) {
             strategyReport.push(`\n🔄 ${round.label}: giorni_liberi=${adaptedRules.mandatory_days_off_per_week}, spezzati_max=${adaptedRules.max_split_shifts_per_employee_per_week}`);
           }
 
@@ -2042,9 +2063,10 @@ Deno.serve(async (req) => {
               strat.reserveForSplit,
             );
 
-            // Apply auto-correction to fix remaining violations
+            // Apply auto-correction (iterative, up to 5 passes) to fix remaining violations
+            // IMPORTANT: auto-correct with ORIGINAL rules, not adapted — ensures final result always respects base rules
             const { correctedShifts, corrections } = autoCorrectViolations(
-              result.shifts, employees, adaptedRules, empConstraints, dept, coverageData, weekDates,
+              result.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
             );
             // Recompute fitness with corrected shifts
             const correctedUncovered: { date: string; hour: string }[] = [];
@@ -2072,40 +2094,91 @@ Deno.serve(async (req) => {
               dayLogs: result.dayLogs,
             };
 
+            // Track ALL corrections for this candidate
+            const candidateValid = postValidateShifts(correctedShifts, employees, rules, empConstraints, dept);
+
             if (!bestResult || correctedResult.fitnessScore > bestResult.fitnessScore) {
               bestResult = correctedResult;
               bestStrategyIdx = i;
-              if (corrections.length > 0) {
-                adaptationNotes = corrections;
-              }
-              if (round.daysOffDelta > 0 || round.splitsDelta > 0) {
+              adaptationNotes = [...corrections];
+              if (round.daysOffDelta !== 0 || round.splitsDelta !== 0) {
                 adaptationNotes.push(`Adattamento: ${round.label}`);
               }
             }
 
-            if (correctedResult.uncoveredSlots.length === 0 && correctedResult.fitnessScore >= 0) {
+            // Perfect solution: 0 uncovered, 0 violations, positive fitness
+            if (correctedResult.uncoveredSlots.length === 0 && candidateValid.valid && correctedResult.fitnessScore >= 0) {
               strategyReport.push(`✅ #${i + 1} "${strat.description}" PERFETTA (fitness: ${correctedResult.fitnessScore.toFixed(1)})${corrections.length > 0 ? ` [${corrections.length} correzioni auto]` : ""}`);
               break;
             }
           }
 
-          // If perfect solution found, stop escalation
+          // If perfect solution found (0 uncovered + 0 violations), stop escalation
           if (bestResult && bestResult.uncoveredSlots.length === 0) {
             const check = postValidateShifts(bestResult.shifts, employees, rules, empConstraints, dept);
             if (check.valid) break;
           }
         }
 
+        // ─── FINAL FORCED CORRECTION ──────────────────────────────────
+        // If after all escalation rounds the best solution still has violations,
+        // run one final aggressive auto-correction pass to force compliance
+        if (bestResult) {
+          const finalCheck = postValidateShifts(bestResult.shifts, employees, rules, empConstraints, dept);
+          if (!finalCheck.valid) {
+            strategyReport.push(`\n⚠️ Soluzione migliore ha ${finalCheck.violations.length} violazioni residue. Correzione forzata finale...`);
+            const { correctedShifts, corrections } = autoCorrectViolations(
+              bestResult.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
+            );
+            // Recompute uncovered after final correction
+            const finalUncovered: { date: string; hour: string }[] = [];
+            for (const dateStr of iterDates) {
+              const dow = getDayOfWeek(dateStr);
+              const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+              for (const c of dayCov) {
+                const h = parseInt(c.hour_slot.split(":")[0], 10);
+                const assigned = correctedShifts.filter(s =>
+                  !s.is_day_off && s.date === dateStr && s.department === dept &&
+                  s.start_time !== null && s.end_time !== null &&
+                  parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
+                ).length;
+                if (assigned < c.min_staff_required) {
+                  finalUncovered.push({ date: dateStr, hour: `${String(h).padStart(2, "0")}:00` });
+                }
+              }
+            }
+            const finalFitness = computeFitness(correctedShifts, finalUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            bestResult = {
+              shifts: correctedShifts,
+              uncoveredSlots: finalUncovered,
+              fitnessScore: finalFitness.score,
+              hourAdjustments: finalFitness.hourAdjustments,
+              dayLogs: bestResult.dayLogs,
+            };
+            adaptationNotes.push(...corrections);
+            strategyReport.push(`   Correzione forzata: ${corrections.length} correzioni applicate`);
+            const recheck = postValidateShifts(correctedShifts, employees, rules, empConstraints, dept);
+            if (recheck.valid) {
+              strategyReport.push(`   ✅ Tutte le violazioni risolte dopo correzione forzata`);
+            } else {
+              strategyReport.push(`   ⚠️ ${recheck.violations.length} violazioni irrisolvibili (vincoli troppo stringenti)`);
+              for (const v of recheck.violations.slice(0, 5)) strategyReport.push(`      - ${v}`);
+            }
+          }
+        }
+
         if (bestStrategyIdx >= 0) {
           const w = strategies[Math.min(bestStrategyIdx, strategies.length - 1)];
-          strategyReport.push(`🏆 Vincente: #${bestStrategyIdx + 1} "${w.description}" (splits=${w.maxSplits} short=${w.preferShort} reserve=${w.reserveForSplit})`);
+          strategyReport.push(`\n🏆 Vincente: #${bestStrategyIdx + 1} "${w.description}" (splits=${w.maxSplits} short=${w.preferShort} reserve=${w.reserveForSplit})`);
           strategyReport.push(`   Fitness: ${bestResult!.fitnessScore.toFixed(1)} | Scoperti: ${bestResult!.uncoveredSlots.length} | Iterazioni: ${iterationsRun}`);
         }
 
-        // Log adaptations
+        // Log ALL adaptations and corrections in detail
         if (adaptationNotes.length > 0) {
           strategyReport.push(`\n🔧 Auto-correzioni applicate (${adaptationNotes.length}):`);
-          for (const n of adaptationNotes.slice(0, 10)) strategyReport.push(`   - ${n}`);
+          for (const n of adaptationNotes) strategyReport.push(`   - ${n}`);
+        } else {
+          strategyReport.push(`\n✅ Nessuna correzione necessaria — soluzione generata rispetta tutte le regole`);
         }
 
         // Post-validation (final check)
