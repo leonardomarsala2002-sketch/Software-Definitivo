@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from "react";
-import { Calendar, Sun, Scissors, Download, Smartphone } from "lucide-react";
+import { Calendar, Sun, Scissors, Download, Smartphone, Clock } from "lucide-react";
 import { format, parseISO, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
@@ -76,6 +76,17 @@ const PersonalCalendar = () => {
     [groupedByDate]
   );
 
+  const weeklyHours = useMemo(() => {
+    let total = 0;
+    shifts.filter(s => !s.is_day_off && s.start_time && s.end_time).forEach(s => {
+      const sH = parseInt(s.start_time!.split(":")[0]);
+      let eH = parseInt(s.end_time!.split(":")[0]);
+      if (eH === 0) eH = 24;
+      total += Math.max(0, eH - sH);
+    });
+    return total;
+  }, [shifts]);
+
   const handleExportIcs = useCallback(() => {
     if (shifts.length === 0) {
       toast.info("Nessun turno da esportare");
@@ -150,6 +161,18 @@ const PersonalCalendar = () => {
         />
       ) : (
         <div className="space-y-2">
+          {/* Weekly hours summary */}
+          <Card className="p-3 flex items-center gap-3 bg-primary/5 border-primary/20">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+              <Clock className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">{weeklyHours}h questa settimana</p>
+              <p className="text-[11px] text-muted-foreground">
+                {shifts.filter(s => s.is_day_off).length} giorni di riposo · {shifts.filter(s => !s.is_day_off).length} turni
+              </p>
+            </div>
+          </Card>
           {sortedDates.map(dateStr => {
             const dayShifts = groupedByDate.get(dateStr)!;
             const isDayOff = dayShifts.some(s => s.is_day_off);
