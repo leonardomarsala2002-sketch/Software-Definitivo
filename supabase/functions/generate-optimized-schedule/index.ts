@@ -43,6 +43,7 @@ interface CoverageReq {
   hour_slot: string;
   department: "sala" | "cucina";
   min_staff_required: number;
+  max_staff_required: number | null;
 }
 
 interface AllowedTime {
@@ -191,8 +192,9 @@ function computeFitness(
         s.start_time !== null && s.end_time !== null &&
         parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
       ).length;
-      if (assigned > c.min_staff_required) {
-        score += (assigned - c.min_staff_required) * PENALTY_OVERCROWDED;
+      const maxRequired = c.max_staff_required ?? c.min_staff_required;
+      if (assigned > maxRequired) {
+        score += (assigned - maxRequired) * PENALTY_OVERCROWDED;
       }
     }
   }
@@ -368,7 +370,7 @@ async function generateAIStrategies(context: {
   totalEmployeeHours: number;
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[];
   allowedTimes: AllowedTime[];
-  coverageDetails: { day_of_week: number; hour_slot: string; min_staff_required: number }[];
+  coverageDetails: { day_of_week: number; hour_slot: string; min_staff_required: number; max_staff_required: number | null }[];
   employeeConstraints: { user_id: string; custom_max_daily_hours: number | null; custom_max_weekly_hours: number | null; custom_max_split_shifts: number | null; custom_days_off: number | null }[];
   availability: { user_id: string; day_of_week: number; start_time: string; end_time: string }[];
   exceptions: { user_id: string; start_date: string; end_date: string }[];
@@ -406,6 +408,7 @@ async function generateAIStrategies(context: {
       giorno: c.day_of_week,
       ora: c.hour_slot,
       staff_minimo: c.min_staff_required,
+      staff_massimo: c.max_staff_required ?? c.min_staff_required,
     })),
     dipendenti: context.employees.map(e => {
       const ec = context.employeeConstraints.find(c => c.user_id === e.user_id);
@@ -457,7 +460,7 @@ ${JSON.stringify(storeSettingsJSON, null, 1)}
 ANALISI OBBLIGATORIA PRIMA DI GENERARE:
 1. Leggi gli orari di apertura/chiusura per OGNI giorno della settimana — NON proporre turni fuori orario.
 2. Leggi le entrate/uscite ammesse — i turni DEVONO iniziare/finire SOLO a queste ore.
-3. Leggi la copertura richiesta per ogni giorno/ora — assegna personale SOLO dove effettivamente richiesto.
+3. Leggi la copertura richiesta per ogni giorno/ora — ogni slot ha un RANGE (staff_minimo, staff_massimo). Qualsiasi numero di persone tra min e max è ACCETTABILE. Sotto il min = buco, sopra il max = overbooking. Usa la flessibilità del range per ottimizzare le ore contrattuali di ciascun dipendente.
 4. Per OGNI dipendente: il LIMITE SETTIMANALE è dato dalle ore_contrattuali individuali (es. 40h, 30h, 24h). NON usare un valore generico uguale per tutti.
 5. Se un giorno ha ZERO copertura richiesta, NON assegnare turni per quel giorno.
 6. Se il locale chiude alle X:00 (es. 23:00), NESSUN turno può terminare dopo le X:00. Solo se chiude a mezzanotte (00:00/24:00) si può arrivare alle 24:00.
@@ -2447,6 +2450,7 @@ Deno.serve(async (req) => {
             day_of_week: c.day_of_week,
             hour_slot: c.hour_slot,
             min_staff_required: c.min_staff_required,
+            max_staff_required: c.max_staff_required ?? null,
           })),
           employeeConstraints: [...empConstraints.entries()].map(([uid, ec]) => ({
             user_id: uid,

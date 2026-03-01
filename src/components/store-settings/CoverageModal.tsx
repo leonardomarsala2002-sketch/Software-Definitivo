@@ -4,6 +4,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Save, Copy, Check, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import NumberStepper from "./NumberStepper";
@@ -14,32 +16,39 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   hours: OpeningHour[];
   coverage: CoverageReq[];
-  onSave: (rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[]) => void;
+  onSave: (rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number; max_staff_required: number | null }[]) => void;
   isSaving: boolean;
   readOnly: boolean;
 }
 
-type CovMap = Record<string, { sala: number; cucina: number }>;
+type CovEntry = { sala: number; cucina: number; salaMax: number | null; cucinaMax: number | null };
+type CovMap = Record<string, CovEntry>;
 
 export default function CoverageModal({ open, onOpenChange, hours, coverage, onSave, isSaving, readOnly }: Props) {
   const [step, setStep] = useState(0);
   const [selectedDays, setSelectedDays] = useState<number[]>([0]);
   const [activeDept, setActiveDept] = useState<"sala" | "cucina">("sala");
+  const [rangeEnabled, setRangeEnabled] = useState(false);
 
   const initialMap = useMemo(() => {
     const m: CovMap = {};
+    let hasMax = false;
     coverage.forEach((c) => {
       const slot = c.hour_slot.slice(0, 5);
       const key = `${c.day_of_week}-${slot}`;
-      if (!m[key]) m[key] = { sala: 0, cucina: 0 };
-      m[key][c.department as "sala" | "cucina"] = c.min_staff_required;
+      if (!m[key]) m[key] = { sala: 0, cucina: 0, salaMax: null, cucinaMax: null };
+      const dept = c.department as "sala" | "cucina";
+      m[key][dept] = c.min_staff_required;
+      m[key][dept === "sala" ? "salaMax" : "cucinaMax"] = c.max_staff_required ?? null;
+      if (c.max_staff_required != null) hasMax = true;
     });
-    return m;
+    return { map: m, hasMax };
   }, [coverage]);
 
-  const [covMap, setCovMap] = useState<CovMap>(initialMap);
+  const [covMap, setCovMap] = useState<CovMap>(initialMap.map);
   useEffect(() => {
-    setCovMap(initialMap);
+    setCovMap(initialMap.map);
+    setRangeEnabled(initialMap.hasMax);
     setStep(0);
     setSelectedDays([0]);
   }, [initialMap, open]);
@@ -48,12 +57,25 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
   const oh = hours.find((h) => h.day_of_week === activeDay);
   const slots = oh ? generateSlots(oh.opening_time, oh.closing_time) : [];
 
-  const update = (day: number, slot: string, dept: "sala" | "cucina", val: number) => {
+  const update = (day: number, slot: string, dept: "sala" | "cucina", val: number, isMax = false) => {
     const key = `${day}-${slot}`;
-    setCovMap((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] || { sala: 0, cucina: 0 }), [dept]: val },
-    }));
+    setCovMap((prev) => {
+      const entry = prev[key] || { sala: 0, cucina: 0, salaMax: null, cucinaMax: null };
+      const next = { ...entry };
+      if (isMax) {
+        next[dept === "sala" ? "salaMax" : "cucinaMax"] = val;
+        // Ensure max >= min
+        if (val < next[dept]) next[dept] = val;
+      } else {
+        next[dept] = val;
+        // Ensure min <= max when range active
+        const maxKey = dept === "sala" ? "salaMax" : "cucinaMax";
+        if (rangeEnabled && next[maxKey] !== null && val > next[maxKey]!) {
+          next[maxKey] = val;
+        }
+      }
+      return { ...prev, [key]: next };
+    });
   };
 
   const copyToSelectedDays = () => {
@@ -69,7 +91,7 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         for (const slot of sourceSlots) {
           const srcKey = `${sourceDay}-${slot}`;
           const tgtKey = `${targetDay}-${slot}`;
-          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0 }) };
+          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0, salaMax: null, cucinaMax: null }) };
         }
       }
       return next;
@@ -90,7 +112,7 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         for (const slot of sourceSlots) {
           const srcKey = `${sourceDay}-${slot}`;
           const tgtKey = `${d}-${slot}`;
-          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0 }) };
+          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0, salaMax: null, cucinaMax: null }) };
         }
       }
       return next;
@@ -99,16 +121,28 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
   };
 
   const handleSave = () => {
-    const rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[] = [];
+    const rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number; max_staff_required: number | null }[] = [];
     for (let day = 0; day < 7; day++) {
       const dayOh = hours.find((h) => h.day_of_week === day);
       if (!dayOh) continue;
       const daySlots = generateSlots(dayOh.opening_time, dayOh.closing_time);
       for (const slot of daySlots) {
         const key = `${day}-${slot}`;
-        const entry = covMap[key] || { sala: 0, cucina: 0 };
-        if (entry.sala > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "sala", min_staff_required: entry.sala });
-        if (entry.cucina > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "cucina", min_staff_required: entry.cucina });
+        const entry = covMap[key] || { sala: 0, cucina: 0, salaMax: null, cucinaMax: null };
+        if (entry.sala > 0) {
+          rows.push({
+            day_of_week: day, hour_slot: slot, department: "sala",
+            min_staff_required: entry.sala,
+            max_staff_required: rangeEnabled ? (entry.salaMax ?? entry.sala) : null,
+          });
+        }
+        if (entry.cucina > 0) {
+          rows.push({
+            day_of_week: day, hour_slot: slot, department: "cucina",
+            min_staff_required: entry.cucina,
+            max_staff_required: rangeEnabled ? (entry.cucinaMax ?? entry.cucina) : null,
+          });
+        }
       }
     }
     onSave(rows);
@@ -128,7 +162,11 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-base">Copertura Richiesta</DialogTitle>
           <DialogDescription className="text-xs">
-            {step === 0 ? "Seleziona giorni e configura slot" : "Imposta il numero esatto di personale per slot (nessun overbooking)"}
+            {step === 0
+              ? "Seleziona giorni e configura slot"
+              : rangeEnabled
+                ? "Imposta Min e Max personale per slot (il motore ottimizza nel range)"
+                : "Imposta il numero esatto di personale per slot"}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,6 +193,21 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
                 </Badge>
               ))}
             </div>
+
+            {/* Range toggle */}
+            {!readOnly && (
+              <div className="flex items-center justify-between rounded-lg border border-border/40 bg-accent/10 px-3 py-2">
+                <Label htmlFor="range-switch" className="text-xs font-medium cursor-pointer">
+                  Abilita range (Min–Max)
+                </Label>
+                <Switch
+                  id="range-switch"
+                  checked={rangeEnabled}
+                  onCheckedChange={setRangeEnabled}
+                />
+              </div>
+            )}
+
             <div className="flex justify-end">
               <Button size="sm" onClick={() => setStep(1)}>
                 Configura slot <ChevronRight className="ml-1 h-3.5 w-3.5" />
@@ -201,19 +254,48 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
               ) : (
                 slots.map((slot) => {
                   const key = `${activeDay}-${slot}`;
-                  const entry = covMap[key] || { sala: 0, cucina: 0 };
+                  const entry = covMap[key] || { sala: 0, cucina: 0, salaMax: null, cucinaMax: null };
                   const endH = parseInt(slot.split(":")[0]) + 1;
                   const endSlot = `${String(endH).padStart(2, "0")}:${slot.split(":")[1]}`;
+                  const minVal = entry[activeDept];
+                  const maxVal = activeDept === "sala" ? entry.salaMax : entry.cucinaMax;
+
                   return (
                     <div key={slot} className="flex items-center justify-between rounded-md border border-border/30 bg-accent/10 px-2.5 py-1">
                       <span className="text-xs font-medium text-foreground">{slot}–{endSlot}</span>
-                      <NumberStepper
-                        value={entry[activeDept]}
-                        onChange={(v) => update(activeDay, slot, activeDept, v)}
-                        disabled={readOnly}
-                        max={99}
-                        compact
-                      />
+                      {rangeEnabled ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] text-muted-foreground font-medium">Min</span>
+                            <NumberStepper
+                              value={minVal}
+                              onChange={(v) => update(activeDay, slot, activeDept, v, false)}
+                              disabled={readOnly}
+                              max={99}
+                              compact
+                            />
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] text-muted-foreground font-medium">Max</span>
+                            <NumberStepper
+                              value={maxVal ?? minVal}
+                              onChange={(v) => update(activeDay, slot, activeDept, v, true)}
+                              disabled={readOnly}
+                              min={minVal}
+                              max={99}
+                              compact
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <NumberStepper
+                          value={minVal}
+                          onChange={(v) => update(activeDay, slot, activeDept, v)}
+                          disabled={readOnly}
+                          max={99}
+                          compact
+                        />
+                      )}
                     </div>
                   );
                 })
