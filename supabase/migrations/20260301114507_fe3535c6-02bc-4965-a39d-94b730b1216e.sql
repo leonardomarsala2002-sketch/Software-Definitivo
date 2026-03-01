@@ -1,0 +1,1 @@
+ALTER TABLE public.store_rules ADD COLUMN min_daily_hours_per_employee integer NOT NULL DEFAULT 4;
