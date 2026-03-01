@@ -73,13 +73,12 @@ const StoreSettings = () => {
     return `${hours[0].opening_time.slice(0, 5)}–${hours[0].closing_time.slice(0, 5)} (variabile)`;
   }, [hours]);
 
+  const genEnabled = rules?.generation_enabled ?? false;
+
   const rulesSummary = useMemo(() => {
     if (!rules) return "Non configurate";
-    const r = rules as any;
     return genEnabled ? "Generazione automatica attiva" : "Generazione manuale";
-  }, [rules]);
-
-  const genEnabled = rules?.generation_enabled ?? false;
+  }, [rules, genEnabled]);
 
   const cards = [
     {
