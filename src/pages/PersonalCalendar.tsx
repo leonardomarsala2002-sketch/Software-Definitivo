@@ -61,6 +61,40 @@ const PersonalCalendar = () => {
   const { user } = useAuth();
   const { data: shifts = [], isLoading } = usePersonalShifts(user?.id);
 
+  // Fetch employee contract hours
+  const { data: employeeDetails } = useQuery({
+    queryKey: ["employee-details-personal", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employee_details")
+        .select("weekly_contract_hours")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  const contractHours = employeeDetails?.weekly_contract_hours ?? 40;
+
+  // Calculate current week hours
+  const currentWeekHours = useMemo(() => {
+    const now = new Date();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const weekEnd = addDays(weekStart, 6);
+    const wsStr = format(weekStart, "yyyy-MM-dd");
+    const weStr = format(weekEnd, "yyyy-MM-dd");
+    return shifts
+      .filter(s => !s.is_day_off && s.start_time && s.end_time && s.date >= wsStr && s.date <= weStr)
+      .reduce((sum, s) => {
+        const sh = parseInt(s.start_time!.split(":")[0], 10);
+        let eh = parseInt(s.end_time!.split(":")[0], 10);
+        if (eh === 0) eh = 24;
+        return sum + (eh - sh);
+      }, 0);
+  }, [shifts]);
+
   const groupedByDate = useMemo(() => {
     const map = new Map<string, PersonalShift[]>();
     shifts.forEach(s => {
@@ -103,7 +137,16 @@ const PersonalCalendar = () => {
           title="Calendario Personale"
           subtitle="I tuoi turni e la tua pianificazione settimanale"
         />
-        {shifts.length > 0 && (
+      <div className="flex items-center gap-2">
+        {!isLoading && shifts.length > 0 && (
+          <Badge
+            variant={currentWeekHours >= contractHours ? "default" : "secondary"}
+            className="text-xs px-2.5 py-1 shrink-0"
+          >
+            {currentWeekHours}h / {contractHours}h
+          </Badge>
+        )}
+      {shifts.length > 0 && (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
@@ -134,6 +177,7 @@ const PersonalCalendar = () => {
             </PopoverContent>
           </Popover>
         )}
+      </div>
       </div>
 
       {isLoading ? (

@@ -20,6 +20,7 @@ import { EmployeeWeekDrawer } from "./EmployeeWeekDrawer";
 interface Employee {
   user_id: string;
   full_name: string | null;
+  weekly_contract_hours?: number;
 }
 
 interface DayDetailDialogProps {
@@ -277,6 +278,7 @@ export function DayDetailDialog({
             employeeId={selectedEmployee.user_id}
             referenceDate={date}
             allShifts={shifts}
+            weeklyContractHours={selectedEmployee.weekly_contract_hours}
           />
         )}
       </DialogContent>
