@@ -54,6 +54,7 @@ interface AllowedTime {
 
 interface StoreRules {
   max_daily_hours_per_employee: number;
+  min_daily_hours_per_employee: number;
   max_weekly_hours_per_employee: number;
   mandatory_days_off_per_week: number;
   max_split_shifts_per_employee_per_week: number;
@@ -385,7 +386,7 @@ async function generateAIStrategies(context: {
   const storeSettingsJSON = {
     regole_store: {
       max_ore_giornaliere_dipendente: context.rules.max_daily_hours_per_employee,
-      max_ore_settimanali_dipendente: context.rules.max_weekly_hours_per_employee,
+      min_ore_giornaliere_dipendente: context.rules.min_daily_hours_per_employee,
       giorni_liberi_obbligatori: context.rules.mandatory_days_off_per_week,
       max_spezzati_settimana: context.rules.max_split_shifts_per_employee_per_week,
       max_ore_team_sala_giorno: context.rules.max_daily_team_hours_sala,
@@ -457,9 +458,10 @@ ANALISI OBBLIGATORIA PRIMA DI GENERARE:
 1. Leggi gli orari di apertura/chiusura per OGNI giorno della settimana — NON proporre turni fuori orario.
 2. Leggi le entrate/uscite ammesse — i turni DEVONO iniziare/finire SOLO a queste ore.
 3. Leggi la copertura richiesta per ogni giorno/ora — assegna personale SOLO dove effettivamente richiesto.
-4. Per OGNI dipendente: controlla ore contrattuali, bilancio ore, vincoli personalizzati, disponibilità, eccezioni, richieste approvate.
+4. Per OGNI dipendente: il LIMITE SETTIMANALE è dato dalle ore_contrattuali individuali (es. 40h, 30h, 24h). NON usare un valore generico uguale per tutti.
 5. Se un giorno ha ZERO copertura richiesta, NON assegnare turni per quel giorno.
-6. Se il locale chiude alle X:00, NESSUN turno può terminare dopo le X:00.
+6. Se il locale chiude alle X:00 (es. 23:00), NESSUN turno può terminare dopo le X:00. Solo se chiude a mezzanotte (00:00/24:00) si può arrivare alle 24:00.
+7. MAI superare automaticamente il limite contrattuale del singolo dipendente. Massimo +5h/sett solo in casi eccezionali e con approvazione manuale.
 
 Ogni strategia controlla l'algoritmo di generazione:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
@@ -471,7 +473,7 @@ Ogni strategia controlla l'algoritmo di generazione:
 REGOLE INVIOLABILI:
 - Rispetta AL 100% orari apertura/chiusura di OGNI SINGOLO giorno (possono variare!)
 - Rispetta entrate/uscite ammesse per il reparto ${context.department}
-- Ogni dipendente non può superare le ore giornaliere/settimanali (personalizzate o di store)
+- Il limite settimanale di OGNI dipendente è il suo contratto individuale (ore_contrattuali), NON un valore store generico
 - Ogni dipendente DEVE avere almeno ${context.rules.mandatory_days_off_per_week} giorno/i libero/i
 - Le eccezioni (ferie, malattia) bloccano COMPLETAMENTE il dipendente in quelle date
 - Le richieste approvate DEVONO essere rispettate
@@ -599,10 +601,10 @@ function postValidateShifts(
     const empShifts = deptShifts.filter(s => s.user_id === emp.user_id && !s.is_day_off && s.start_time && s.end_time);
     const ec = empConstraints.get(emp.user_id);
 
-    // Weekly hours
+    // Weekly hours — use individual contract hours as the limit (not generic store rule)
     const weeklyH = empShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
-    const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
-    if (weeklyH > maxWeekly) violations.push(`${emp.user_id}: ${weeklyH}h > max ${maxWeekly}h/sett`);
+    const maxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+    if (weeklyH > maxWeekly) violations.push(`${emp.user_id}: ${weeklyH}h > max contrattuale ${maxWeekly}h/sett`);
 
     // Daily hours
     const byDate = new Map<string, typeof empShifts>();
@@ -670,7 +672,7 @@ function autoCorrectViolations(
     for (const emp of deptEmployees) {
       const ec = empConstraints.get(emp.user_id);
       const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-      const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      const maxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
       const maxSplitsWeek = ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week;
       const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
 
@@ -909,7 +911,7 @@ function equalizeEquity(
           // Check: can donor work on swapDay?
           if (!isAvailable(donor.user_id, swapDay, availability, exceptions)) continue;
           const ec = empConstraints.get(donor.user_id);
-          const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+          const maxWeekly = ec?.custom_max_weekly_hours ?? donor.weekly_contract_hours;
           if ((stats.hoursMap.get(donor.user_id) ?? 0) >= maxWeekly) continue;
 
           // Find a day where receiver works that has low demand to give as day off
@@ -1163,8 +1165,10 @@ function runIteration(
 
     // Rules summary
     dayLogs.push(`\n📏 REGOLE STORE:`);
+    dayLogs.push(`  Min ore giornaliere/dipendente: ${(rules as any).min_daily_hours_per_employee ?? 4}h`);
     dayLogs.push(`  Max ore giornaliere/dipendente: ${rules.max_daily_hours_per_employee}h`);
-    dayLogs.push(`  Max ore settimanali/dipendente: ${rules.max_weekly_hours_per_employee}h`);
+    dayLogs.push(`  Ore settimanali: da contratto individuale (NON valore generico store)`);
+    dayLogs.push(`  Tolleranza massima: +5h/sett solo se approvato manualmente`);
     dayLogs.push(`  Giorni liberi obbligatori/settimana: ${rules.mandatory_days_off_per_week}`);
     dayLogs.push(`  Max spezzati/dipendente/settimana: ${maxSplitsAllowed}`);
     dayLogs.push(`  Max ore team ${department}/giorno: ${maxDailyTeamHours}h`);
@@ -1406,7 +1410,7 @@ function runIteration(
       const balance = hourBalances.get(emp.user_id) ?? 0;
       const adjustedTarget = emp.weekly_contract_hours - balance;
       const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-      const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
       // If reserveForSplit > 0 and this is the first shift today, cap daily hours
       // to leave room for a potential split shift later
       const empDaySplitCount0 = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
@@ -1615,7 +1619,7 @@ function runIteration(
         const balance = hourBalances.get(emp.user_id) ?? 0;
         const adjustedTarget = emp.weekly_contract_hours - balance;
         const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
 
         // Calculate hours already worked today
         const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
@@ -1748,7 +1752,7 @@ function runIteration(
       let gapFillers = deptEmployees.filter(emp => {
         if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) return false;
         const ec = empConstraints.get(emp.user_id);
-        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         if (empWeeklyUsed >= empMaxWeekly) return false;
         // Check days off limit
@@ -1771,7 +1775,7 @@ function runIteration(
         const ec = empConstraints.get(emp.user_id);
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-        const empMaxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+        const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
 
         // Check if already has shifts today
         const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
@@ -1909,7 +1913,7 @@ function runIteration(
     if (dayUncovered.length > 0) {
       dayLogs.push(`  ❌ SCOPERTI: ${dayUncovered.join(", ")}`);
       // Diagnose WHY uncovered: analyze employee status
-      const atMaxHours = deptEmployees.filter(e => (weeklyHours.get(e.user_id) ?? 0) >= (empConstraints.get(e.user_id)?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee)).length;
+      const atMaxHours = deptEmployees.filter(e => (weeklyHours.get(e.user_id) ?? 0) >= (empConstraints.get(e.user_id)?.custom_max_weekly_hours ?? e.weekly_contract_hours)).length;
       const onDayOff = deptEmployees.filter(e => prePlannedDaysOff.get(e.user_id)?.has(dateStr)).length;
       const onException = deptEmployees.filter(e => !isAvailable(e.user_id, dateStr, availability, exceptions)).length;
       const atMaxSplits = deptEmployees.filter(e => (weeklySplits.get(e.user_id) ?? 0) >= (empConstraints.get(e.user_id)?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week)).length;
@@ -1944,7 +1948,7 @@ function runIteration(
     const issues: string[] = [];
     if (daysOff < minDaysOff) issues.push(`⚠️ riposi ${daysOff}<${minDaysOff}`);
     if (ws > maxSplitsWeek) issues.push(`⚠️ spezzati ${ws}>${maxSplitsWeek}`);
-    if (wh > (ec?.custom_max_weekly_hours ?? ec_rules.max_weekly_hours_per_employee)) issues.push(`⚠️ ore eccessive`);
+    if (wh > (ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours)) issues.push(`⚠️ ore eccessive`);
     dayLogs.push(`${getEmpName(emp.user_id)}: ${wh}h/${emp.weekly_contract_hours}h contratto | ${ws}/${maxSplitsWeek} spezzati | ${daysOff}/${minDaysOff}+ riposi${issues.length > 0 ? " " + issues.join(" ") : " ✅"}`);
   }
 
@@ -2623,7 +2627,10 @@ Deno.serve(async (req) => {
               const extraH = startH - uncoveredHour;
               if (currentDailyH + extraH > maxDaily) continue;
               const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
-              const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+              const empObj = empMapForSugg.get(s.user_id);
+              const contractHours = empObj?.weekly_contract_hours ?? 40;
+              // Hard cap: never exceed contract + 5h even in suggestions
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractHours, contractHours + 5);
               if (empWeeklyUsed + extraH > maxWeekly) continue;
 
               const empName = nameMap.get(s.user_id) ?? "Dipendente";
@@ -2660,7 +2667,8 @@ Deno.serve(async (req) => {
               const extraH = newEnd - endH;
               if (currentDailyH + extraH > maxDaily) continue;
               const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
-              const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+              const contractHours2 = emp?.weekly_contract_hours ?? 40;
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractHours2, contractHours2 + 5);
               if (empWeeklyUsed + extraH > maxWeekly) continue;
 
               const empName = nameMap.get(s.user_id) ?? "Dipendente";
@@ -2694,7 +2702,7 @@ Deno.serve(async (req) => {
             if (!canCover) continue;
             const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
             const ec = empConstraints.get(emp.user_id);
-            const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+            const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
             if (empWeeklyUsed >= maxWeekly) continue;
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             // Find a reasonable shift block WITHIN store hours
@@ -2734,7 +2742,7 @@ Deno.serve(async (req) => {
               if (!canCover) continue;
               const ec = empConstraints.get(emp.user_id);
               const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-              const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
               if (empWeeklyUsed >= maxWeekly) continue;
               const empName = nameMap.get(emp.user_id) ?? "Dipendente";
               const empWorkDays = shifts
@@ -2772,7 +2780,7 @@ Deno.serve(async (req) => {
             if (!emp) continue;
             const ec = empConstraints.get(emp.user_id);
             const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-            const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+            const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
             if (empWeeklyUsed >= maxWeekly) continue;
             // Check split limit
             const empWeeklySplits = (() => {
@@ -2893,7 +2901,7 @@ Deno.serve(async (req) => {
               const atMaxWeekly = deptEmps.filter(e => {
                 const used = weeklyHours_final.get(e.user_id) ?? 0;
                 const ec = empConstraints.get(e.user_id);
-                const maxW = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+                const maxW = ec?.custom_max_weekly_hours ?? e.weekly_contract_hours;
                 return used >= maxW;
               }).length;
               const onDayOff = deptEmps.filter(e => {
