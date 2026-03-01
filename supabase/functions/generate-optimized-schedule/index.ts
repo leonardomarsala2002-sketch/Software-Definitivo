@@ -13,6 +13,8 @@ interface EmployeeData {
   department: "sala" | "cucina";
   weekly_contract_hours: number;
   is_active: boolean;
+  first_name?: string;
+  last_name?: string;
 }
 
 interface EmployeeConstraints {
@@ -349,12 +351,20 @@ function getDefaultStrategies(): AIStrategy[] {
 
 async function generateAIStrategies(context: {
   rules: StoreRules;
-  employees: { department: string; weekly_contract_hours: number }[];
+  employees: { user_id: string; department: string; weekly_contract_hours: number; first_name?: string; last_name?: string }[];
   coverageSummary: string;
   department: string;
   smartMemorySummary: string;
   totalCoverageHours: number;
   totalEmployeeHours: number;
+  openingHours: { day_of_week: number; opening_time: string; closing_time: string }[];
+  allowedTimes: AllowedTime[];
+  coverageDetails: { day_of_week: number; hour_slot: string; min_staff_required: number }[];
+  employeeConstraints: { user_id: string; custom_max_daily_hours: number | null; custom_max_weekly_hours: number | null; custom_max_split_shifts: number | null; custom_days_off: number | null }[];
+  availability: { user_id: string; day_of_week: number; start_time: string; end_time: string }[];
+  exceptions: { user_id: string; start_date: string; end_date: string }[];
+  approvedRequests: { user_id: string; request_date: string; request_type: string; selected_hour: number | null }[];
+  hourBalances: Record<string, number>;
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -362,38 +372,111 @@ async function generateAIStrategies(context: {
   }
 
   const ratio = (context.totalCoverageHours / Math.max(context.totalEmployeeHours, 1)).toFixed(2);
-  const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti. Genera 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
 
-Ogni strategia controlla l'algoritmo:
+  // Build comprehensive JSON payload for Gemini
+  const storeSettingsJSON = {
+    regole_store: {
+      max_ore_giornaliere_dipendente: context.rules.max_daily_hours_per_employee,
+      max_ore_settimanali_dipendente: context.rules.max_weekly_hours_per_employee,
+      giorni_liberi_obbligatori: context.rules.mandatory_days_off_per_week,
+      max_spezzati_settimana: context.rules.max_split_shifts_per_employee_per_week,
+      max_ore_team_sala_giorno: context.rules.max_daily_team_hours_sala,
+      max_ore_team_cucina_giorno: context.rules.max_daily_team_hours_cucina,
+      max_ore_team_sala_settimana: context.rules.max_team_hours_sala_per_week,
+      max_ore_team_cucina_settimana: context.rules.max_team_hours_cucina_per_week,
+    },
+    orari_apertura: context.openingHours.map(h => ({
+      giorno: h.day_of_week,
+      apertura: h.opening_time,
+      chiusura: h.closing_time,
+    })),
+    entrate_uscite_ammesse: context.allowedTimes
+      .filter(t => t.department === context.department && t.is_active)
+      .map(t => ({ tipo: t.kind, ora: t.hour })),
+    copertura_richiesta: context.coverageDetails.map(c => ({
+      giorno: c.day_of_week,
+      ora: c.hour_slot,
+      staff_minimo: c.min_staff_required,
+    })),
+    dipendenti: context.employees.map(e => {
+      const ec = context.employeeConstraints.find(c => c.user_id === e.user_id);
+      const avail = context.availability.filter(a => a.user_id === e.user_id);
+      const excs = context.exceptions.filter(x => x.user_id === e.user_id);
+      const reqs = context.approvedRequests.filter(r => r.user_id === e.user_id);
+      const balance = context.hourBalances[e.user_id] ?? 0;
+      return {
+        id: e.user_id.slice(0, 8),
+        nome: e.first_name && e.last_name ? `${e.first_name} ${e.last_name}` : e.user_id.slice(0, 8),
+        reparto: e.department,
+        ore_contrattuali: e.weekly_contract_hours,
+        bilancio_ore: balance,
+        ore_target: e.weekly_contract_hours - balance,
+        vincoli_personalizzati: ec ? {
+          max_ore_giornaliere: ec.custom_max_daily_hours,
+          max_ore_settimanali: ec.custom_max_weekly_hours,
+          max_spezzati: ec.custom_max_split_shifts,
+          giorni_liberi: ec.custom_days_off,
+        } : null,
+        disponibilita: avail.length > 0 ? avail.map(a => ({
+          giorno: a.day_of_week,
+          da: a.start_time,
+          a: a.end_time,
+        })) : "sempre_disponibile",
+        eccezioni: excs.length > 0 ? excs.map(x => ({
+          da: x.start_date,
+          a: x.end_date,
+        })) : [],
+        richieste_approvate: reqs.length > 0 ? reqs.map(r => ({
+          data: r.request_date,
+          tipo: r.request_type,
+          ora_selezionata: r.selected_hour,
+        })) : [],
+      };
+    }),
+    metriche: {
+      ore_copertura_totali: context.totalCoverageHours,
+      ore_disponibili_totali: context.totalEmployeeHours,
+      rapporto: parseFloat(ratio),
+    },
+  };
+
+  const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti italiani. Genera ESATTAMENTE 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
+
+DATI COMPLETI DELLO STORE E DEI DIPENDENTI (JSON):
+${JSON.stringify(storeSettingsJSON, null, 1)}
+
+Ogni strategia controlla l'algoritmo di generazione:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
 - preferShort (bool): turni corti per lasciare spazio a spezzati
 - randomize (bool): ordine dipendenti casuale vs fill-ratio
 - reserveForSplit (0-4): ore riservate nel primo turno per spezzato serale
 - description: breve (max 30 char)
 
-REGOLE:
-- Almeno 10 strategie con maxSplits=0 (turni pieni)
-- Almeno 10 con maxSplits>=2 (spezzati)
-- Almeno 5 con randomize=true
-- Almeno 5 con preferShort=true e reserveForSplit>=2
-- Se rapporto copertura/disponibilità >0.8: più spezzati
-- Se <0.5: più turni lunghi
-- Distribuisci equamente giorni liberi e spezzati`;
+REGOLE INVIOLABILI:
+- Rispetta AL 100% orari apertura/chiusura di ogni giorno
+- Rispetta entrate/uscite ammesse per il reparto ${context.department}
+- Ogni dipendente non può superare le ore giornaliere/settimanali (personalizzate o di store)
+- Ogni dipendente DEVE avere almeno ${context.rules.mandatory_days_off_per_week} giorno/i libero/i
+- Le eccezioni (ferie, malattia) bloccano COMPLETAMENTE il dipendente in quelle date
+- Le richieste approvate DEVONO essere rispettate
+- Il bilancio ore deve guidare la distribuzione: chi ha ore in eccesso riceve meno
 
-  const userPrompt = `CONTESTO:
-- Reparto: ${context.department}
-- Dipendenti: ${context.employees.length} (ore: ${context.employees.map(e => e.weekly_contract_hours).join(', ')})
-- Max ore giornaliere: ${context.rules.max_daily_hours_per_employee}h
-- Max ore settimanali: ${context.rules.max_weekly_hours_per_employee}h
-- Giorni liberi: ${context.rules.mandatory_days_off_per_week}/sett
-- Max spezzati: ${context.rules.max_split_shifts_per_employee_per_week}/sett
-- Ore copertura: ${context.totalCoverageHours}h
-- Ore disponibili: ${context.totalEmployeeHours}h
-- Rapporto: ${ratio}
-${context.coverageSummary}
-${context.smartMemorySummary}
+DISTRIBUZIONE STRATEGIE:
+- Almeno 10 strategie con maxSplits=0 (turni pieni, niente spezzati)
+- Almeno 5 con maxSplits=1 (spezzati minimi)
+- Almeno 10 con maxSplits>=2 (spezzati equilibrati)
+- Almeno 5 con 2 giorni liberi garantiti per tutti
+- Almeno 5 con randomize=true per esplorazione
+- Se rapporto copertura/disponibilità >0.8: privilegia più spezzati
+- Se <0.5: privilegia turni lunghi e continui
 
-Genera ESATTAMENTE 40 strategie diverse.`;
+${context.smartMemorySummary}`;
+
+  const userPrompt = `Reparto: ${context.department}
+Dipendenti: ${context.employees.length} (${context.employees.map(e => `${e.first_name ?? e.user_id.slice(0,6)}: ${e.weekly_contract_hours}h`).join(', ')})
+Rapporto copertura: ${ratio}
+
+Genera ESATTAMENTE 40 strategie diverse ottimizzate per questo specifico store.`;
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -469,7 +552,7 @@ Genera ESATTAMENTE 40 strategie diverse.`;
     throw new Error("GEMINI_AI_REQUIRED: Gemini 2.5 AI ha restituito 0 strategie. Riprova la generazione.");
   }
 
-  console.log(`[AI] Gemini 2.5 generated ${strategies.length} strategies successfully`);
+  console.log(`[AI] Gemini 2.5 generated ${strategies.length} strategies with full store context`);
 
   // Pad to 40 with variations of existing AI strategies if needed
   while (strategies.length < 40) {
@@ -1264,7 +1347,7 @@ Deno.serve(async (req) => {
 
     // Fetch all data in parallel
     const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes, constraintsRes] = await Promise.all([
-      adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active"),
+      adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active, first_name, last_name"),
       adminClient.from("employee_availability").select("user_id, day_of_week, start_time, end_time").eq("store_id", store_id),
       adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", week_start_date),
       adminClient.from("store_coverage_requirements").select("*").eq("store_id", store_id),
@@ -1536,19 +1619,51 @@ Deno.serve(async (req) => {
         // Gemini 2.5 AI is MANDATORY — no fallback allowed
         const aiResult = await generateAIStrategies({
           rules,
-          employees: deptEmployees.map(e => ({ department: e.department, weekly_contract_hours: e.weekly_contract_hours })),
+          employees: deptEmployees.map(e => ({
+            user_id: e.user_id,
+            department: e.department,
+            weekly_contract_hours: e.weekly_contract_hours,
+            first_name: (e as any).first_name ?? undefined,
+            last_name: (e as any).last_name ?? undefined,
+          })),
           coverageSummary: `COPERTURA (${dept}):\n${covSummary}`,
           department: dept,
           smartMemorySummary: memorySummary,
           totalCoverageHours,
           totalEmployeeHours,
+          openingHours: openingHoursData,
+          allowedTimes: allowedData,
+          coverageDetails: deptCoverageForAI.map(c => ({
+            day_of_week: c.day_of_week,
+            hour_slot: c.hour_slot,
+            min_staff_required: c.min_staff_required,
+          })),
+          employeeConstraints: [...empConstraints.entries()].map(([uid, ec]) => ({
+            user_id: uid,
+            custom_max_daily_hours: ec.custom_max_daily_hours,
+            custom_max_weekly_hours: ec.custom_max_weekly_hours,
+            custom_max_split_shifts: ec.custom_max_split_shifts,
+            custom_days_off: ec.custom_days_off,
+          })),
+          availability: availability.filter(a => deptEmployees.some(e => e.user_id === a.user_id)),
+          exceptions: allExceptions.filter(ex => deptEmployees.some(e => e.user_id === ex.user_id)),
+          approvedRequests: (requestsRes.data ?? []).filter((r: any) => deptEmployees.some(e => e.user_id === r.user_id)).map((r: any) => ({
+            user_id: r.user_id,
+            request_date: r.request_date,
+            request_type: r.request_type,
+            selected_hour: r.selected_hour,
+          })),
+          hourBalances: Object.fromEntries(
+            deptEmployees.map(e => [e.user_id, hourBalances.get(e.user_id) ?? 0])
+          ),
         });
         const strategies = aiResult.strategies;
         aiStrategiesUsed = true; // Always true — AI is mandatory
         console.log(`[${dept}] Gemini 2.5 AI generated ${strategies.length} strategies`);
 
         strategyReport.push(`=== ${dept.toUpperCase()} ===`);
-        strategyReport.push(`Motore: Gemini 2.5 AI (obbligatorio)`);
+        strategyReport.push(`Motore: Gemini 2.5 AI (obbligatorio) — contesto completo JSON inviato`);
+        strategyReport.push(`Dati inviati: regole store, orari apertura, entrate/uscite, copertura, ${deptEmployees.length} dipendenti con vincoli/disponibilità/eccezioni/richieste`);
         strategyReport.push(`Dipendenti: ${deptEmployees.length} | Copertura: ${totalCoverageHours}h | Disponibili: ${totalEmployeeHours}h`);
         strategyReport.push(`Strategie AI: ${strategies.length}`);
 
