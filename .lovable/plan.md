@@ -1,63 +1,42 @@
 
 
-## Piano: Ore settimanali visibili + Auto-risoluzione intelligente
+## Piano: Copertura con Range Min-Max
 
-### Parte 1: Visualizzazione ore settimanali
+Sì, dare un range (min-max) al motore ridurrebbe significativamente gli errori. Attualmente il motore ha un solo numero fisso come target: se assegna 1 persona in meno è "buco", se ne assegna 1 in più è "overbooking". Con un range, il motore ha flessibilità per bilanciare le ore contrattuali di ciascuno senza violare la copertura.
 
-**Per il dipendente (PersonalCalendar.tsx)**:
-- Aggiungere in alto una card/badge che mostra il totale ore settimanali assegnate vs ore contrattuali (es. "32h / 40h contratto")
-- Calcolare il totale sommando la durata di tutti i turni non-day-off della settimana corrente
+### Come funziona
 
-**Per l'admin (EmployeeWeekDrawer.tsx)**:
-- Aggiungere nel header del drawer, sotto il nome e la settimana, un riepilogo: ore assegnate / ore contratto
-- Recuperare le ore contrattuali dal prop `employee_details` (servira passare `weeklyContractHours` come prop dal TeamCalendar)
-- Calcolare le ore dalla somma dei turni visibili nel drawer
+- **Min** = personale minimo obbligatorio (sotto = errore)
+- **Max** = limite massimo accettabile (sopra = overbooking)
+- Tra min e max = zona sicura dove il motore può ottimizzare liberamente le ore contrattuali
 
-### Parte 2: Auto-risoluzione nel motore di generazione
+Esempio: slot 12:00-13:00 con min=2, max=4 → il motore può mettere 2, 3 o 4 persone a seconda di quante ore deve completare per rispettare i contratti.
 
-Il motore attualmente genera troppi suggerimenti. L'utente vuole vedere **solo**:
-1. **Manca personale** → suggerimento di prestito inter-store
-2. **Troppo personale** → suggerimento di prestare gente ad altri store
+### Modifiche
 
-Tutto il resto (deviazioni orarie entro ±5h, surplus/deficit di slot singoli, bilanciamento equità, spezzati, giorni liberi) deve essere **risolto automaticamente** dal motore senza generare suggerimenti.
+#### 1. UI Copertura (`CoverageModal.tsx`)
 
-**Modifiche in `generate-optimized-schedule/index.ts`**:
+- Aggiungere uno switch "Abilita range" (già presente `max_staff_required` nel DB)
+- Quando attivo, ogni slot mostra 2 stepper: Min e Max
+- Quando disattivo, il valore inserito vale sia come min che come max (comportamento attuale = numero esatto)
+- Il salvataggio invia sia `min_staff_required` che `max_staff_required`
+- La copia tra giorni copia entrambi i valori
 
-1. **Eliminare suggerimenti `overtime_balance`**: le deviazioni orarie entro ±5h sono già automatiche, quelle oltre vengono gestite internamente estendendo/accorciando turni
+#### 2. Hook `useStoreSettings` + tipo `CoverageReq`
 
-2. **Eliminare suggerimenti `surplus` per slot singoli**: se c'è surplus su un singolo slot orario, il motore deve rimuovere automaticamente il turno in eccesso (assegnando alla persona con meno ore o più lontana dal contratto)
+- Aggiungere `max_staff_required` al tipo `CoverageReq` e alla query/salvataggio
+- Passare il valore max al salvataggio DB
 
-3. **Eliminare suggerimenti `smart-increase-splits` e `smart-increase-daysoff`**: il motore deve applicare queste modifiche automaticamente durante l'escalation (gia implementata), non proporle all'utente
+#### 3. Motore di generazione (`generate-optimized-schedule/index.ts`)
 
-4. **Mantenere solo 2 tipi di suggerimenti**:
-   - `uncovered` con `alternatives` che contengono opzioni di **prestito inter-store** (quando non ci sono soluzioni interne)
-   - `surplus` a livello **giornaliero aggregato** dove ci sono persone in piu rispetto alla copertura → suggerire di **prestarle** ad altri store
-
-5. **Auto-risolvere surplus**: prima di generare suggerimenti surplus, il motore tenta automaticamente di ridurre i turni delle persone in surplus (accorciandoli o rimuovendoli) mantenendo la copertura esatta. Solo se il surplus persiste per mancanza di opzioni, viene suggerito il prestito
-
-6. **Suggerimento staffing_analysis**: eliminarlo dai suggerimenti (resta nei log come info)
+- Leggere `max_staff_required` dalla query coverage
+- Passarlo nel contesto AI e nella logica di validazione
+- **Fitness function**: penalizzare solo se sotto min o sopra max (non più se diverso dal numero esatto)
+- **autoCorrectViolations**: rimuovere turni solo se si supera max, non se si supera min+1
+- **Prompt AI Gemini**: spiegare che la copertura è un range e che qualsiasi valore tra min e max è accettabile
+- **Suggerimenti**: segnalare "manca personale" solo se sotto min, "troppo personale" solo se sopra max
 
 ### Dettagli tecnici
 
-**PersonalCalendar.tsx**:
-- Query `employee_details` per ottenere `weekly_contract_hours` dell'utente loggato
-- Sommare ore dei turni della settimana corrente
-- Mostrare badge in alto: `{totalHours}h / {contractHours}h`
-
-**EmployeeWeekDrawer.tsx**:
-- Aggiungere prop `weeklyContractHours: number`
-- Calcolare totale ore dai turni nel drawer
-- Mostrare nel header sotto il weekLabel
-
-**TeamCalendar.tsx**:
-- Passare `weeklyContractHours` al drawer dall'`employee_details` del dipendente selezionato
-
-**generate-optimized-schedule/index.ts** (sezione suggerimenti ~riga 2974-3233):
-- Rimuovere generazione suggerimenti `surplus` per slot singoli → auto-ridurre turni
-- Rimuovere suggerimenti `overtime_balance` → gestiti internamente
-- Rimuovere suggerimenti `smart-increase-splits` → applicare automaticamente durante escalation
-- Rimuovere suggerimenti `smart-increase-daysoff` → applicare automaticamente
-- Rimuovere suggerimenti `staffing_analysis` → solo log
-- Mantenere solo `uncovered` senza alternative interne → proporre prestito inter-store
-- Aggiungere suggerimento `lending` per surplus persistente → proporre di prestare persone
+Il campo `max_staff_required` esiste già nel DB (`store_coverage_requirements.max_staff_required`, nullable). Quando è NULL, il motore userà `min_staff_required` come valore esatto (backward compatible). Quando è valorizzato, il motore lavora nel range.
 
