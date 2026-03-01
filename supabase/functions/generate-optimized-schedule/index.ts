@@ -158,7 +158,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 const PENALTY_UNCOVERED = -100;
 const PENALTY_OVERCROWDED = -10;
-const PENALTY_DRIFT_PER_H = -5;
+const PENALTY_DRIFT_PER_H = -30;
 const PENALTY_REST_VIOLATION = -200;  // 11h rest violation (HARD)
 const PENALTY_NO_DAY_OFF = -500;      // Employee has 0 days off (HARD)
 const PENALTY_EQUITY_SPLIT = -50;     // Spezzati equity (strict: any diff penalized)
@@ -1685,11 +1685,19 @@ function runIteration(
       const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
       if (empDaySplitCount >= 1 && empWeeklySplitCount >= maxSplitsWeek) continue;
 
-      let hasUncovered = false;
+      // Check if there's ANY slot that still needs staff (under min OR under max)
+      let hasUncoveredMin = false;
+      let hasRoomUnderMax = false;
       for (const [h, needed] of hourCoverage) {
-        if ((staffAssigned.get(h) ?? 0) < needed) { hasUncovered = true; break; }
+        const assigned = staffAssigned.get(h) ?? 0;
+        if (assigned < needed) { hasUncoveredMin = true; break; }
+        const maxNeeded = maxStaffMap.get(h) ?? needed;
+        if (assigned < maxNeeded) hasRoomUnderMax = true;
       }
-      if (!hasUncovered) break;
+      // If min coverage is fully met AND no room under max, stop assigning
+      // But if employee still needs contract hours and there's room under max, continue
+      const empNeedsHours = empWeeklyUsed < adjustedTarget;
+      if (!hasUncoveredMin && (!hasRoomUnderMax || !empNeedsHours)) break;
 
       // 11h rest: determine earliest start for this employee today
       let earliestStart = 0;
@@ -1746,6 +1754,7 @@ function runIteration(
           // Exact coverage: reject shifts that would cause ANY tracked hour to exceed its MAX staff
           let wouldOverbook = false;
           let coverCount = 0;
+          let fillCount = 0; // slots between min and max (secondary value)
           for (let h = entry; h < exit; h++) {
             const maxNeeded = maxStaffMap.get(h);
             const minNeeded = hourCoverage.get(h);
@@ -1753,6 +1762,7 @@ function runIteration(
               const current = staffAssigned.get(h) ?? 0;
               if (current >= maxNeeded) { wouldOverbook = true; break; }
               if (minNeeded !== undefined && current < minNeeded) coverCount++;
+              else if (minNeeded !== undefined && current >= minNeeded && current < maxNeeded) fillCount++;
             }
           }
           if (wouldOverbook) continue;
@@ -1760,8 +1770,9 @@ function runIteration(
           if (preferShortShifts) {
             // Density-based scoring: prefer shorter shifts that cover more uncovered hours per hour worked
             const density = coverCount / duration;
+            const fillDensity = fillCount / duration * 0.1; // secondary: filling up to max
             const transitionBonus = transitionExits.has(exit) ? 0.1 : 0;
-            const score = density + transitionBonus;
+            const score = density + fillDensity + transitionBonus;
             if (score > bestScore || (score === bestScore && duration < (bestEnd - bestStart))) {
               bestScore = score;
               bestCoverage = coverCount;
@@ -1769,9 +1780,10 @@ function runIteration(
               bestEnd = exit;
             }
           } else {
-            // Original strategy: max coverage, then shortest duration
-            if (coverCount > bestCoverage || (coverCount === bestCoverage && duration < (bestEnd - bestStart))) {
-              bestCoverage = coverCount;
+            // Strategy: max coverage first, then fill count (between min-max), then shortest duration
+            const effectiveCover = coverCount * 1000 + fillCount;
+            if (effectiveCover > bestCoverage || (effectiveCover === bestCoverage && duration < (bestEnd - bestStart))) {
+              bestCoverage = effectiveCover;
               bestStart = entry;
               bestEnd = exit;
             }
