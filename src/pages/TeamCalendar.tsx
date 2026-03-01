@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send, Stethoscope } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send, Stethoscope, Sparkles } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import PageHeader from "@/components/PageHeader";
@@ -115,6 +115,12 @@ const TeamCalendar = () => {
       r => r.department === department && (r.status === "completed" || r.status === "running")
     );
   }, [generationRuns, department]);
+
+  const aiActive = useMemo(() => {
+    return generationRuns.some(r =>
+      latestRunIds.includes(r.id) && r.notes?.includes("Gemini 2.5 AI")
+    );
+  }, [generationRuns, latestRunIds]);
 
   const hasDraftShifts = useMemo(() => {
     return shifts.some(s => s.status === "draft" && s.department === department);
@@ -564,6 +570,12 @@ const TeamCalendar = () => {
         {/* Action buttons */}
         {canEdit && (
           <div className="flex items-center gap-2">
+            {aiActive && (
+              <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 rounded-[32px] gap-1">
+                <Sparkles className="h-3 w-3" />
+                Gemini 2.5 AI attivo
+              </Badge>
+            )}
             {hasDraftShifts && (
               <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10 rounded-[32px]">
                 <AlertTriangle className="h-3 w-3 mr-1" />
