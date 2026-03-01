@@ -1909,7 +1909,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending, locked_shift_ids } = body;
+    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending, locked_shift_ids, department: requestedDepartment } = body;
     const isPatchMode = mode === "patch";
     const isRebalanceMode = mode === "rebalance";
     const MAX_ITERATIONS = 12;
@@ -2040,8 +2040,10 @@ Deno.serve(async (req) => {
     }
     console.log(`[Smart Memory] Loaded ${(outcomeRows ?? []).length} historical outcomes, ${smartMemory.size} unique scores`);
 
-    // Run for BOTH departments
-    const departments: ("sala" | "cucina")[] = ["sala", "cucina"];
+    // Run for requested department(s) — manual generation sends a single dept, cron sends both
+    const departments: ("sala" | "cucina")[] = requestedDepartment
+      ? [requestedDepartment as "sala" | "cucina"]
+      : ["sala", "cucina"];
     const results: { department: string; runId: string; shifts: number; daysOff: number; uncovered: number; fitness: number; hourAdjustments: Record<string, number>; fallbackUsed: boolean }[] = [];
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2079,30 +2081,38 @@ Deno.serve(async (req) => {
         await adminClient.from("generation_runs").delete().in("id", oldRunIds);
       }
     } else if (!isPatchMode) {
-      // CLEAN REGENERATION: delete ALL previous data for this store+week
-      console.log(`[CLEANUP] Deleting previous data for store=${store_id}, week=${week_start_date}..${weekEnd}`);
+      // CLEAN REGENERATION: delete previous data for this store+week
+      // When a single department is requested, only clean that department's data
+      const singleDept = departments.length === 1 ? departments[0] : null;
+      console.log(`[CLEANUP] Deleting previous data for store=${store_id}, week=${week_start_date}..${weekEnd}${singleDept ? `, dept=${singleDept}` : " (all depts)"}`);
 
       // 1) Delete lending_request_messages for lending_requests involving this store+week
-      const { data: oldLendingReqs } = await adminClient
-        .from("lending_requests")
-        .select("id")
-        .or(`proposer_store_id.eq.${store_id},receiver_store_id.eq.${store_id}`)
-        .gte("date", week_start_date)
-        .lte("date", weekEnd);
+      if (!singleDept) {
+        const { data: oldLendingReqs } = await adminClient
+          .from("lending_requests")
+          .select("id")
+          .or(`proposer_store_id.eq.${store_id},receiver_store_id.eq.${store_id}`)
+          .gte("date", week_start_date)
+          .lte("date", weekEnd);
 
-      const oldLrIds = (oldLendingReqs ?? []).map(r => r.id);
-      if (oldLrIds.length > 0) {
-        await adminClient.from("lending_request_messages").delete().in("lending_request_id", oldLrIds);
-        await adminClient.from("lending_requests").delete().in("id", oldLrIds);
-        console.log(`[CLEANUP] Deleted ${oldLrIds.length} lending_requests + messages`);
+        const oldLrIds = (oldLendingReqs ?? []).map(r => r.id);
+        if (oldLrIds.length > 0) {
+          await adminClient.from("lending_request_messages").delete().in("lending_request_id", oldLrIds);
+          await adminClient.from("lending_requests").delete().in("id", oldLrIds);
+          console.log(`[CLEANUP] Deleted ${oldLrIds.length} lending_requests + messages`);
+        }
       }
 
-      // 2) Delete old generation_runs, lending_suggestions, generation_adjustments, and draft shifts
-      const { data: oldRuns } = await adminClient
+      // 2) Delete old generation_runs, lending_suggestions for the target department(s)
+      let oldRunQuery = adminClient
         .from("generation_runs")
         .select("id")
         .eq("store_id", store_id)
         .eq("week_start", week_start_date);
+      if (singleDept) {
+        oldRunQuery = oldRunQuery.eq("department", singleDept);
+      }
+      const { data: oldRuns } = await oldRunQuery;
 
       const oldRunIds = (oldRuns ?? []).map(r => r.id);
       if (oldRunIds.length > 0) {
@@ -2110,9 +2120,11 @@ Deno.serve(async (req) => {
         console.log(`[CLEANUP] Deleted lending_suggestions for ${oldRunIds.length} old runs`);
       }
 
-      // Delete generation_adjustments for this store+week
-      await adminClient.from("generation_adjustments").delete()
-        .eq("store_id", store_id).eq("week_start", week_start_date);
+      // Delete generation_adjustments for this store+week (only if cleaning all depts)
+      if (!singleDept) {
+        await adminClient.from("generation_adjustments").delete()
+          .eq("store_id", store_id).eq("week_start", week_start_date);
+      }
 
       // Delete old generation_runs themselves
       if (oldRunIds.length > 0) {
@@ -2120,12 +2132,16 @@ Deno.serve(async (req) => {
         console.log(`[CLEANUP] Deleted ${oldRunIds.length} old generation_runs`);
       }
 
-      // Delete ALL draft shifts for this store+week (both depts at once)
-      await adminClient.from("shifts").delete()
+      // Delete draft shifts for the target department(s)
+      let shiftDeleteQuery = adminClient.from("shifts").delete()
         .eq("store_id", store_id).eq("status", "draft")
         .gte("date", week_start_date).lte("date", weekEnd);
+      if (singleDept) {
+        shiftDeleteQuery = shiftDeleteQuery.eq("department", singleDept);
+      }
+      await shiftDeleteQuery;
 
-      console.log(`[CLEANUP] Complete for store=${store_id}, week=${week_start_date}`);
+      console.log(`[CLEANUP] Complete for store=${store_id}, week=${week_start_date}${singleDept ? `, dept=${singleDept}` : ""}`);
     }
 
     for (const dept of departments) {

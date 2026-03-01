@@ -75,7 +75,7 @@ const TeamCalendar = () => {
 
   const { data: generationRuns = [] } = useWeekGenerationRuns(storeId, currentWeekStart);
 
-  // Fetch suggestions only from the LATEST completed run per department
+  // Fetch suggestions only from the LATEST completed run for the SELECTED department
   const latestRunIds = useMemo(() => {
     const latest = new Map<string, string>(); // dept -> run id
     for (const r of generationRuns) {
@@ -85,19 +85,27 @@ const TeamCalendar = () => {
     }
     return Array.from(latest.values());
   }, [generationRuns]);
-  const { suggestions: rawSuggestions } = useOptimizationSuggestions(latestRunIds);
-  const { data: dbLendingSuggestions = [] } = useLendingSuggestions(latestRunIds);
+
+  // Only use the run for the currently selected department for suggestions
+  const deptRunIds = useMemo(() => {
+    const deptRun = generationRuns.find(
+      r => r.status === "completed" && r.department === department
+    );
+    return deptRun ? [deptRun.id] : [];
+  }, [generationRuns, department]);
+  const { suggestions: rawSuggestions } = useOptimizationSuggestions(deptRunIds);
+  const { data: dbLendingSuggestions = [] } = useLendingSuggestions(deptRunIds);
 
   // Collect accepted_gaps from latest generation runs to filter suggestions
   const acceptedGapIds = useMemo(() => {
     const ids = new Set<string>();
     for (const r of generationRuns) {
-      if (!latestRunIds.includes(r.id)) continue;
+      if (!deptRunIds.includes(r.id)) continue;
       const gaps = r.accepted_gaps;
       if (Array.isArray(gaps)) gaps.forEach(g => ids.add(g));
     }
     return ids;
-  }, [generationRuns, latestRunIds]);
+  }, [generationRuns, deptRunIds]);
 
   // Filter out suggestions whose gaps have been accepted
   const suggestions = useMemo(() => {
@@ -118,12 +126,12 @@ const TeamCalendar = () => {
     );
   }, [generationRuns, department]);
 
-  // AI is mandatory — badge shows whenever there are completed generation runs
+  // AI is mandatory — badge shows whenever there are completed generation runs for this dept
   const aiActive = useMemo(() => {
     return generationRuns.some(r =>
-      latestRunIds.includes(r.id) && r.status === "completed"
+      deptRunIds.includes(r.id) && r.status === "completed"
     );
-  }, [generationRuns, latestRunIds]);
+  }, [generationRuns, deptRunIds]);
 
   const hasDraftShifts = useMemo(() => {
     return shifts.some(s => s.status === "draft" && s.department === department);
@@ -246,6 +254,7 @@ const TeamCalendar = () => {
     if (!storeId) return;
     generateShifts.mutate({
       store_id: storeId,
+      department,
       week_start: currentWeekStart,
     }, {
       onSuccess: () => {
@@ -493,7 +502,7 @@ const TeamCalendar = () => {
     if (!storeId) return;
     // Find the generation run that owns this suggestion
     const targetRun = generationRuns.find(r => {
-      if (!latestRunIds.includes(r.id)) return false;
+      if (!deptRunIds.includes(r.id)) return false;
       const suggs = (r.suggestions as any[]) ?? [];
       return suggs.some((s: any) => s.id === suggestion.id);
     });
@@ -759,9 +768,9 @@ const TeamCalendar = () => {
             <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
             <AlertDialogDescription>
               ⚠️ <strong>Rigenerazione pulita:</strong> tutti i dati precedenti per la settimana
-              del <strong>{currentWeekStart}</strong> verranno cancellati (turni draft, suggerimenti,
-              richieste di prestito e messaggi correlati) e sostituiti con una nuova generazione
-              ottimale di <strong>40 iterazioni</strong> per Sala e Cucina.
+              del <strong>{currentWeekStart}</strong> ({department === "sala" ? "Sala" : "Cucina"}) verranno cancellati
+              (turni draft, suggerimenti, richieste di prestito e messaggi correlati) e sostituiti
+              con una nuova generazione ottimale di <strong>40 iterazioni</strong>.
               Il sistema terrà conto del monte ore (Hour Bank) per bilanciare le ore tra le settimane.
             </AlertDialogDescription>
           </AlertDialogHeader>
