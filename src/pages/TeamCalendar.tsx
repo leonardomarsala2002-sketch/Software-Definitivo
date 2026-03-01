@@ -53,6 +53,7 @@ const TeamCalendar = () => {
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [isRebalancing, setIsRebalancing] = useState(false);
 
   const [showOptimizationErrors, setShowOptimizationErrors] = useState(false);
 
@@ -701,8 +702,25 @@ const TeamCalendar = () => {
           onCreateShift={(s) =>
             createShift.mutate({ store_id: storeId!, department, ...s })
           }
-          onUpdateShift={(id, updates) => updateShift.mutate({ id, updates })}
+          onUpdateShift={(id, updates) => updateShift.mutate({ id, updates, storeId })}
           onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
+          isRebalancing={isRebalancing}
+          onRebalanceAfterEdit={() => {
+            if (!storeId) return;
+            setIsRebalancing(true);
+            // Collect IDs of manually-edited draft shifts to lock
+            const draftShiftIds = shifts
+              .filter(s => s.status === "draft" && s.department === department)
+              .map(s => s.id);
+            generateShifts.mutate({
+              store_id: storeId,
+              week_start: currentWeekStart,
+              mode: "rebalance",
+              locked_shift_ids: draftShiftIds,
+            }, {
+              onSettled: () => setIsRebalancing(false),
+            });
+          }}
         />
       )}
 

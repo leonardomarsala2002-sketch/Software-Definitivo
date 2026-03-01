@@ -41,9 +41,22 @@ export function useWeekGenerationRuns(storeId: string | undefined, weekStart: st
 export function useGenerateShifts() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { store_id: string; department?: "sala" | "cucina"; week_start: string; mode?: "full" | "patch"; affected_user_id?: string }) => {
+    mutationFn: async (params: {
+      store_id: string;
+      department?: "sala" | "cucina";
+      week_start: string;
+      mode?: "full" | "patch" | "rebalance";
+      affected_user_id?: string;
+      locked_shift_ids?: string[];
+    }) => {
       const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
-        body: { store_id: params.store_id, week_start_date: params.week_start, mode: params.mode, affected_user_id: params.affected_user_id },
+        body: {
+          store_id: params.store_id,
+          week_start_date: params.week_start,
+          mode: params.mode,
+          affected_user_id: params.affected_user_id,
+          locked_shift_ids: params.locked_shift_ids,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -56,7 +69,10 @@ export function useGenerateShifts() {
       qc.invalidateQueries({ queryKey: ["lending-suggestions"] });
       const depts = data?.departments ?? [];
       const totalUncovered = depts.reduce((acc: number, d: any) => acc + (d.uncovered ?? 0), 0);
-      if (totalUncovered > 0) {
+      if (data?.is_rebalance) {
+        const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
+        toast.success(`🔄 Ribilanciamento AI completato: ${totalShifts} turni rigenerati, ${data?.locked_shifts_kept ?? 0} turni manuali preservati`);
+      } else if (totalUncovered > 0) {
         toast.warning(`Turni generati con ${totalUncovered} slot non coperti. Controlla i suggerimenti nel pannello Health Check.`);
       } else {
         const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
