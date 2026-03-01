@@ -121,8 +121,8 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
         {/* ── GENERALI ── */}
         <SectionHeader emoji="⚙️" label="Generali" />
         <div className="grid grid-cols-1 gap-2.5">
-          <RuleRow label="Max spezzati / dip. / sett." value={form.max_split_shifts_per_employee_per_week} onChange={set("max_split_shifts_per_employee_per_week")} min={0} max={14} disabled={readOnly} />
-          <RuleRow label="Giorni liberi / sett." value={form.mandatory_days_off_per_week} onChange={set("mandatory_days_off_per_week")} min={0} max={7} disabled={readOnly} />
+          <RuleRow label="Max spezzati / dip. / sett." value={form.max_split_shifts_per_employee_per_week} onChange={set("max_split_shifts_per_employee_per_week")} min={1} max={3} disabled={readOnly} />
+          <RuleRow label="Giorni liberi / sett." value={form.mandatory_days_off_per_week} onChange={set("mandatory_days_off_per_week")} min={1} max={2} disabled={readOnly} />
         </div>
 
         {!readOnly && (

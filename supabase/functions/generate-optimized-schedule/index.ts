@@ -461,7 +461,7 @@ ANALISI OBBLIGATORIA PRIMA DI GENERARE:
 4. Per OGNI dipendente: il LIMITE SETTIMANALE è dato dalle ore_contrattuali individuali (es. 40h, 30h, 24h). NON usare un valore generico uguale per tutti.
 5. Se un giorno ha ZERO copertura richiesta, NON assegnare turni per quel giorno.
 6. Se il locale chiude alle X:00 (es. 23:00), NESSUN turno può terminare dopo le X:00. Solo se chiude a mezzanotte (00:00/24:00) si può arrivare alle 24:00.
-7. MAI superare automaticamente il limite contrattuale del singolo dipendente. Massimo +5h/sett solo in casi eccezionali e con approvazione manuale.
+7. La tolleranza ±5h/sett rispetto al contratto individuale si applica AUTOMATICAMENTE se necessaria per coprire buchi di copertura. Non richiede approvazione manuale.
 
 Ogni strategia controlla l'algoritmo di generazione:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
@@ -1154,8 +1154,9 @@ function runIteration(
     const shuffledEmps = shuffle(deptEmployees);
     for (const emp of shuffledEmps) {
       const ec = empConstraints.get(emp.user_id);
-      // Use the MINIMUM mandatory days off from rules (typically 1)
-      const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+      // Use the MINIMUM mandatory days off from rules (floor clamped to 1, cap at 2)
+      const rawDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+      const minDaysOff = Math.min(2, Math.max(1, rawDaysOff));
       const empDaysOff = new Set<string>();
 
       // Find best days for this employee's days off
@@ -1184,13 +1185,13 @@ function runIteration(
     dayLogs.push(`=== 📋 DATI INPUT GENERAZIONE — ${department.toUpperCase()} ===`);
 
     // Rules summary
-    dayLogs.push(`\n📏 REGOLE STORE:`);
+    dayLogs.push(`\n📏 REGOLE DI QUESTO STORE:`);
     dayLogs.push(`  Min ore giornaliere/dipendente: ${(rules as any).min_daily_hours_per_employee ?? 4}h`);
     dayLogs.push(`  Max ore giornaliere/dipendente: ${rules.max_daily_hours_per_employee}h`);
-    dayLogs.push(`  Ore settimanali: da contratto individuale (NON valore generico store)`);
-    dayLogs.push(`  Tolleranza massima: +5h/sett solo se approvato manualmente`);
-    dayLogs.push(`  Giorni liberi obbligatori/settimana: ${rules.mandatory_days_off_per_week}`);
-    dayLogs.push(`  Max spezzati/dipendente/settimana: ${maxSplitsAllowed}`);
+    dayLogs.push(`  Ore settimanali: da contratto individuale di ogni dipendente`);
+    dayLogs.push(`  Tolleranza: ±5h/sett automatica se necessaria per copertura`);
+    dayLogs.push(`  Giorni liberi: min 1 — max 2 per dipendente (uguali per tutti)`);
+    dayLogs.push(`  Spezzati: min 1 — max ${rules.max_split_shifts_per_employee_per_week} (uguali per tutti, aumentano solo se servono)`);
     dayLogs.push(`  Max ore team ${department}/giorno: ${maxDailyTeamHours}h`);
     dayLogs.push(`  Max ore team ${department}/settimana: ${maxWeeklyTeamHours}h`);
 
@@ -2414,7 +2415,7 @@ Deno.serve(async (req) => {
           // Create adapted rules for this round
           const adaptedRules = { ...rules };
           if (round.daysOffDelta !== 0) {
-            adaptedRules.mandatory_days_off_per_week = Math.max(0, rules.mandatory_days_off_per_week + round.daysOffDelta);
+            adaptedRules.mandatory_days_off_per_week = Math.max(1, rules.mandatory_days_off_per_week + round.daysOffDelta);
           }
           if (round.splitsDelta > 0) {
             adaptedRules.max_split_shifts_per_employee_per_week = rules.max_split_shifts_per_employee_per_week + round.splitsDelta;
@@ -3013,7 +3014,8 @@ Deno.serve(async (req) => {
           const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
           const delta = weeklyUsed - emp.weekly_contract_hours;
           // Only flag significant deviations (>=3h) within this generated week
-          if (Math.abs(delta) >= 3) {
+          if (Math.abs(delta) >= 3 && Math.abs(delta) > 5) {
+            // Only flag deviations BEYOND the automatic ±5h tolerance
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             const direction = delta > 0 ? "eccesso" : "deficit";
             const absDelta = Math.abs(delta);
