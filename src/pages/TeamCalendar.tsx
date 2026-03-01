@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send, Stethoscope, Sparkles } from "lucide-react";
+import { GenerationLogPanel } from "@/components/team-calendar/GenerationLogPanel";
 import { format, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import PageHeader from "@/components/PageHeader";
@@ -661,6 +662,11 @@ const TeamCalendar = () => {
             Risolvi ora
           </Button>
         </div>
+      )}
+
+      {/* Generation Log Panel (temporary debug) */}
+      {canEdit && generationRuns.length > 0 && (
+        <GenerationLogPanel generationRuns={generationRuns} department={department} />
       )}
 
       {/* Full-view calendar */}

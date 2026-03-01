@@ -80,6 +80,7 @@ interface IterationResult {
   uncoveredSlots: { date: string; hour: string }[];
   fitnessScore: number;
   hourAdjustments: Record<string, number>;
+  dayLogs: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -837,6 +838,9 @@ function runIteration(
 
   const shifts: GeneratedShift[] = [];
   const uncoveredSlots: { date: string; hour: string }[] = [];
+  const dayLogs: string[] = [];
+  const empNameMap = new Map(employees.map(e => [e.user_id, `${(e as any).first_name ?? ""} ${(e as any).last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
+  const getEmpName = (uid: string) => empNameMap.get(uid) ?? uid.slice(0, 8);
 
   const weeklyHours = new Map<string, number>();
   const daysWorked = new Map<string, Set<string>>();
@@ -905,6 +909,16 @@ function runIteration(
     }
   }
 
+  // Log pre-planned days off
+  {
+    const doffSummary: string[] = [];
+    for (const [uid, days] of prePlannedDaysOff) {
+      if (days.size > 0) doffSummary.push(`${getEmpName(uid)}: riposo ${[...days].join(", ")}`);
+    }
+    dayLogs.push(`=== PRE-PIANIFICAZIONE RIPOSI ===`);
+    dayLogs.push(`Riposi assegnati (${doffSummary.length} dipendenti): ${doffSummary.join(" | ")}`);
+  }
+
   for (const dateStr of weekDates) {
     const dow = getDayOfWeek(dateStr);
     const dayCoverage = deptCoverage.filter(c => c.day_of_week === dow);
@@ -961,6 +975,13 @@ function runIteration(
     const effectiveExits = [...dynamicExits].sort((a, b) => a - b);
     if (effectiveEntries.length === 0 || effectiveExits.length === 0) continue;
 
+    // Day header log
+    const dayLabel = new Date(dateStr + "T00:00:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+    const covReqSummary = [...hourCoverage.entries()].sort((a,b)=>a[0]-b[0]).map(([h,n])=>`${h}:00=${n}p`).join(" ");
+    dayLogs.push(`\n=== ${dayLabel.toUpperCase()} (${dateStr}) ===`);
+    dayLogs.push(`Copertura richiesta: ${covReqSummary}`);
+    dayLogs.push(`Orario: ${dayOpenH}:00-${effectiveClose}:00 | Entrate: [${effectiveEntries.join(",")}] | Uscite: [${effectiveExits.join(",")}]`);
+
     let dailyTeamHoursUsed = 0;
 
     let availableEmps = deptEmployees.filter(emp => {
@@ -989,6 +1010,30 @@ function runIteration(
 
       return true;
     });
+
+    // Log available/excluded employees
+    {
+      const excluded = deptEmployees.filter(e => !availableEmps.some(a => a.user_id === e.user_id));
+      const excludeReasons: string[] = [];
+      for (const emp of excluded) {
+        if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) {
+          excludeReasons.push(`${getEmpName(emp.user_id)}: non disponibile/eccezione`);
+        } else if (prePlannedDaysOff.get(emp.user_id)?.has(dateStr)) {
+          excludeReasons.push(`${getEmpName(emp.user_id)}: riposo pre-pianificato`);
+        } else {
+          const worked = daysWorked.get(emp.user_id)!;
+          const ec = empConstraints.get(emp.user_id);
+          const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
+          if (worked.size >= maxDaysWorked) {
+            excludeReasons.push(`${getEmpName(emp.user_id)}: max giorni lavorati (${worked.size}/${maxDaysWorked})`);
+          } else {
+            excludeReasons.push(`${getEmpName(emp.user_id)}: riposo 11h`);
+          }
+        }
+      }
+      dayLogs.push(`Disponibili: ${availableEmps.map(e => getEmpName(e.user_id)).join(", ")} (${availableEmps.length}/${deptEmployees.length})`);
+      if (excludeReasons.length > 0) dayLogs.push(`Esclusi: ${excludeReasons.join(" | ")}`);
+    }
 
     if (randomize) {
       availableEmps = shuffle(availableEmps);
@@ -1145,6 +1190,8 @@ function runIteration(
         const duration = bestEnd - bestStart;
         const isSplit = empDaySplitCount > 0;
 
+        dayLogs.push(`  ✅ ${getEmpName(emp.user_id)}: ${bestStart}:00-${bestEnd === 24 ? 0 : bestEnd}:00 (${duration}h) — copre ${bestCoverage} slot scoperti${isSplit ? " [SPEZZATO]" : ""} | ore sett: ${empWeeklyUsed}+${duration}=${empWeeklyUsed+duration}/${emp.weekly_contract_hours}h`);
+
         shifts.push({
           store_id: storeId,
           user_id: emp.user_id,
@@ -1180,6 +1227,31 @@ function runIteration(
             staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
           }
         }
+      } else {
+        // Log why no shift was assigned
+        const empWeeklyUsedLog = weeklyHours.get(emp.user_id) ?? 0;
+        const balanceLog = hourBalances.get(emp.user_id) ?? 0;
+        const adjTarget = emp.weekly_contract_hours - balanceLog;
+        const remainingLog = Math.max(adjTarget - empWeeklyUsedLog, 0);
+        if (remainingLog <= 0) {
+          dayLogs.push(`  ⏭️ ${getEmpName(emp.user_id)}: saltato — ore sett. esaurite (${empWeeklyUsedLog}/${adjTarget}h)`);
+        } else {
+          dayLogs.push(`  ⏭️ ${getEmpName(emp.user_id)}: saltato — nessun turno valido trovato (ore disp: ${remainingLog}h, team budget: ${dailyTeamHoursUsed}/${maxDailyTeamHours}h)`);
+        }
+      }
+    }
+
+    // Log first pass summary
+    {
+      const firstPassCov: string[] = [];
+      for (const [h, needed] of [...hourCoverage.entries()].sort((a,b)=>a[0]-b[0])) {
+        const assigned = staffAssigned.get(h) ?? 0;
+        if (assigned < needed) firstPassCov.push(`${h}:00 (${assigned}/${needed})`);
+      }
+      if (firstPassCov.length > 0) {
+        dayLogs.push(`  📊 Dopo 1° pass: ${firstPassCov.length} slot ancora scoperti: ${firstPassCov.join(", ")}`);
+      } else {
+        dayLogs.push(`  📊 Dopo 1° pass: copertura completa ✅`);
       }
     }
 
@@ -1190,6 +1262,8 @@ function runIteration(
     }
 
     if (hasUncoveredAfterFirst) {
+      dayLogs.push(`  🔀 2° pass (spezzati):`);
+      // Get employees who already have a shift today (candidates for a split)
       // Get employees who already have a shift today (candidates for a split)
       const empsWithShiftToday = deptEmployees.filter(emp => {
         const dayShiftCount = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
@@ -1286,6 +1360,7 @@ function runIteration(
 
         if (bestStart >= 0 && bestEnd > bestStart) {
           const duration = bestEnd - bestStart;
+          dayLogs.push(`    ✅ ${getEmpName(emp.user_id)}: spezzato ${bestStart}:00-${bestEnd === 24 ? 0 : bestEnd}:00 (${duration}h) — copre ${bestCoverage} slot`);
 
           shifts.push({
             store_id: storeId,
@@ -1333,6 +1408,7 @@ function runIteration(
     }
 
     if (hasUncoveredAfterSplits) {
+      dayLogs.push(`  🔍 3° pass (gap-filling):`);
       // Try ALL available employees (including those without shifts today)
       let gapFillers = deptEmployees.filter(emp => {
         if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) return false;
@@ -1439,6 +1515,7 @@ function runIteration(
         if (bestStart >= 0 && bestEnd > bestStart) {
           const duration = bestEnd - bestStart;
           const isSplit = todayShifts.length > 0;
+          dayLogs.push(`    ✅ ${getEmpName(emp.user_id)}: gap-fill ${bestStart}:00-${bestEnd === 24 ? 0 : bestEnd}:00 (${duration}h)${isSplit ? " [SPEZZATO]" : ""}`);
 
           shifts.push({
             store_id: storeId, user_id: emp.user_id, date: dateStr,
@@ -1485,16 +1562,38 @@ function runIteration(
       }
     }
 
+    // Day-end uncovered summary
+    const dayUncovered: string[] = [];
     for (const [h, needed] of hourCoverage) {
-      if ((staffAssigned.get(h) ?? 0) < needed) {
+      const assigned = staffAssigned.get(h) ?? 0;
+      if (assigned < needed) {
         uncoveredSlots.push({ date: dateStr, hour: `${String(h).padStart(2, "0")}:00` });
+        dayUncovered.push(`${h}:00 (${assigned}/${needed})`);
       }
     }
+    if (dayUncovered.length > 0) {
+      dayLogs.push(`  ❌ SCOPERTI: ${dayUncovered.join(", ")}`);
+      dayLogs.push(`  💡 Motivo: insufficiente personale disponibile o vincoli (ore max, spezzati, riposo 11h) impediscono ulteriore copertura`);
+    } else {
+      dayLogs.push(`  ✅ GIORNO COMPLETAMENTE COPERTO`);
+    }
+
+    // Day-end team summary
+    dayLogs.push(`  📈 Team: ${dailyTeamHoursUsed}h usate / ${maxDailyTeamHours}h max giornaliere`);
+  }
+
+  // Weekly summary
+  dayLogs.push(`\n=== RIEPILOGO SETTIMANALE ===`);
+  for (const emp of deptEmployees) {
+    const wh = weeklyHours.get(emp.user_id) ?? 0;
+    const ws = weeklySplits.get(emp.user_id) ?? 0;
+    const daysOff = [...weekDates].filter(d => !daysWorked.get(emp.user_id)?.has(d)).length;
+    dayLogs.push(`${getEmpName(emp.user_id)}: ${wh}h/${emp.weekly_contract_hours}h contratto | ${ws} spezzati | ${daysOff} riposi`);
   }
 
   const { score, hourAdjustments } = computeFitness(shifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department);
 
-  return { shifts, uncoveredSlots, fitnessScore: score, hourAdjustments };
+  return { shifts, uncoveredSlots, fitnessScore: score, hourAdjustments, dayLogs };
 }
 
 // ─── Main Handler ────────────────────────────────────────────────────────────
@@ -1970,6 +2069,7 @@ Deno.serve(async (req) => {
               uncoveredSlots: correctedUncovered,
               fitnessScore: correctedFitness.score,
               hourAdjustments: correctedFitness.hourAdjustments,
+              dayLogs: result.dayLogs,
             };
 
             if (!bestResult || correctedResult.fitnessScore > bestResult.fitnessScore) {
@@ -2017,7 +2117,7 @@ Deno.serve(async (req) => {
           strategyReport.push(`✅ Post-validazione: tutte le regole rispettate`);
         }
 
-        const { shifts, uncoveredSlots, fitnessScore, hourAdjustments } = bestResult!;
+        const { shifts, uncoveredSlots, fitnessScore, hourAdjustments, dayLogs: bestDayLogs } = bestResult!;
 
         // Insert best shifts
         if (shifts.length > 0) {
@@ -2435,7 +2535,7 @@ Deno.serve(async (req) => {
           fallbackUsed ? "spezzati attivati" : null,
           isPatchMode ? "modalità patch" : null,
         ].filter(Boolean).join(" | ");
-        const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n");
+        const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n") + "\n\n--- LOG GIORNALIERO DETTAGLIATO ---\n" + (bestDayLogs ?? []).join("\n");
 
         await adminClient.from("generation_runs").update({
           status: "completed",
