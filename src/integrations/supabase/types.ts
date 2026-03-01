@@ -516,6 +516,36 @@ export type Database = {
           },
         ]
       }
+      engine_rules: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          is_active?: boolean
+          label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       generation_adjustments: {
         Row: {
           adjustment_type: string
