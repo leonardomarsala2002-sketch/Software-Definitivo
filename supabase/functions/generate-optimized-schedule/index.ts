@@ -665,6 +665,10 @@ function autoCorrectViolations(
   department: "sala" | "cucina",
   coverage: CoverageReq[],
   weekDates: string[],
+  availability: AvailSlot[] = [],
+  exceptions: ExceptionBlock[] = [],
+  allowedTimes: AllowedTime[] = [],
+  openingHours: { day_of_week: number; opening_time: string; closing_time: string }[] = [],
 ): { correctedShifts: GeneratedShift[]; corrections: string[] } {
   const allCorrections: string[] = [];
   let corrected = [...shifts];
@@ -809,6 +813,160 @@ function autoCorrectViolations(
             if (idx >= 0 && newStart < parseHour(corrected[idx].end_time!)) {
               corrected[idx] = { ...corrected[idx], start_time: `${String(newStart).padStart(2, "0")}:00` };
               passCorrections.push(`FIX riposo 11h [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${allEmpShifts[i + 1].date} posticipato ingresso a ${newStart}:00`);
+            }
+          }
+        }
+      }
+    }
+
+    // 6) Coverage repair: fill slots that are below min_staff_required
+    for (const dateStr of weekDates) {
+      const dow = getDayOfWeek(dateStr);
+      const dayCov = coverage.filter(c => c.day_of_week === dow && c.department === department);
+      for (const c of dayCov) {
+        const h = parseInt(c.hour_slot.split(":")[0], 10);
+        const assigned = corrected.filter(s =>
+          !s.is_day_off && s.date === dateStr && s.department === department &&
+          s.start_time !== null && s.end_time !== null &&
+          parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
+        ).length;
+        if (assigned >= c.min_staff_required) continue;
+
+        const deficit = c.min_staff_required - assigned;
+        for (let d = 0; d < deficit; d++) {
+          // Try to extend an existing shift to cover this hour
+          let filled = false;
+
+          // Option A: extend an employee whose shift ends at this hour (push end later)
+          const canExtendEnd = corrected.filter(s =>
+            !s.is_day_off && s.date === dateStr && s.department === department &&
+            s.end_time !== null && parseHour(s.end_time!) === h
+          );
+          for (const s of canExtendEnd) {
+            const emp = deptEmployees.find(e => e.user_id === s.user_id);
+            if (!emp) continue;
+            const ec = empConstraints.get(emp.user_id);
+            const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+            const maxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+            const empDayShifts = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && sh.date === dateStr && !sh.is_day_off && sh.start_time && sh.end_time);
+            const dailyH = empDayShifts.reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            const weeklyH = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time && sh.end_time)
+              .reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            if (dailyH + 1 <= maxDaily && weeklyH + 1 <= maxWeekly) {
+              const idx = corrected.indexOf(s);
+              if (idx >= 0) {
+                const newEnd = h + 1;
+                corrected[idx] = { ...s, end_time: `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00` };
+                passCorrections.push(`FIX copertura [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${dateStr} esteso fine a ${newEnd}:00 per coprire slot ${h}:00`);
+                filled = true;
+                break;
+              }
+            }
+          }
+          if (filled) continue;
+
+          // Option B: extend an employee whose shift starts at h+1 (push start earlier)
+          const canExtendStart = corrected.filter(s =>
+            !s.is_day_off && s.date === dateStr && s.department === department &&
+            s.start_time !== null && parseHour(s.start_time!) === h + 1
+          );
+          for (const s of canExtendStart) {
+            const emp = deptEmployees.find(e => e.user_id === s.user_id);
+            if (!emp) continue;
+            const ec = empConstraints.get(emp.user_id);
+            const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+            const maxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+            const dailyH = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && sh.date === dateStr && !sh.is_day_off && sh.start_time && sh.end_time)
+              .reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            const weeklyH = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time && sh.end_time)
+              .reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            // Check 11h rest from previous day
+            let restOk = true;
+            const prevDayShifts = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.end_time)
+              .filter(sh => {
+                const d1 = new Date(sh.date + "T00:00:00Z");
+                const d2 = new Date(dateStr + "T00:00:00Z");
+                return (d2.getTime() - d1.getTime()) === 86400000;
+              });
+            if (prevDayShifts.length > 0) {
+              const latestEnd = Math.max(...prevDayShifts.map(sh => parseHour(sh.end_time!)));
+              const rest = (24 - latestEnd) + h;
+              if (rest < 11) restOk = false;
+            }
+            if (restOk && dailyH + 1 <= maxDaily && weeklyH + 1 <= maxWeekly) {
+              const idx = corrected.indexOf(s);
+              if (idx >= 0) {
+                corrected[idx] = { ...s, start_time: `${String(h).padStart(2, "0")}:00` };
+                passCorrections.push(`FIX copertura [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${dateStr} anticipato inizio a ${h}:00 per coprire slot ${h}:00`);
+                filled = true;
+                break;
+              }
+            }
+          }
+          if (filled) continue;
+
+          // Option C: assign a new short shift to an available employee not covering this hour
+          const alreadyCovering = new Set(corrected.filter(s =>
+            !s.is_day_off && s.date === dateStr && s.department === department &&
+            s.start_time !== null && s.end_time !== null &&
+            parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
+          ).map(s => s.user_id));
+
+          for (const emp of deptEmployees) {
+            if (alreadyCovering.has(emp.user_id)) continue;
+            if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) continue;
+            const ec = empConstraints.get(emp.user_id);
+            const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+            const maxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+            const dailyH = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && sh.date === dateStr && !sh.is_day_off && sh.start_time && sh.end_time)
+              .reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            const weeklyH = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time && sh.end_time)
+              .reduce((sum, sh) => sum + (parseHour(sh.end_time!) - parseHour(sh.start_time!)), 0);
+            // Check days off constraint
+            const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+            const workedDays = new Set(corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time).map(sh => sh.date));
+            if (!workedDays.has(dateStr) && workedDays.size >= 7 - minDaysOff) continue;
+            // 11h rest check
+            let restOk = true;
+            const prevDayShifts = corrected.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.end_time)
+              .filter(sh => {
+                const d1 = new Date(sh.date + "T00:00:00Z");
+                const d2 = new Date(dateStr + "T00:00:00Z");
+                return (d2.getTime() - d1.getTime()) === 86400000;
+              });
+            if (prevDayShifts.length > 0) {
+              const latestEnd = Math.max(...prevDayShifts.map(sh => parseHour(sh.end_time!)));
+              const rest = (24 - latestEnd) + h;
+              if (rest < 11) restOk = false;
+            }
+            if (restOk && dailyH + 1 <= maxDaily && weeklyH + 1 <= maxWeekly) {
+              // Find a reasonable shift length covering this hour (at least min_daily_hours if possible)
+              const minShift = rules.min_daily_hours_per_employee;
+              // Build a shift from h to h+minShift (or h+1 if that exceeds constraints)
+              let shiftEnd = Math.min(h + minShift, h + (maxDaily - dailyH), h + (maxWeekly - weeklyH));
+              if (shiftEnd <= h) shiftEnd = h + 1;
+              // Don't exceed opening hours
+              const oh = openingHours.find(o => o.day_of_week === dow);
+              const closeH = oh ? (parseInt(oh.closing_time.split(":")[0], 10) || 24) : 24;
+              if (shiftEnd > closeH) shiftEnd = closeH;
+              if (shiftEnd <= h) continue;
+
+              const storeId = corrected[0]?.store_id ?? "";
+              const runId = corrected[0]?.generation_run_id ?? "";
+              corrected.push({
+                store_id: storeId,
+                user_id: emp.user_id,
+                date: dateStr,
+                start_time: `${String(h).padStart(2, "0")}:00`,
+                end_time: `${String(shiftEnd === 24 ? 0 : shiftEnd).padStart(2, "0")}:00`,
+                department,
+                is_day_off: false,
+                status: "draft",
+                generation_run_id: runId,
+              });
+              passCorrections.push(`FIX copertura [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${dateStr} nuovo turno ${h}:00-${shiftEnd}:00 per coprire slot ${h}:00`);
+              filled = true;
+              break;
             }
           }
         }
@@ -2547,6 +2705,7 @@ Deno.serve(async (req) => {
             // IMPORTANT: auto-correct with ORIGINAL rules, not adapted — ensures final result always respects base rules
             const { correctedShifts, corrections } = autoCorrectViolations(
               result.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
+              availability, allExceptions, allowedData, openingHoursData,
             );
             // Apply equity rebalancing pass: equalize days off and splits
             const { rebalancedShifts, equityReport } = equalizeEquity(
@@ -2615,6 +2774,7 @@ Deno.serve(async (req) => {
             strategyReport.push(`\n⚠️ Soluzione migliore ha ${finalCheck.violations.length} violazioni residue. Correzione forzata finale...`);
             const { correctedShifts, corrections } = autoCorrectViolations(
               bestResult.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
+              availability, allExceptions, allowedData, openingHoursData,
             );
             // Final equity pass
             const { rebalancedShifts: finalRebalanced, equityReport: finalEquity } = equalizeEquity(
