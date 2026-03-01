@@ -43,6 +43,8 @@ import { Link } from "react-router-dom";
 import RequestForm from "@/components/requests/RequestForm";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
+import { TeamHoursCard } from "@/components/dashboard/TeamHoursCard";
+import { VacationBalanceCard } from "@/components/dashboard/VacationBalanceCard";
 import { useAppointments, useRespondAppointment, useCancelAppointment } from "@/hooks/useAppointments";
 import { AppointmentFormDialog } from "@/components/dashboard/AppointmentFormDialog";
 import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
@@ -254,6 +256,11 @@ const Dashboard = () => {
   if (!isAdmin) {
     return (
       <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-in fade-in duration-500">
+        {/* Vacation Balance - Employee only */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-shrink-0">
+          <VacationBalanceCard />
+        </div>
+
         {/* Weekly Timeline */}
         <Card className="p-4 flex flex-col flex-shrink-0">
           <CardHeader className="p-0 pb-3">
@@ -518,6 +525,17 @@ const Dashboard = () => {
             <KpiCard {...kpi} />
           </div>
         ))}
+      </div>
+
+      {/* Team Hours + Vacation Balance */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
+        <div className="lg:col-span-2">
+          <TeamHoursCard />
+        </div>
+        <div className="flex flex-col gap-4">
+          {role === "admin" && <VacationBalanceCard />}
+          <DashboardCharts />
+        </div>
       </div>
 
       {/* Calendar + Day detail */}
