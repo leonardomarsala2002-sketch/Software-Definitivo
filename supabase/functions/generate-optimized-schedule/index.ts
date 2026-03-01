@@ -2581,128 +2581,6 @@ Deno.serve(async (req) => {
           strategyReport.push(`✅ Post-validazione: tutte le regole rispettate`);
         }
 
-        // ─── FLEX ±5h PASS: auto-adjust hours to fill remaining gaps ───
-        // Only extends/adds hours when there are uncovered slots remaining.
-        // Never exceeds contract + 5h. Saves adjustments for next-week rebalancing.
-        const flexReport: string[] = [];
-        const flexAdjustments: { userId: string; userName: string; extraHours: number; reason: string }[] = [];
-        
-        if (bestResult!.uncoveredSlots.length > 0) {
-          flexReport.push(`\n⚡ FLEX ±5h PASS: ${bestResult!.uncoveredSlots.length} slot ancora scoperti, tentativo di copertura automatica...`);
-          
-          const empNameMapFlex = new Map(employees.map(e => [e.user_id, `${(e as any).first_name ?? ""} ${(e as any).last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
-          const getFlexName = (uid: string) => empNameMapFlex.get(uid) ?? uid.slice(0, 8);
-          
-          // Compute current weekly hours for each employee
-          const currentWeeklyH = new Map<string, number>();
-          for (const s of bestResult!.shifts) {
-            if (s.is_day_off || !s.start_time || !s.end_time || s.department !== dept) continue;
-            const dur = parseHour(s.end_time) - parseHour(s.start_time);
-            currentWeeklyH.set(s.user_id, (currentWeeklyH.get(s.user_id) ?? 0) + dur);
-          }
-          
-          // Group uncovered by date
-          const uncovByDate = new Map<string, number[]>();
-          for (const slot of bestResult!.uncoveredSlots) {
-            const h = parseInt(slot.hour.split(":")[0], 10);
-            const arr = uncovByDate.get(slot.date) ?? [];
-            arr.push(h);
-            uncovByDate.set(slot.date, arr);
-          }
-          
-          let flexShiftsModified = 0;
-          
-          for (const [dateStr, uncovHours] of uncovByDate) {
-            uncovHours.sort((a, b) => a - b);
-            const dow = getDayOfWeek(dateStr);
-            const oh = openingHoursData.find(h => h.day_of_week === dow);
-            const effectiveClose = oh ? (parseInt(oh.closing_time.split(":")[0], 10) === 0 ? 24 : parseInt(oh.closing_time.split(":")[0], 10)) : 22;
-            
-            for (const uncovH of uncovHours) {
-              if (uncovH >= effectiveClose) continue;
-              
-              // Try extending existing shifts on this day
-              const dayShifts = bestResult!.shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
-              let covered = false;
-              
-              for (const s of dayShifts) {
-                if (covered) break;
-                const emp = deptEmployees.find(e => e.user_id === s.user_id);
-                if (!emp) continue;
-                
-                const ec = empConstraints.get(s.user_id);
-                const weeklyUsed = currentWeeklyH.get(s.user_id) ?? 0;
-                const contractH = emp.weekly_contract_hours;
-                const hardCap = contractH + 5; // absolute max
-                const maxWeekly = ec?.custom_max_weekly_hours ?? contractH;
-                const effectiveMax = Math.min(hardCap, maxWeekly + 5);
-                const flexRoom = effectiveMax - weeklyUsed;
-                if (flexRoom <= 0) continue;
-                
-                const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-                const dailyUsed = dayShifts.filter(ds => ds.user_id === s.user_id).reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
-                if (dailyUsed >= maxDaily) continue;
-                
-                let endH = parseHour(s.end_time!);
-                let startH = parseHour(s.start_time!);
-                
-                // Try extending later
-                if (endH === uncovH || (endH <= uncovH && uncovH - endH <= 1)) {
-                  const newEnd = Math.min(uncovH + 1, effectiveClose);
-                  const extraH = newEnd - endH;
-                  if (extraH > 0 && extraH <= flexRoom && dailyUsed + extraH <= maxDaily) {
-                    const idx = bestResult!.shifts.indexOf(s);
-                    if (idx >= 0) {
-                      bestResult!.shifts[idx] = { ...s, end_time: `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00` };
-                      currentWeeklyH.set(s.user_id, weeklyUsed + extraH);
-                      flexAdjustments.push({ userId: s.user_id, userName: getFlexName(s.user_id), extraHours: extraH, reason: `esteso turno ${dateStr} fino alle ${newEnd}:00 per coprire slot ${uncovH}:00` });
-                      flexReport.push(`  ✅ ${getFlexName(s.user_id)}: esteso turno fino a ${newEnd}:00 (+${extraH}h) — ${weeklyUsed + extraH}/${contractH}h [flex +${weeklyUsed + extraH - contractH > 0 ? weeklyUsed + extraH - contractH : 0}h]`);
-                      flexShiftsModified++;
-                      covered = true;
-                    }
-                  }
-                }
-                
-                // Try extending earlier
-                if (!covered && (startH === uncovH + 1 || (startH > uncovH && startH - uncovH <= 1))) {
-                  const newStart = uncovH;
-                  const extraH = startH - newStart;
-                  if (extraH > 0 && extraH <= flexRoom && dailyUsed + extraH <= maxDaily) {
-                    const idx = bestResult!.shifts.indexOf(s);
-                    if (idx >= 0) {
-                      bestResult!.shifts[idx] = { ...s, start_time: `${String(newStart).padStart(2, "0")}:00` };
-                      currentWeeklyH.set(s.user_id, weeklyUsed + extraH);
-                      flexAdjustments.push({ userId: s.user_id, userName: getFlexName(s.user_id), extraHours: extraH, reason: `anticipato turno ${dateStr} alle ${newStart}:00 per coprire slot ${uncovH}:00` });
-                      flexReport.push(`  ✅ ${getFlexName(s.user_id)}: anticipato a ${newStart}:00 (+${extraH}h) — ${weeklyUsed + extraH}/${contractH}h [flex +${weeklyUsed + extraH - contractH > 0 ? weeklyUsed + extraH - contractH : 0}h]`);
-                      flexShiftsModified++;
-                      covered = true;
-                    }
-                  }
-                }
-              }
-              
-              if (covered) {
-                // Remove this slot from uncovered
-                bestResult!.uncoveredSlots = bestResult!.uncoveredSlots.filter(s => !(s.date === dateStr && parseInt(s.hour.split(":")[0], 10) === uncovH));
-              }
-            }
-          }
-          
-          if (flexShiftsModified > 0) {
-            flexReport.push(`\n📊 FLEX RIEPILOGO: ${flexShiftsModified} turni modificati, ${bestResult!.uncoveredSlots.length} slot ancora scoperti`);
-            flexReport.push(`   ⏩ Le ore extra verranno compensate automaticamente la settimana successiva`);
-            
-            // Recompute fitness after flex adjustments
-            const flexFitness = computeFitness(bestResult!.shifts, bestResult!.uncoveredSlots, employees, coverageData, weekDates, hourBalances, dept);
-            bestResult!.fitnessScore = flexFitness.score;
-            bestResult!.hourAdjustments = flexFitness.hourAdjustments;
-          } else {
-            flexReport.push(`  ℹ️ Nessun turno estendibile entro i limiti ±5h`);
-          }
-          
-          bestResult!.dayLogs.push(...flexReport);
-        }
-        
         const { shifts, uncoveredSlots, fitnessScore, hourAdjustments, dayLogs: bestDayLogs } = bestResult!;
 
         // Insert best shifts
@@ -3265,37 +3143,10 @@ Deno.serve(async (req) => {
         ].filter(Boolean).join(" | ");
         const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n") + "\n\n--- LOG GIORNALIERO DETTAGLIATO ---\n" + (bestDayLogs ?? []).join("\n");
 
-        // ── Save flex adjustments to generation_adjustments for next-week rebalancing ──
-        if (flexAdjustments.length > 0) {
-          const adjustInserts = flexAdjustments.map(fa => ({
-            store_id,
-            user_id: fa.userId,
-            week_start: week_start_date,
-            adjustment_type: "flex_auto",
-            extra_hours: fa.extraHours,
-            notes: `[Auto-flex] ${fa.reason}. Compensazione automatica settimana successiva.`,
-          }));
-          await adminClient.from("generation_adjustments").insert(adjustInserts);
-          
-          // Add flex adjustment info to suggestions
-          deptSuggestions.push({
-            id: `flex-adjustments-${dept}`,
-            type: "hour_reduction" as any,
-            severity: "info",
-            title: `Ore flex applicate a ${flexAdjustments.length} dipendente/i (${dept === "cucina" ? "Cucina" : "Sala"})`,
-            description: `Per coprire slot scoperti, sono state aggiunte ore extra: ${flexAdjustments.map(fa => `${fa.userName} +${fa.extraHours}h`).join(", ")}. Queste ore verranno compensate automaticamente nella generazione della settimana successiva.`,
-            actionLabel: "Info",
-            declineLabel: "Ok",
-          });
-        }
-        
-        // ── Add flex report to notes ──
-        const flexSection = flexReport.length > 0 ? "\n\n--- FLEX ±5h ---\n" + flexReport.join("\n") : "";
-        
         await adminClient.from("generation_runs").update({
           status: "completed",
           completed_at: new Date().toISOString(),
-          notes: fullNotes + flexSection,
+          notes: fullNotes,
           fitness_score: fitnessScore,
           iterations_run: iterationsRun,
           hour_adjustments: hourAdjustments,

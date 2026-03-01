@@ -391,27 +391,6 @@ const Dashboard = () => {
                 );
               })}
             </div>
-            {/* Weekly hours summary */}
-            {weekShifts.length > 0 && (() => {
-              const totalH = weekShifts.filter(s => !s.is_day_off && s.start_time && s.end_time).reduce((sum, s) => {
-                const sH = parseInt(s.start_time!.split(":")[0]);
-                let eH = parseInt(s.end_time!.split(":")[0]);
-                if (eH === 0) eH = 24;
-                return sum + Math.max(0, eH - sH);
-              }, 0);
-              const daysOff = weekShifts.filter(s => s.is_day_off).length;
-              return (
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border">
-                  <Badge variant="secondary" className="text-[11px] gap-1">
-                    <Clock className="h-3 w-3" />
-                    {totalH}h totali
-                  </Badge>
-                  <Badge variant="secondary" className="text-[11px] gap-1">
-                    {daysOff} riposi
-                  </Badge>
-                </div>
-              );
-            })()}
           </CardContent>
         </Card>
 

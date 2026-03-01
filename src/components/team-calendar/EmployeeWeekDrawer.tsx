@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Sun, Scissors, Clock } from "lucide-react";
+import { Sun, Scissors } from "lucide-react";
 import { format, parseISO, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import {
@@ -43,35 +43,16 @@ export function EmployeeWeekDrawer({
     return `${format(s, "d MMM", { locale: it })} – ${format(e, "d MMM yyyy", { locale: it })}`;
   }, [weekDates]);
 
-  const { shiftsByDate, weeklyStats } = useMemo(() => {
+  const shiftsByDate = useMemo(() => {
     const map = new Map<string, ShiftRow[]>();
     const empShifts = allShifts.filter(s => s.user_id === employeeId);
-    let totalHours = 0;
-    let splitDays = 0;
-    let daysOff = 0;
-    
     empShifts.forEach(s => {
       const arr = map.get(s.date) ?? [];
       arr.push(s);
       map.set(s.date, arr);
     });
-    
-    for (const dateStr of weekDates) {
-      const dayShifts = map.get(dateStr) ?? [];
-      const isDayOff = dayShifts.some(s => s.is_day_off);
-      if (isDayOff) { daysOff++; continue; }
-      const workShifts = dayShifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
-      if (workShifts.length >= 2) splitDays++;
-      for (const s of workShifts) {
-        const sH = parseInt(s.start_time!.split(":")[0]);
-        let eH = parseInt(s.end_time!.split(":")[0]);
-        if (eH === 0) eH = 24;
-        totalHours += Math.max(0, eH - sH);
-      }
-    }
-    
-    return { shiftsByDate: map, weeklyStats: { totalHours, splitDays, daysOff } };
-  }, [allShifts, employeeId, weekDates]);
+    return map;
+  }, [allShifts, employeeId]);
 
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
 
@@ -81,22 +62,6 @@ export function EmployeeWeekDrawer({
         <SheetHeader className="px-5 pt-5 pb-3 border-b">
           <SheetTitle className="text-base">{employeeName}</SheetTitle>
           <p className="text-xs text-muted-foreground">{weekLabel}</p>
-          <div className="flex items-center gap-3 mt-2">
-            <Badge variant="secondary" className="text-xs px-2 py-0.5 gap-1">
-              <Clock className="h-3 w-3" />
-              {weeklyStats.totalHours}h
-            </Badge>
-            <Badge variant="secondary" className="text-xs px-2 py-0.5 gap-1">
-              <Sun className="h-3 w-3" />
-              {weeklyStats.daysOff} riposi
-            </Badge>
-            {weeklyStats.splitDays > 0 && (
-              <Badge variant="secondary" className="text-xs px-2 py-0.5 gap-1 text-amber-600 dark:text-amber-400 border-amber-300">
-                <Scissors className="h-3 w-3" />
-                {weeklyStats.splitDays} spezzati
-              </Badge>
-            )}
-          </div>
         </SheetHeader>
 
         <ScrollArea className="h-[calc(70vh-80px)]">
