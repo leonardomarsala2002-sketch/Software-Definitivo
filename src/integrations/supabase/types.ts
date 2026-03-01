@@ -1265,6 +1265,7 @@ export type Database = {
           max_team_hours_cucina_per_week: number
           max_team_hours_sala_per_week: number
           max_weekly_hours_per_employee: number
+          min_daily_hours_per_employee: number
           store_id: string
           updated_at: string
         }
@@ -1281,6 +1282,7 @@ export type Database = {
           max_team_hours_cucina_per_week?: number
           max_team_hours_sala_per_week?: number
           max_weekly_hours_per_employee?: number
+          min_daily_hours_per_employee?: number
           store_id: string
           updated_at?: string
         }
@@ -1297,6 +1299,7 @@ export type Database = {
           max_team_hours_cucina_per_week?: number
           max_team_hours_sala_per_week?: number
           max_weekly_hours_per_employee?: number
+          min_daily_hours_per_employee?: number
           store_id?: string
           updated_at?: string
         }
