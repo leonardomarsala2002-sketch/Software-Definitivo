@@ -1179,6 +1179,7 @@ export type Database = {
           department: Database["public"]["Enums"]["department"]
           hour_slot: string
           id: string
+          max_staff_required: number | null
           min_staff_required: number
           store_id: string
           updated_at: string
@@ -1189,6 +1190,7 @@ export type Database = {
           department: Database["public"]["Enums"]["department"]
           hour_slot: string
           id?: string
+          max_staff_required?: number | null
           min_staff_required?: number
           store_id: string
           updated_at?: string
@@ -1199,6 +1201,7 @@ export type Database = {
           department?: Database["public"]["Enums"]["department"]
           hour_slot?: string
           id?: string
+          max_staff_required?: number | null
           min_staff_required?: number
           store_id?: string
           updated_at?: string

@@ -4,6 +4,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Save, Copy, Check, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import NumberStepper from "./NumberStepper";
@@ -14,12 +15,15 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   hours: OpeningHour[];
   coverage: CoverageReq[];
-  onSave: (rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[]) => void;
+  onSave: (rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number; max_staff_required: number | null }[]) => void;
   isSaving: boolean;
   readOnly: boolean;
 }
 
-type CovMap = Record<string, { sala: number; cucina: number }>;
+type CovEntry = { sala: number; cucina: number; salaMax: number | null; cucinaMax: number | null };
+type CovMap = Record<string, CovEntry>;
+
+const defaultEntry = (): CovEntry => ({ sala: 0, cucina: 0, salaMax: null, cucinaMax: null });
 
 export default function CoverageModal({ open, onOpenChange, hours, coverage, onSave, isSaving, readOnly }: Props) {
   const [step, setStep] = useState(0);
@@ -31,8 +35,10 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
     coverage.forEach((c) => {
       const slot = c.hour_slot.slice(0, 5);
       const key = `${c.day_of_week}-${slot}`;
-      if (!m[key]) m[key] = { sala: 0, cucina: 0 };
-      m[key][c.department as "sala" | "cucina"] = c.min_staff_required;
+      if (!m[key]) m[key] = defaultEntry();
+      const dept = c.department as "sala" | "cucina";
+      m[key][dept] = c.min_staff_required;
+      m[key][dept === "sala" ? "salaMax" : "cucinaMax"] = (c as any).max_staff_required ?? null;
     });
     return m;
   }, [coverage]);
@@ -48,12 +54,42 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
   const oh = hours.find((h) => h.day_of_week === activeDay);
   const slots = oh ? generateSlots(oh.opening_time, oh.closing_time) : [];
 
-  const update = (day: number, slot: string, dept: "sala" | "cucina", val: number) => {
+  const updateMin = (day: number, slot: string, dept: "sala" | "cucina", val: number) => {
     const key = `${day}-${slot}`;
+    setCovMap((prev) => {
+      const entry = { ...(prev[key] || defaultEntry()) };
+      entry[dept] = val;
+      // if max is enabled and less than new min, bump it
+      const maxKey = dept === "sala" ? "salaMax" : "cucinaMax";
+      if (entry[maxKey] !== null && entry[maxKey]! < val) {
+        entry[maxKey] = val;
+      }
+      return { ...prev, [key]: entry };
+    });
+  };
+
+  const updateMax = (day: number, slot: string, dept: "sala" | "cucina", val: number) => {
+    const key = `${day}-${slot}`;
+    const maxKey = dept === "sala" ? "salaMax" : "cucinaMax";
     setCovMap((prev) => ({
       ...prev,
-      [key]: { ...(prev[key] || { sala: 0, cucina: 0 }), [dept]: val },
+      [key]: { ...(prev[key] || defaultEntry()), [maxKey]: val },
     }));
+  };
+
+  const toggleMinMax = (day: number, slot: string, dept: "sala" | "cucina", enabled: boolean) => {
+    const key = `${day}-${slot}`;
+    const maxKey = dept === "sala" ? "salaMax" : "cucinaMax";
+    setCovMap((prev) => {
+      const entry = { ...(prev[key] || defaultEntry()) };
+      if (enabled) {
+        // enable max: default to min value + 1 (at least min)
+        entry[maxKey] = Math.max(entry[dept] + 1, 1);
+      } else {
+        entry[maxKey] = null;
+      }
+      return { ...prev, [key]: entry };
+    });
   };
 
   const copyToSelectedDays = () => {
@@ -69,7 +105,7 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         for (const slot of sourceSlots) {
           const srcKey = `${sourceDay}-${slot}`;
           const tgtKey = `${targetDay}-${slot}`;
-          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0 }) };
+          next[tgtKey] = { ...(next[srcKey] || defaultEntry()) };
         }
       }
       return next;
@@ -90,7 +126,7 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         for (const slot of sourceSlots) {
           const srcKey = `${sourceDay}-${slot}`;
           const tgtKey = `${d}-${slot}`;
-          next[tgtKey] = { ...(next[srcKey] || { sala: 0, cucina: 0 }) };
+          next[tgtKey] = { ...(next[srcKey] || defaultEntry()) };
         }
       }
       return next;
@@ -99,16 +135,16 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
   };
 
   const handleSave = () => {
-    const rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[] = [];
+    const rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number; max_staff_required: number | null }[] = [];
     for (let day = 0; day < 7; day++) {
       const dayOh = hours.find((h) => h.day_of_week === day);
       if (!dayOh) continue;
       const daySlots = generateSlots(dayOh.opening_time, dayOh.closing_time);
       for (const slot of daySlots) {
         const key = `${day}-${slot}`;
-        const entry = covMap[key] || { sala: 0, cucina: 0 };
-        if (entry.sala > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "sala", min_staff_required: entry.sala });
-        if (entry.cucina > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "cucina", min_staff_required: entry.cucina });
+        const entry = covMap[key] || defaultEntry();
+        if (entry.sala > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "sala", min_staff_required: entry.sala, max_staff_required: entry.salaMax });
+        if (entry.cucina > 0) rows.push({ day_of_week: day, hour_slot: slot, department: "cucina", min_staff_required: entry.cucina, max_staff_required: entry.cucinaMax });
       }
     }
     onSave(rows);
@@ -128,7 +164,7 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-base">Copertura Richiesta</DialogTitle>
           <DialogDescription className="text-xs">
-            {step === 0 ? "Seleziona giorni e configura slot" : "Imposta il numero esatto di personale per slot (nessun overbooking)"}
+            {step === 0 ? "Seleziona giorni e configura slot" : "Imposta min personale per slot. Attiva lo switch per impostare anche un massimo."}
           </DialogDescription>
         </DialogHeader>
 
@@ -195,25 +231,74 @@ export default function CoverageModal({ open, onOpenChange, hours, coverage, onS
             </div>
 
             {/* Slots */}
-            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {slots.length === 0 ? (
                 <p className="py-6 text-center text-xs text-muted-foreground">Nessun orario configurato per questo giorno</p>
               ) : (
                 slots.map((slot) => {
                   const key = `${activeDay}-${slot}`;
-                  const entry = covMap[key] || { sala: 0, cucina: 0 };
+                  const entry = covMap[key] || defaultEntry();
                   const endH = parseInt(slot.split(":")[0]) + 1;
                   const endSlot = `${String(endH).padStart(2, "0")}:${slot.split(":")[1]}`;
+                  const maxKey = activeDept === "sala" ? "salaMax" : "cucinaMax";
+                  const hasMax = entry[maxKey] !== null;
+                  const minVal = entry[activeDept];
+                  const maxVal = entry[maxKey];
+
                   return (
-                    <div key={slot} className="flex items-center justify-between rounded-md border border-border/30 bg-accent/10 px-2.5 py-1">
-                      <span className="text-xs font-medium text-foreground">{slot}–{endSlot}</span>
-                      <NumberStepper
-                        value={entry[activeDept]}
-                        onChange={(v) => update(activeDay, slot, activeDept, v)}
-                        disabled={readOnly}
-                        max={99}
-                        compact
-                      />
+                    <div key={slot} className="rounded-lg border border-border/30 bg-accent/10 px-2.5 py-1.5">
+                      {/* Time label + min stepper */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground whitespace-nowrap">{slot}–{endSlot}</span>
+                        <div className="flex items-center gap-2">
+                          {hasMax && <span className="text-[10px] text-muted-foreground font-medium">Min</span>}
+                          <NumberStepper
+                            value={minVal}
+                            onChange={(v) => updateMin(activeDay, slot, activeDept, v)}
+                            disabled={readOnly}
+                            max={99}
+                            compact
+                          />
+                        </div>
+                      </div>
+
+                      {/* Min/Max toggle + max stepper */}
+                      {hasMax && (
+                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-border/20">
+                          <div className="flex items-center gap-1.5">
+                            <Switch
+                              checked={true}
+                              onCheckedChange={() => toggleMinMax(activeDay, slot, activeDept, false)}
+                              disabled={readOnly}
+                              className="scale-75 origin-left"
+                            />
+                            <span className="text-[10px] text-muted-foreground">Range min/max</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground font-medium">Max</span>
+                            <NumberStepper
+                              value={maxVal ?? minVal}
+                              onChange={(v) => updateMax(activeDay, slot, activeDept, Math.max(v, minVal))}
+                              disabled={readOnly}
+                              min={minVal}
+                              max={99}
+                              compact
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {!hasMax && !readOnly && (
+                        <div className="flex items-center mt-0.5">
+                          <Switch
+                            checked={false}
+                            onCheckedChange={() => toggleMinMax(activeDay, slot, activeDept, true)}
+                            disabled={readOnly}
+                            className="scale-75 origin-left"
+                          />
+                          <span className="text-[10px] text-muted-foreground ml-0.5">Abilita max</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })

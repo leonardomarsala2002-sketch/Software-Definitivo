@@ -221,7 +221,7 @@ export function useSaveCoverage() {
       rows,
     }: {
       storeId: string;
-      rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number }[];
+      rows: { day_of_week: number; hour_slot: string; department: "sala" | "cucina"; min_staff_required: number; max_staff_required?: number | null }[];
     }) => {
       const { error: delErr } = await supabase
         .from("store_coverage_requirements")
@@ -229,7 +229,7 @@ export function useSaveCoverage() {
         .eq("store_id", storeId);
       if (delErr) throw delErr;
       if (rows.length > 0) {
-        const inserts = rows.map((r) => ({ ...r, store_id: storeId }));
+        const inserts = rows.map((r) => ({ ...r, store_id: storeId, max_staff_required: r.max_staff_required ?? null }));
         const { error: insErr } = await supabase
           .from("store_coverage_requirements")
           .insert(inserts as any);
