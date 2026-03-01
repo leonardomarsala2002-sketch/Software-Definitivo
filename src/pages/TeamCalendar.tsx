@@ -116,9 +116,10 @@ const TeamCalendar = () => {
     );
   }, [generationRuns, department]);
 
+  // AI is mandatory — badge shows whenever there are completed generation runs
   const aiActive = useMemo(() => {
     return generationRuns.some(r =>
-      latestRunIds.includes(r.id) && r.notes?.includes("Gemini 2.5 AI")
+      latestRunIds.includes(r.id) && r.status === "completed"
     );
   }, [generationRuns, latestRunIds]);
 

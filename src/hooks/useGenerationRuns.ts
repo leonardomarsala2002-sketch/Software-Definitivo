@@ -63,7 +63,15 @@ export function useGenerateShifts() {
         toast.success(`Turni generati: ${totalShifts} turni`);
       }
     },
-    onError: (err: any) => toast.error(err.message ?? "Errore generazione turni"),
+    onError: (err: any) => {
+      const msg = err.message ?? "Errore generazione turni";
+      if (msg.includes("GEMINI_AI_REQUIRED")) {
+        const cleanMsg = msg.replace("GEMINI_AI_REQUIRED: ", "");
+        toast.error(`⚠️ Gemini 2.5 AI non disponibile: ${cleanMsg}`, { duration: 10000 });
+      } else {
+        toast.error(msg);
+      }
+    },
   });
 }
 

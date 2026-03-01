@@ -358,13 +358,11 @@ async function generateAIStrategies(context: {
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
-    console.log("[AI] No LOVABLE_API_KEY, using default strategies");
-    return { strategies: getDefaultStrategies(), aiUsed: false };
+    throw new Error("GEMINI_AI_REQUIRED: LOVABLE_API_KEY non configurata. Impossibile generare turni senza Gemini 2.5 AI. Configura la chiave nelle impostazioni del progetto.");
   }
 
-  try {
-    const ratio = (context.totalCoverageHours / Math.max(context.totalEmployeeHours, 1)).toFixed(2);
-    const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti. Genera 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
+  const ratio = (context.totalCoverageHours / Math.max(context.totalEmployeeHours, 1)).toFixed(2);
+  const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti. Genera 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
 
 Ogni strategia controlla l'algoritmo:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
@@ -382,7 +380,7 @@ REGOLE:
 - Se <0.5: più turni lunghi
 - Distribuisci equamente giorni liberi e spezzati`;
 
-    const userPrompt = `CONTESTO:
+  const userPrompt = `CONTESTO:
 - Reparto: ${context.department}
 - Dipendenti: ${context.employees.length} (ore: ${context.employees.map(e => e.weekly_contract_hours).join(', ')})
 - Max ore giornaliere: ${context.rules.max_daily_hours_per_employee}h
@@ -397,84 +395,93 @@ ${context.smartMemorySummary}
 
 Genera ESATTAMENTE 40 strategie diverse.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "submit_strategies",
-            description: "Submit 40 diverse scheduling strategies",
-            parameters: {
-              type: "object",
-              properties: {
-                strategies: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      maxSplits: { type: "number" },
-                      preferShort: { type: "boolean" },
-                      randomize: { type: "boolean" },
-                      reserveForSplit: { type: "number" },
-                      description: { type: "string" },
-                    },
-                    required: ["maxSplits", "preferShort", "randomize", "reserveForSplit", "description"],
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "submit_strategies",
+          description: "Submit 40 diverse scheduling strategies",
+          parameters: {
+            type: "object",
+            properties: {
+              strategies: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    maxSplits: { type: "number" },
+                    preferShort: { type: "boolean" },
+                    randomize: { type: "boolean" },
+                    reserveForSplit: { type: "number" },
+                    description: { type: "string" },
                   },
+                  required: ["maxSplits", "preferShort", "randomize", "reserveForSplit", "description"],
                 },
               },
-              required: ["strategies"],
             },
+            required: ["strategies"],
           },
-        }],
-        tool_choice: { type: "function", function: { name: "submit_strategies" } },
-      }),
-    });
+        },
+      }],
+      tool_choice: { type: "function", function: { name: "submit_strategies" } },
+    }),
+  });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[AI] Gemini error ${response.status}: ${errText}`);
-      return { strategies: getDefaultStrategies(), aiUsed: false };
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`[AI] Gemini error ${response.status}: ${errText}`);
+    if (response.status === 429) {
+      throw new Error("GEMINI_AI_REQUIRED: Gemini 2.5 AI ha raggiunto il limite di richieste. Riprova tra qualche minuto.");
     }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      console.log("[AI] No tool call in response, using defaults");
-      return { strategies: getDefaultStrategies(), aiUsed: false };
+    if (response.status === 402) {
+      throw new Error("GEMINI_AI_REQUIRED: Crediti Lovable AI esauriti. Aggiungi crediti in Settings → Workspace → Usage e riprova.");
     }
-
-    const args = JSON.parse(toolCall.function.arguments);
-    const strategies: AIStrategy[] = (args.strategies ?? []).map((s: any) => ({
-      maxSplits: Math.min(3, Math.max(0, Number(s.maxSplits) || 0)),
-      preferShort: Boolean(s.preferShort),
-      randomize: Boolean(s.randomize),
-      reserveForSplit: Math.min(4, Math.max(0, Number(s.reserveForSplit) || 0)),
-      description: String(s.description ?? "").slice(0, 50),
-    }));
-
-    console.log(`[AI] Gemini generated ${strategies.length} strategies`);
-
-    // Pad to 40 if needed
-    while (strategies.length < 40) {
-      const defaults = getDefaultStrategies();
-      strategies.push(defaults[strategies.length % defaults.length]);
-    }
-
-    return { strategies: strategies.slice(0, 40), aiUsed: true };
-  } catch (err) {
-    console.error("[AI] Strategy generation failed:", err);
-    return { strategies: getDefaultStrategies(), aiUsed: false };
+    throw new Error(`GEMINI_AI_REQUIRED: Gemini 2.5 AI non disponibile (HTTP ${response.status}). Riprova o controlla la configurazione.`);
   }
+
+  const data = await response.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) {
+    throw new Error("GEMINI_AI_REQUIRED: Gemini 2.5 AI non ha restituito strategie valide. Riprova la generazione.");
+  }
+
+  const args = JSON.parse(toolCall.function.arguments);
+  const strategies: AIStrategy[] = (args.strategies ?? []).map((s: any) => ({
+    maxSplits: Math.min(3, Math.max(0, Number(s.maxSplits) || 0)),
+    preferShort: Boolean(s.preferShort),
+    randomize: Boolean(s.randomize),
+    reserveForSplit: Math.min(4, Math.max(0, Number(s.reserveForSplit) || 0)),
+    description: String(s.description ?? "").slice(0, 50),
+  }));
+
+  if (strategies.length === 0) {
+    throw new Error("GEMINI_AI_REQUIRED: Gemini 2.5 AI ha restituito 0 strategie. Riprova la generazione.");
+  }
+
+  console.log(`[AI] Gemini 2.5 generated ${strategies.length} strategies successfully`);
+
+  // Pad to 40 with variations of existing AI strategies if needed
+  while (strategies.length < 40) {
+    const base = strategies[strategies.length % strategies.length];
+    strategies.push({
+      ...base,
+      randomize: !base.randomize,
+      description: `${base.description}-v${strategies.length}`,
+    });
+  }
+
+  return { strategies: strategies.slice(0, 40), aiUsed: true };
 }
 
 function postValidateShifts(
@@ -1494,28 +1501,24 @@ Deno.serve(async (req) => {
           ? `MEMORIA STORICA: ${goodP} pattern positivi, ${badP} negativi su ${memoryEntries.length}`
           : "MEMORIA STORICA: nessun dato";
 
-        let strategies: AIStrategy[];
-        try {
-          const aiResult = await generateAIStrategies({
-            rules,
-            employees: deptEmployees.map(e => ({ department: e.department, weekly_contract_hours: e.weekly_contract_hours })),
-            coverageSummary: `COPERTURA (${dept}):\n${covSummary}`,
-            department: dept,
-            smartMemorySummary: memorySummary,
-            totalCoverageHours,
-            totalEmployeeHours,
-          });
-          strategies = aiResult.strategies;
-          aiStrategiesUsed = aiResult.aiUsed;
-          console.log(`[${dept}] ${aiStrategiesUsed ? "AI" : "Default"} generated ${strategies.length} strategies`);
-        } catch (err) {
-          console.error(`[${dept}] AI failed, using defaults:`, err);
-          strategies = getDefaultStrategies();
-        }
+        // Gemini 2.5 AI is MANDATORY — no fallback allowed
+        const aiResult = await generateAIStrategies({
+          rules,
+          employees: deptEmployees.map(e => ({ department: e.department, weekly_contract_hours: e.weekly_contract_hours })),
+          coverageSummary: `COPERTURA (${dept}):\n${covSummary}`,
+          department: dept,
+          smartMemorySummary: memorySummary,
+          totalCoverageHours,
+          totalEmployeeHours,
+        });
+        const strategies = aiResult.strategies;
+        aiStrategiesUsed = true; // Always true — AI is mandatory
+        console.log(`[${dept}] Gemini 2.5 AI generated ${strategies.length} strategies`);
 
         strategyReport.push(`=== ${dept.toUpperCase()} ===`);
+        strategyReport.push(`Motore: Gemini 2.5 AI (obbligatorio)`);
         strategyReport.push(`Dipendenti: ${deptEmployees.length} | Copertura: ${totalCoverageHours}h | Disponibili: ${totalEmployeeHours}h`);
-        strategyReport.push(`Strategie: ${aiStrategiesUsed ? "Gemini 2.5" : "Fallback algoritmico"} (${strategies.length})`);
+        strategyReport.push(`Strategie AI: ${strategies.length}`);
 
         let bestStrategyIdx = -1;
         let iterationsRun = 0;
@@ -1972,7 +1975,7 @@ Deno.serve(async (req) => {
         const statusNotes = [
           uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
           `fitness: ${fitnessScore.toFixed(1)}`,
-          aiStrategiesUsed ? "Gemini 2.5 AI" : "algoritmo classico",
+          "Gemini 2.5 AI", // Always AI — no fallback
           fallbackUsed ? "spezzati attivati" : null,
           isPatchMode ? "modalità patch" : null,
         ].filter(Boolean).join(" | ");
