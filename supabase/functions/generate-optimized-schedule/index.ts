@@ -807,6 +807,233 @@ function autoCorrectViolations(
   return { correctedShifts: corrected, corrections: allCorrections };
 }
 
+// ─── Equity Rebalancing Pass ─────────────────────────────────────────────────
+
+function equalizeEquity(
+  shifts: GeneratedShift[],
+  employees: EmployeeData[],
+  rules: StoreRules,
+  empConstraints: Map<string, EmployeeConstraints>,
+  department: "sala" | "cucina",
+  coverage: CoverageReq[],
+  weekDates: string[],
+  availability: AvailSlot[],
+  exceptions: ExceptionBlock[],
+  allowedTimes: AllowedTime[],
+  openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
+): { rebalancedShifts: GeneratedShift[]; equityReport: string[] } {
+  let result = [...shifts];
+  const equityReport: string[] = [];
+  const deptEmployees = employees.filter(e => e.department === department && e.is_active);
+  if (deptEmployees.length < 2) return { rebalancedShifts: result, equityReport };
+
+  const empNameMap = new Map(employees.map(e => [e.user_id, `${(e as any).first_name ?? ""} ${(e as any).last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
+  const getEmpName = (uid: string) => empNameMap.get(uid) ?? uid.slice(0, 8);
+
+  // Helper: count days off and splits for current state
+  function computeStats(s: GeneratedShift[]) {
+    const daysOffMap = new Map<string, number>();
+    const splitsMap = new Map<string, number>();
+    const hoursMap = new Map<string, number>();
+    for (const emp of deptEmployees) {
+      const workDays = new Set(s.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time).map(sh => sh.date));
+      daysOffMap.set(emp.user_id, weekDates.length - workDays.size);
+      let splitCount = 0;
+      const byDate = new Map<string, number>();
+      for (const sh of s.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time)) {
+        byDate.set(sh.date, (byDate.get(sh.date) ?? 0) + 1);
+      }
+      for (const [, c] of byDate) { if (c > 1) splitCount += c - 1; }
+      splitsMap.set(emp.user_id, splitCount);
+      let hours = 0;
+      for (const sh of s.filter(sh => sh.user_id === emp.user_id && sh.department === department && !sh.is_day_off && sh.start_time && sh.end_time)) {
+        hours += parseHour(sh.end_time!) - parseHour(sh.start_time!);
+      }
+      hoursMap.set(emp.user_id, hours);
+    }
+    return { daysOffMap, splitsMap, hoursMap };
+  }
+
+  // Helper: get day demand
+  function getDayDemand(dateStr: string): number {
+    const dow = getDayOfWeek(dateStr);
+    return coverage.filter(c => c.day_of_week === dow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
+  }
+
+  // ── 1) EQUALIZE DAYS OFF ──
+  // Target: all employees should have the same number of days off if possible
+  const MAX_EQUITY_PASSES = 3;
+  for (let pass = 0; pass < MAX_EQUITY_PASSES; pass++) {
+    const stats = computeStats(result);
+    const offValues = [...stats.daysOffMap.values()];
+    const avgOff = offValues.reduce((a, b) => a + b, 0) / offValues.length;
+    const targetOff = Math.round(avgOff);
+    const maxOff = Math.max(...offValues);
+    const minOff = Math.min(...offValues);
+    if (maxOff - minOff <= 1) break; // Already balanced enough
+
+    // Find employees with too many days off (donors) and too few (receivers)
+    const donors = deptEmployees.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) > targetOff)
+      .sort((a, b) => (stats.daysOffMap.get(b.user_id) ?? 0) - (stats.daysOffMap.get(a.user_id) ?? 0));
+    const receivers = deptEmployees.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) < targetOff)
+      .sort((a, b) => (stats.daysOffMap.get(a.user_id) ?? 0) - (stats.daysOffMap.get(b.user_id) ?? 0));
+
+    let swapped = false;
+    for (const donor of donors) {
+      if ((stats.daysOffMap.get(donor.user_id) ?? 0) <= targetOff) continue;
+      for (const receiver of receivers) {
+        if ((stats.daysOffMap.get(receiver.user_id) ?? 0) >= targetOff) continue;
+        // Find a day where donor is off and receiver works, and swap is safe
+        const donorOffDays = weekDates.filter(d => {
+          const works = result.some(s => s.user_id === donor.user_id && s.department === department && s.date === d && !s.is_day_off && s.start_time);
+          return !works;
+        });
+        const receiverWorkDays = weekDates.filter(d => {
+          const works = result.some(s => s.user_id === receiver.user_id && s.department === department && s.date === d && !s.is_day_off && s.start_time);
+          return works;
+        });
+
+        // Sort by demand (swap on lowest demand days)
+        donorOffDays.sort((a, b) => getDayDemand(a) - getDayDemand(b));
+
+        for (const swapDay of donorOffDays) {
+          // Check: can donor work on swapDay?
+          if (!isAvailable(donor.user_id, swapDay, availability, exceptions)) continue;
+          const ec = empConstraints.get(donor.user_id);
+          const maxWeekly = ec?.custom_max_weekly_hours ?? rules.max_weekly_hours_per_employee;
+          if ((stats.hoursMap.get(donor.user_id) ?? 0) >= maxWeekly) continue;
+
+          // Find a day where receiver works that has low demand to give as day off
+          for (const offDay of receiverWorkDays) {
+            if (offDay === swapDay) continue;
+            const receiverEc = empConstraints.get(receiver.user_id);
+            const minDaysOff = receiverEc?.custom_days_off ?? rules.mandatory_days_off_per_week;
+            // Receiver must still have minimum days off after gaining this one
+            // (they're getting +1 so it's fine if they were below target)
+
+            // Check: would removing receiver's shift on offDay hurt coverage?
+            const dow = getDayOfWeek(offDay);
+            const dayCov = coverage.filter(c => c.day_of_week === dow && c.department === department);
+            const dayShifts = result.filter(s => s.date === offDay && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+            let wouldUncoverAny = false;
+            for (const c of dayCov) {
+              const h = parseInt(c.hour_slot.split(":")[0], 10);
+              const staffAtH = dayShifts.filter(s => parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h).length;
+              const receiverCoversH = dayShifts.filter(s => s.user_id === receiver.user_id && parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h).length;
+              if (staffAtH - receiverCoversH < c.min_staff_required) { wouldUncoverAny = true; break; }
+            }
+            if (wouldUncoverAny) continue;
+
+            // SWAP: donor gets a shift on swapDay (copy receiver's typical hours), receiver gets day off on offDay
+            // Remove receiver's shifts on offDay
+            const removedShifts = result.filter(s => s.user_id === receiver.user_id && s.department === department && s.date === offDay && !s.is_day_off);
+            result = result.filter(s => !removedShifts.includes(s));
+            result.push({
+              store_id: removedShifts[0]?.store_id ?? "",
+              user_id: receiver.user_id,
+              date: offDay,
+              start_time: null, end_time: null,
+              department, is_day_off: true, status: "draft",
+              generation_run_id: removedShifts[0]?.generation_run_id ?? "",
+            });
+
+            // Add donor shift on swapDay (use a reasonable template from existing shifts)
+            const donorExistingShift = result.find(s => s.user_id === donor.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+            if (donorExistingShift) {
+              // Remove donor's day off marker on swapDay if exists
+              result = result.filter(s => !(s.user_id === donor.user_id && s.department === department && s.date === swapDay && s.is_day_off));
+              result.push({
+                store_id: donorExistingShift.store_id,
+                user_id: donor.user_id,
+                date: swapDay,
+                start_time: donorExistingShift.start_time,
+                end_time: donorExistingShift.end_time,
+                department, is_day_off: false, status: "draft",
+                generation_run_id: donorExistingShift.generation_run_id,
+              });
+            }
+
+            equityReport.push(`SWAP riposo: ${getEmpName(receiver.user_id)} riposa ${offDay} (era al lavoro), ${getEmpName(donor.user_id)} lavora ${swapDay} (era in riposo)`);
+            swapped = true;
+            break;
+          }
+          if (swapped) break;
+        }
+        if (swapped) break;
+      }
+      if (swapped) break;
+    }
+    if (!swapped) break;
+  }
+
+  // ── 2) EQUALIZE SPLIT SHIFTS ──
+  // If some employees have many more splits than others, try to swap
+  for (let pass = 0; pass < MAX_EQUITY_PASSES; pass++) {
+    const stats = computeStats(result);
+    const splitValues = [...stats.splitsMap.values()];
+    const maxSplits = Math.max(...splitValues);
+    const minSplits = Math.min(...splitValues);
+    if (maxSplits - minSplits <= 1) break;
+
+    const overloaded = deptEmployees.filter(e => (stats.splitsMap.get(e.user_id) ?? 0) > minSplits + 1)
+      .sort((a, b) => (stats.splitsMap.get(b.user_id) ?? 0) - (stats.splitsMap.get(a.user_id) ?? 0));
+
+    let swapped = false;
+    for (const emp of overloaded) {
+      // Find a day where this employee has a split and remove the shorter segment
+      const empShifts = result.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+      const byDate = new Map<string, typeof empShifts>();
+      for (const s of empShifts) {
+        const arr = byDate.get(s.date) ?? [];
+        arr.push(s);
+        byDate.set(s.date, arr);
+      }
+      for (const [date, dayShifts] of byDate) {
+        if (dayShifts.length <= 1) continue;
+        // Remove shortest segment
+        dayShifts.sort((a, b) => (parseHour(a.end_time!) - parseHour(a.start_time!)) - (parseHour(b.end_time!) - parseHour(b.start_time!)));
+        const toRemove = dayShifts[0];
+        result = result.filter(s => s !== toRemove);
+        equityReport.push(`RIDUZIONE spezzati: ${getEmpName(emp.user_id)} rimosso spezzato ${date} (${toRemove.start_time}-${toRemove.end_time})`);
+        swapped = true;
+        break;
+      }
+      if (swapped) break;
+    }
+    if (!swapped) break;
+  }
+
+  // ── 3) GENERATE EQUITY REPORT ──
+  const finalStats = computeStats(result);
+  equityReport.push(`\n📊 RIEPILOGO EQUITÀ:`);
+  const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
+  const splitValues = [...finalStats.splitsMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
+  const hoursValues = [...finalStats.hoursMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
+
+  const avgOff = offValues.reduce((a, b) => a + b.value, 0) / Math.max(offValues.length, 1);
+  const avgSplits = splitValues.reduce((a, b) => a + b.value, 0) / Math.max(splitValues.length, 1);
+  const avgHours = hoursValues.reduce((a, b) => a + b.value, 0) / Math.max(hoursValues.length, 1);
+
+  equityReport.push(`Media riposi: ${avgOff.toFixed(1)} | Media spezzati: ${avgSplits.toFixed(1)} | Media ore: ${avgHours.toFixed(1)}`);
+
+  for (const emp of deptEmployees) {
+    const off = finalStats.daysOffMap.get(emp.user_id) ?? 0;
+    const splits = finalStats.splitsMap.get(emp.user_id) ?? 0;
+    const hours = finalStats.hoursMap.get(emp.user_id) ?? 0;
+    const offDelta = off - avgOff;
+    const splitDelta = splits - avgSplits;
+    const hourDelta = hours - avgHours;
+    const flags: string[] = [];
+    if (Math.abs(offDelta) >= 1) flags.push(`riposi ${offDelta > 0 ? "+" : ""}${offDelta.toFixed(0)} vs media`);
+    if (Math.abs(splitDelta) >= 1) flags.push(`spezzati ${splitDelta > 0 ? "+" : ""}${splitDelta.toFixed(0)} vs media`);
+    if (Math.abs(hourDelta) >= 3) flags.push(`ore ${hourDelta > 0 ? "+" : ""}${hourDelta.toFixed(0)}h vs media`);
+    const status = flags.length === 0 ? "✅" : `⚠️ ${flags.join(", ")}`;
+    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h — ${status}`);
+  }
+
+  return { rebalancedShifts: result, equityReport };
+}
+
 // ─── Single Iteration Generator ──────────────────────────────────────────────
 
 // Smart memory score map: key = `${userId}-${dow}-${hour}` -> score (positive = good, negative = bad)
@@ -2068,14 +2295,20 @@ Deno.serve(async (req) => {
             const { correctedShifts, corrections } = autoCorrectViolations(
               result.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
             );
-            // Recompute fitness with corrected shifts
+            // Apply equity rebalancing pass: equalize days off and splits
+            const { rebalancedShifts, equityReport } = equalizeEquity(
+              correctedShifts, employees, rules, empConstraints, dept,
+              coverageData, weekDates, availability, allExceptions,
+              allowedData, openingHoursData,
+            );
+            // Recompute fitness with equity-rebalanced shifts
             const correctedUncovered: { date: string; hour: string }[] = [];
             for (const dateStr of iterDates) {
               const dow = getDayOfWeek(dateStr);
               const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
               for (const c of dayCov) {
                 const h = parseInt(c.hour_slot.split(":")[0], 10);
-                const assigned = correctedShifts.filter(s =>
+                const assigned = rebalancedShifts.filter(s =>
                   !s.is_day_off && s.date === dateStr && s.department === dept &&
                   s.start_time !== null && s.end_time !== null &&
                   parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
@@ -2085,22 +2318,22 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            const correctedFitness = computeFitness(correctedShifts, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const correctedFitness = computeFitness(rebalancedShifts, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept);
             const correctedResult: IterationResult = {
-              shifts: correctedShifts,
+              shifts: rebalancedShifts,
               uncoveredSlots: correctedUncovered,
               fitnessScore: correctedFitness.score,
               hourAdjustments: correctedFitness.hourAdjustments,
-              dayLogs: result.dayLogs,
+              dayLogs: [...result.dayLogs, ...equityReport],
             };
 
-            // Track ALL corrections for this candidate
-            const candidateValid = postValidateShifts(correctedShifts, employees, rules, empConstraints, dept);
+            // Track ALL corrections + equity swaps for this candidate
+            const candidateValid = postValidateShifts(rebalancedShifts, employees, rules, empConstraints, dept);
 
             if (!bestResult || correctedResult.fitnessScore > bestResult.fitnessScore) {
               bestResult = correctedResult;
               bestStrategyIdx = i;
-              adaptationNotes = [...corrections];
+              adaptationNotes = [...corrections, ...equityReport.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE"))];
               if (round.daysOffDelta !== 0 || round.splitsDelta !== 0) {
                 adaptationNotes.push(`Adattamento: ${round.label}`);
               }
@@ -2108,7 +2341,7 @@ Deno.serve(async (req) => {
 
             // Perfect solution: 0 uncovered, 0 violations, positive fitness
             if (correctedResult.uncoveredSlots.length === 0 && candidateValid.valid && correctedResult.fitnessScore >= 0) {
-              strategyReport.push(`✅ #${i + 1} "${strat.description}" PERFETTA (fitness: ${correctedResult.fitnessScore.toFixed(1)})${corrections.length > 0 ? ` [${corrections.length} correzioni auto]` : ""}`);
+              strategyReport.push(`✅ #${i + 1} "${strat.description}" PERFETTA (fitness: ${correctedResult.fitnessScore.toFixed(1)})${corrections.length > 0 ? ` [${corrections.length} correzioni auto, ${equityReport.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE")).length} swap equità]` : ""}`);
               break;
             }
           }
@@ -2130,14 +2363,20 @@ Deno.serve(async (req) => {
             const { correctedShifts, corrections } = autoCorrectViolations(
               bestResult.shifts, employees, rules, empConstraints, dept, coverageData, weekDates,
             );
-            // Recompute uncovered after final correction
+            // Final equity pass
+            const { rebalancedShifts: finalRebalanced, equityReport: finalEquity } = equalizeEquity(
+              correctedShifts, employees, rules, empConstraints, dept,
+              coverageData, weekDates, availability, allExceptions,
+              allowedData, openingHoursData,
+            );
+            // Recompute uncovered after final correction + equity
             const finalUncovered: { date: string; hour: string }[] = [];
             for (const dateStr of iterDates) {
               const dow = getDayOfWeek(dateStr);
               const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
               for (const c of dayCov) {
                 const h = parseInt(c.hour_slot.split(":")[0], 10);
-                const assigned = correctedShifts.filter(s =>
+                const assigned = finalRebalanced.filter(s =>
                   !s.is_day_off && s.date === dateStr && s.department === dept &&
                   s.start_time !== null && s.end_time !== null &&
                   parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
@@ -2147,17 +2386,18 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            const finalFitness = computeFitness(correctedShifts, finalUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const finalFitness = computeFitness(finalRebalanced, finalUncovered, employees, coverageData, weekDates, hourBalances, dept);
             bestResult = {
-              shifts: correctedShifts,
+              shifts: finalRebalanced,
               uncoveredSlots: finalUncovered,
               fitnessScore: finalFitness.score,
               hourAdjustments: finalFitness.hourAdjustments,
-              dayLogs: bestResult.dayLogs,
+              dayLogs: [...bestResult.dayLogs, ...finalEquity],
             };
             adaptationNotes.push(...corrections);
-            strategyReport.push(`   Correzione forzata: ${corrections.length} correzioni applicate`);
-            const recheck = postValidateShifts(correctedShifts, employees, rules, empConstraints, dept);
+            adaptationNotes.push(...finalEquity.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE")));
+            strategyReport.push(`   Correzione forzata: ${corrections.length} correzioni + ${finalEquity.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE")).length} swap equità`);
+            const recheck = postValidateShifts(finalRebalanced, employees, rules, empConstraints, dept);
             if (recheck.valid) {
               strategyReport.push(`   ✅ Tutte le violazioni risolte dopo correzione forzata`);
             } else {
