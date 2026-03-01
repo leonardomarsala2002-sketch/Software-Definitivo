@@ -106,9 +106,8 @@ export function GenerationLogPanel({ generationRuns, department }: GenerationLog
               {copied ? "Copiato" : "Copia tutto"}
             </Button>
           </div>
-          <ScrollArea className="max-h-[500px] cursor-grab active:cursor-grabbing" onPointerDown={(e) => {
-            const el = e.currentTarget.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
-            if (!el) return;
+          <div className="max-h-[500px] overflow-y-auto cursor-grab active:cursor-grabbing" onPointerDown={(e) => {
+            const el = e.currentTarget;
             const startY = e.clientY;
             const startScroll = el.scrollTop;
             const onMove = (ev: PointerEvent) => { el.scrollTop = startScroll - (ev.clientY - startY); };
@@ -121,7 +120,7 @@ export function GenerationLogPanel({ generationRuns, department }: GenerationLog
                 <DaySection key={sIdx} section={section} />
               ))}
             </div>
-          </ScrollArea>
+          </div>
         </>
       )}
     </div>
