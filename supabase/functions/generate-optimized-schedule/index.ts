@@ -857,8 +857,9 @@ function runIteration(
   }
 
   // ── PRE-PLAN MANDATORY DAYS OFF ──────────────────────────────────────
-  // Proactively assign at least 1 day off per employee BEFORE the daily loop.
-  // This guarantees every employee gets their mandatory rest days.
+  // Assign EXACTLY the mandatory minimum days off (typically 1) per employee.
+  // NEVER assign more than the minimum proactively — extra days off are only
+  // suggested post-generation when all coverage is already met and there's surplus.
   const prePlannedDaysOff = new Map<string, Set<string>>(); // userId -> Set<dateStr>
   {
     const deptCoverageLocal = coverage.filter(c => c.department === department);
@@ -876,10 +877,11 @@ function runIteration(
     const dayOffCounts = new Map<string, number>();
     for (const d of weekDates) dayOffCounts.set(d, 0);
 
-    // For each employee, assign mandatory_days_off days off
+    // For each employee, assign EXACTLY mandatory_days_off (usually 1) days off
     const shuffledEmps = shuffle(deptEmployees);
     for (const emp of shuffledEmps) {
       const ec = empConstraints.get(emp.user_id);
+      // Use the MINIMUM mandatory days off from rules (typically 1)
       const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
       const empDaysOff = new Set<string>();
 
@@ -1886,15 +1888,18 @@ Deno.serve(async (req) => {
         let adaptationNotes: string[] = [];
 
         // ─── ADAPTIVE ESCALATION LOOP ──────────────────────────────────
+        // Priority: fill gaps FIRST by increasing splits & reducing days off.
+        // Only add days off when there's surplus (all coverage met).
         // Round 1: original rules
-        // Round 2: mandatory_days_off + 1 (top 10 strategies)
-        // Round 3: max_split_shifts + 1 (top 10 strategies)
-        // Round 4: both increased (top 10 strategies)
+        // Round 2: spezzati +1 (more splits to fill gaps)
+        // Round 3: spezzati +2 (even more splits)
+        // Round 4: spezzati +1 AND giorni liberi -1 (reduce rest to free up staff)
+        // Round 5: only if ALL covered & surplus → giorni liberi +1
         const escalationRounds = [
           { label: "Round 1 (regole originali)", daysOffDelta: 0, splitsDelta: 0, stratSlice: strategies.length },
-          { label: "Round 2 (giorni liberi +1)", daysOffDelta: 1, splitsDelta: 0, stratSlice: 10 },
-          { label: "Round 3 (spezzati +1)", daysOffDelta: 0, splitsDelta: 1, stratSlice: 10 },
-          { label: "Round 4 (entrambi +1)", daysOffDelta: 1, splitsDelta: 1, stratSlice: 10 },
+          { label: "Round 2 (spezzati +1)", daysOffDelta: 0, splitsDelta: 1, stratSlice: 10 },
+          { label: "Round 3 (spezzati +2)", daysOffDelta: 0, splitsDelta: 2, stratSlice: 10 },
+          { label: "Round 4 (spezzati +1, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 1, stratSlice: 10 },
         ];
 
         for (const round of escalationRounds) {
@@ -1910,8 +1915,8 @@ Deno.serve(async (req) => {
 
           // Create adapted rules for this round
           const adaptedRules = { ...rules };
-          if (round.daysOffDelta > 0) {
-            adaptedRules.mandatory_days_off_per_week = rules.mandatory_days_off_per_week + round.daysOffDelta;
+          if (round.daysOffDelta !== 0) {
+            adaptedRules.mandatory_days_off_per_week = Math.max(0, rules.mandatory_days_off_per_week + round.daysOffDelta);
           }
           if (round.splitsDelta > 0) {
             adaptedRules.max_split_shifts_per_employee_per_week = rules.max_split_shifts_per_employee_per_week + round.splitsDelta;
