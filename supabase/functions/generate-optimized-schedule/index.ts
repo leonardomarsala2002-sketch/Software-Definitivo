@@ -461,9 +461,7 @@ ANALISI OBBLIGATORIA PRIMA DI GENERARE:
 4. Per OGNI dipendente: il LIMITE SETTIMANALE è dato dalle ore_contrattuali individuali (es. 40h, 30h, 24h). NON usare un valore generico uguale per tutti.
 5. Se un giorno ha ZERO copertura richiesta, NON assegnare turni per quel giorno.
 6. Se il locale chiude alle X:00 (es. 23:00), NESSUN turno può terminare dopo le X:00. Solo se chiude a mezzanotte (00:00/24:00) si può arrivare alle 24:00.
-7. PRIORITÀ ASSOLUTA: sfrutta al MASSIMO le ore contrattuali di ogni dipendente. Se un dipendente ha 40h, assegna il più vicino possibile a 40h. I giorni liberi extra (oltre il minimo obbligatorio) devono essere distribuiti SOLO se la copertura è già completamente soddisfatta e non ci sono più slot da riempire.
-8. La flessibilità ±5h deve essere usata SOLO in casi reali di necessità (buchi di copertura), MAI automaticamente o per comodità algoritmica.
-9. Se c'è surplus personale (ore contrattuali totali > domanda copertura), distribuisci i giorni liberi extra in modo EQUO a TUTTI, non solo a 1-2 dipendenti.
+7. MAI superare automaticamente il limite contrattuale del singolo dipendente. Massimo +5h/sett solo in casi eccezionali e con approvazione manuale.
 
 Ogni strategia controlla l'algoritmo di generazione:
 - maxSplits (0-3): max turni spezzati per dipendente a settimana
@@ -1028,61 +1026,7 @@ function equalizeEquity(
     if (!swapped) break;
   }
 
-  // ── 3) SURPLUS EQUALIZATION: When employees can't reach contract hours ──
-  // because coverage demand is fully met, distribute extra days off EQUALLY.
-  {
-    const surplusStats = computeStats(result);
-    const stdEmps = deptEmployees.filter(e => empConstraints.get(e.user_id)?.custom_days_off == null);
-    if (stdEmps.length > 1) {
-      const stdOffCounts = stdEmps.map(e => surplusStats.daysOffMap.get(e.user_id) ?? 0);
-      const maxOff = Math.max(...stdOffCounts);
-      const minOff = Math.min(...stdOffCounts);
-
-      if (maxOff > minOff) {
-        equityReport.push(`\n🔄 EQUITÀ GIORNI LIBERI (SURPLUS):`);
-        // Check if employees with fewer days off are already at their contract limit
-        // If so, they can't work more → give them equal days off
-        for (const emp of stdEmps) {
-          const empOff = surplusStats.daysOffMap.get(emp.user_id) ?? 0;
-          if (empOff >= maxOff) continue;
-          const empHours = surplusStats.hoursMap.get(emp.user_id) ?? 0;
-          const remainingCapacity = emp.weekly_contract_hours - empHours;
-          // If employee is already close to contract OR no more coverage to fill
-          // → equalize days off
-          const needMore = maxOff - empOff;
-          // Find work days with lowest demand to convert to rest
-          const empWorkDays = [...new Set(result.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time).map(s => s.date))];
-          const sortedByDemand = empWorkDays.sort((a, b) => {
-            const aDow = getDayOfWeek(a);
-            const bDow = getDayOfWeek(b);
-            const aDemand = coverage.filter(c => c.day_of_week === aDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-            const bDemand = coverage.filter(c => c.day_of_week === bDow && c.department === department).reduce((s, c) => s + c.min_staff_required, 0);
-            return aDemand - bDemand;
-          });
-
-          let added = 0;
-          for (const dayOff of sortedByDemand) {
-            if (added >= needMore) break;
-            // Ensure minimum 1 day off remains after this date (don't take ALL work days)
-            const remainingWorkDays = empWorkDays.length - added - 1;
-            if (remainingWorkDays < 1) break; // keep at least 1 work day
-            const removed = result.filter(s => s.user_id === emp.user_id && s.department === department && s.date === dayOff && !s.is_day_off);
-            if (removed.length === 0) continue;
-            result = result.filter(s => !removed.includes(s));
-            result.push({
-              store_id: removed[0].store_id, user_id: emp.user_id, date: dayOff,
-              start_time: null, end_time: null, department, is_day_off: true,
-              status: "draft", generation_run_id: removed[0].generation_run_id,
-            });
-            added++;
-            equityReport.push(`  ${getEmpName(emp.user_id)}: aggiunto riposo ${dayOff} (da ${empOff} a ${empOff + added} riposi) — equità surplus`);
-          }
-        }
-      }
-    }
-  }
-
-  // ── 4) GENERATE EQUITY REPORT ──
+  // ── 3) GENERATE EQUITY REPORT ──
   const finalStats = computeStats(result);
   equityReport.push(`\n📊 RIEPILOGO EQUITÀ (tolleranza ZERO per dipendenti standard):`);
   const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v, isCustom: empConstraints.get(uid)?.custom_days_off != null }));
@@ -1095,52 +1039,27 @@ function equalizeEquity(
   const avgSplits = stdSplits.reduce((a, b) => a + b.value, 0) / Math.max(stdSplits.length, 1);
   const avgHours = hoursValues.reduce((a, b) => a + b.value, 0) / Math.max(hoursValues.length, 1);
 
-  // Surplus analysis
-  const totalAssigned = hoursValues.reduce((a, b) => a + b.value, 0);
-  const totalContract = deptEmployees.reduce((a, b) => a + b.weekly_contract_hours, 0);
-  const totalCovDemand = weekDates.reduce((sum, dateStr) => {
-    const dow = getDayOfWeek(dateStr);
-    return sum + coverage.filter(c => c.department === department && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
-  }, 0);
-  const isSurplus = totalContract > totalCovDemand;
-  if (isSurplus) {
-    equityReport.push(`⚠️ SURPLUS PERSONALE: monteore contrattuale totale (${totalContract}h) > domanda copertura (${totalCovDemand}h). Non tutte le ore contrattuali possono essere assegnate.`);
-    equityReport.push(`   Ore assegnate: ${totalAssigned}h/${totalContract}h (deficit: ${totalContract - totalAssigned}h distribuito equamente)`);
-  }
-
   const stdOffEqual = stdOff.length > 0 && stdOff.every(v => v.value === stdOff[0].value);
   const stdSplitsEqual = stdSplits.length > 0 && stdSplits.every(v => v.value === stdSplits[0].value);
   equityReport.push(`Riposi standard: ${stdOffEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdOff.map(v => `${v.name}=${v.value}`).join(", ")})`);
   equityReport.push(`Spezzati standard: ${stdSplitsEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdSplits.map(v => `${v.name}=${v.value}`).join(", ")})`);
-  equityReport.push(`Media ore: ${avgHours.toFixed(1)}h | Totale: ${totalAssigned}h/${totalContract}h contratto`);
+  equityReport.push(`Media ore: ${avgHours.toFixed(1)}`);
 
   for (const emp of deptEmployees) {
     const off = finalStats.daysOffMap.get(emp.user_id) ?? 0;
     const splits = finalStats.splitsMap.get(emp.user_id) ?? 0;
     const hours = finalStats.hoursMap.get(emp.user_id) ?? 0;
     const empObj = employees.find(e => e.user_id === emp.user_id);
-    const contractH = empObj?.weekly_contract_hours ?? 40;
-    const hourDelta = hours - contractH;
+    const hourDelta = hours - (empObj?.weekly_contract_hours ?? 40);
     const isCustomOff = empConstraints.get(emp.user_id)?.custom_days_off != null;
     const isCustomSplit = empConstraints.get(emp.user_id)?.custom_max_split_shifts != null;
     const flags: string[] = [];
     if (!isCustomOff && Math.abs(off - avgOff) >= 0.5) flags.push(`riposi ${off} vs media ${avgOff.toFixed(0)}`);
     if (!isCustomSplit && Math.abs(splits - avgSplits) >= 0.5) flags.push(`spezzati ${splits} vs media ${avgSplits.toFixed(0)}`);
-    // Add reason for hour deviation
-    if (hourDelta < -3) {
-      if (isSurplus) {
-        flags.push(`${hourDelta}h vs contratto (surplus personale)`);
-      } else {
-        flags.push(`${hourDelta}h vs contratto (bassa copertura)`);
-      }
-    } else if (hourDelta > 3) {
-      flags.push(`+${hourDelta}h vs contratto (copertura critica)`);
-    } else if (Math.abs(hourDelta) >= 1) {
-      flags.push(`${hourDelta > 0 ? "+" : ""}${hourDelta}h vs contratto`);
-    }
+    if (Math.abs(hourDelta) >= 3) flags.push(`${hourDelta > 0 ? "+" : ""}${hourDelta}h vs contratto`);
     const customTag = (isCustomOff || isCustomSplit) ? " [personalizzato]" : "";
     const status = flags.length === 0 ? "✅" : `⚠️ ${flags.join(", ")}`;
-    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h/${contractH}h${customTag} — ${status}`);
+    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h/${empObj?.weekly_contract_hours ?? "?"}h${customTag} — ${status}`);
   }
 
   return { rebalancedShifts: result, equityReport };
@@ -2796,30 +2715,287 @@ Deno.serve(async (req) => {
           }
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        // POST-GENERATION AUTO-RESOLUTION: Apply all fixable issues automatically.
-        // Only generate suggestions for: (1) >5h contract deviation, (2) uncoverable gaps.
-        // ═══════════════════════════════════════════════════════════════════
+        // Compute optimization suggestions server-side with SPECIFIC corrective actions
         const deptSuggestions: any[] = [];
         const empMapForSugg = new Map(employees.map(e => [e.user_id, e]));
         const { data: profilesForSugg } = await adminClient
           .from("profiles").select("id, full_name").in("id", employees.map(e => e.user_id));
         const nameMap = new Map((profilesForSugg ?? []).map(p => [p.id, p.full_name ?? "Dipendente"]));
 
-        // Track weekly hours from best result
+        // Helper: find employees who could cover an uncovered slot
+        // VALIDATES all proposals against REAL store opening hours, employee constraints, and availability
+        function findCorrectionAlternatives(dateStr: string, uncoveredHour: number, dept: "sala" | "cucina"): any[] {
+          const alts: any[] = [];
+          const dayShifts = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
+          const dow = getDayOfWeek(dateStr);
+
+          // ── Get REAL opening hours for THIS specific day ──
+          const oh = openingHoursData.find(h => h.day_of_week === dow);
+          const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
+          const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
+          const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
+
+          // If the uncovered hour is OUTSIDE store operating hours, skip entirely
+          if (uncoveredHour < dayOpenH || uncoveredHour >= effectiveClose) {
+            return []; // Store is closed at this hour — no valid alternatives
+          }
+
+          // Get valid entry/exit points for this day+department
+          const deptEntries = allowedData
+            .filter(t => t.department === dept && t.kind === "entry" && t.is_active && t.hour >= dayOpenH && t.hour < effectiveClose)
+            .map(t => t.hour).sort((a, b) => a - b);
+          const deptExits = allowedData
+            .filter(t => t.department === dept && t.kind === "exit" && t.is_active && t.hour > dayOpenH && t.hour <= effectiveClose)
+            .map(t => t.hour).sort((a, b) => a - b);
+          // Fallback to opening/closing if no configured allowed times
+          const validEntries = deptEntries.length > 0 ? deptEntries : [dayOpenH];
+          const validExits = deptExits.length > 0 ? deptExits : [effectiveClose];
+
+          // 1) Employees already working that day who could start earlier
+          for (const s of dayShifts) {
+            const startH = parseInt(s.start_time!.split(":")[0], 10);
+            if (startH > uncoveredHour && startH - uncoveredHour <= 2) {
+              // Validate: new start must be >= store opening AND a valid entry point
+              if (uncoveredHour < dayOpenH) continue;
+              const isValidEntry = validEntries.some(e => e <= uncoveredHour);
+              if (!isValidEntry) continue;
+              // Validate: employee hasn't exceeded daily/weekly hours
+              const emp = empMapForSugg.get(s.user_id);
+              if (!emp) continue;
+              const ec = empConstraints.get(s.user_id);
+              const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+              const empDayShifts = dayShifts.filter(ds => ds.user_id === s.user_id);
+              const currentDailyH = empDayShifts.reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
+              const extraH = startH - uncoveredHour;
+              if (currentDailyH + extraH > maxDaily) continue;
+              const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
+              const empObj = empMapForSugg.get(s.user_id);
+              const contractHours = empObj?.weekly_contract_hours ?? 40;
+              // Hard cap: never exceed contract + 5h even in suggestions
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractHours, contractHours + 5);
+              if (empWeeklyUsed + extraH > maxWeekly) continue;
+
+              const empName = nameMap.get(s.user_id) ?? "Dipendente";
+              alts.push({
+                id: `earlier-${s.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `${empName} arriva alle ${uncoveredHour}:00`,
+                description: `${empName} anticipa l'entrata da ${s.start_time?.slice(0,5)} a ${uncoveredHour}:00 (${extraH}h prima). Ore giorn: ${currentDailyH + extraH}/${maxDaily}h. Store aperto ${dayOpenH}:00-${effectiveClose}:00.`,
+                actionType: "shift_earlier",
+                userId: s.user_id,
+                userName: empName,
+                newStartTime: `${String(uncoveredHour).padStart(2,"0")}:00`,
+                newEndTime: s.end_time,
+              });
+            }
+          }
+
+          // 2) Employees already working who could stay later
+          for (const s of dayShifts) {
+            let endH = parseInt(s.end_time!.split(":")[0], 10);
+            if (endH === 0) endH = 24;
+            if (endH <= uncoveredHour && uncoveredHour - endH <= 2) {
+              const newEnd = uncoveredHour + 1;
+              // Validate: new end must NOT exceed store closing time
+              if (newEnd > effectiveClose) continue;
+              const isValidExit = validExits.some(e => e >= newEnd);
+              if (!isValidExit) continue;
+              // Validate employee hours
+              const emp = empMapForSugg.get(s.user_id);
+              if (!emp) continue;
+              const ec = empConstraints.get(s.user_id);
+              const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+              const empDayShifts = dayShifts.filter(ds => ds.user_id === s.user_id);
+              const currentDailyH = empDayShifts.reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
+              const extraH = newEnd - endH;
+              if (currentDailyH + extraH > maxDaily) continue;
+              const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
+              const contractHours2 = emp?.weekly_contract_hours ?? 40;
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractHours2, contractHours2 + 5);
+              if (empWeeklyUsed + extraH > maxWeekly) continue;
+
+              const empName = nameMap.get(s.user_id) ?? "Dipendente";
+              alts.push({
+                id: `later-${s.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `${empName} esce alle ${newEnd}:00`,
+                description: `${empName} prolunga il turno da ${s.end_time?.slice(0,5)} a ${newEnd}:00 (+${extraH}h). Ore giorn: ${currentDailyH + extraH}/${maxDaily}h. Store chiude ${effectiveClose}:00.`,
+                actionType: "shift_later",
+                userId: s.user_id,
+                userName: empName,
+                newStartTime: s.start_time,
+                newEndTime: `${String(newEnd === 24 ? 0 : newEnd).padStart(2,"0")}:00`,
+              });
+            }
+          }
+
+          // 3) Available employees not working that day — add a shift
+          // IMPORTANT: NEVER propose an employee on their day off
+          const workingUserIds = new Set(dayShifts.map(s => s.user_id));
+          const dayOffUserIds = new Set(
+            shifts.filter(s => s.date === dateStr && s.department === dept && s.is_day_off)
+              .map(s => s.user_id)
+          );
+          const deptEmps = employees.filter(e => e.department === dept && e.is_active);
+          for (const emp of deptEmps) {
+            if (workingUserIds.has(emp.user_id)) continue;
+            if (dayOffUserIds.has(emp.user_id)) continue;
+            if (!isAvailable(emp.user_id, dateStr, availability, allExceptions)) continue;
+            const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+            const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+            if (!canCover) continue;
+            const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+            const ec = empConstraints.get(emp.user_id);
+            const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
+            if (empWeeklyUsed >= maxWeekly) continue;
+            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+            // Find a reasonable shift block WITHIN store hours
+            const validEntriesForDay = validEntries.filter(e => e >= dayOpenH && e < effectiveClose);
+            const validExitsForDay = validExits.filter(e => e > dayOpenH && e <= effectiveClose);
+            if (validEntriesForDay.length === 0 || validExitsForDay.length === 0) continue;
+            const nearestEntry = validEntriesForDay.reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, validEntriesForDay[0]);
+            const nearestExit = validExitsForDay.find(e => e > nearestEntry) ?? Math.min(nearestEntry + 4, effectiveClose);
+            // Validate exit doesn't exceed store close
+            const cappedExit = Math.min(nearestExit, effectiveClose);
+            if (cappedExit <= nearestEntry) continue;
+            const shiftDuration = cappedExit - nearestEntry;
+            const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+            if (shiftDuration > maxDaily) continue;
+            if (empWeeklyUsed + shiftDuration > maxWeekly) continue;
+            alts.push({
+              id: `split-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+              label: `Aggiungi ${empName} (${nearestEntry}:00-${cappedExit}:00)`,
+              description: `${empName} (non assegnato) copre ${nearestEntry}:00-${cappedExit}:00 (${shiftDuration}h). Ore sett: ${empWeeklyUsed}/${emp.weekly_contract_hours}h. Store: ${dayOpenH}:00-${effectiveClose}:00.`,
+              actionType: "add_split",
+              userId: emp.user_id,
+              userName: empName,
+              newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+              newEndTime: `${String(cappedExit === 24 ? 0 : cappedExit).padStart(2,"0")}:00`,
+            });
+            if (alts.length >= 5) break;
+          }
+
+          // 3b) Propose swapping a day off: employees with day_off TODAY could swap to another day
+          if (alts.length < 5) {
+            for (const dayOffUserId of dayOffUserIds) {
+              if (alts.length >= 5) break;
+              const emp = deptEmps.find(e => e.user_id === dayOffUserId);
+              if (!emp) continue;
+              const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+              const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+              if (!canCover) continue;
+              const ec = empConstraints.get(emp.user_id);
+              const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
+              if (empWeeklyUsed >= maxWeekly) continue;
+              const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+              const empWorkDays = shifts
+                .filter(s => s.user_id === emp.user_id && s.department === dept && !s.is_day_off && s.start_time && s.end_time)
+                .map(s => s.date);
+              const swapDay = empWorkDays.find(d => {
+                const otherUncovered = uncoveredByDay.get(d);
+                return !otherUncovered || otherUncovered.length === 0;
+              });
+              if (!swapDay) continue;
+              const swapDayLabel = new Date(swapDay + "T00:00:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
+              const nearestEntry = validEntries.filter(e => e >= dayOpenH).reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, validEntries[0] ?? uncoveredHour);
+              const nearestExit = Math.min(validExits.find(e => e > nearestEntry) ?? nearestEntry + 4, effectiveClose);
+              if (nearestExit <= nearestEntry) continue;
+              alts.push({
+                id: `swap-dayoff-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `Sposta riposo ${empName} a ${swapDayLabel}`,
+                description: `${empName} sposta il giorno libero da oggi a ${swapDayLabel} e copre ${nearestEntry}:00-${nearestExit}:00. Ore sett.: ${empWeeklyUsed}/${emp.weekly_contract_hours}h. Store: ${dayOpenH}:00-${effectiveClose}:00.`,
+                actionType: "add_split",
+                userId: emp.user_id,
+                userName: empName,
+                newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+                newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
+              });
+            }
+          }
+
+          // 4) Employees already working that day who finished early enough for a split
+          for (const s of dayShifts) {
+            if (alts.length >= 5) break;
+            let endH = parseInt(s.end_time!.split(":")[0], 10);
+            if (endH === 0) endH = 24;
+            if (endH + 2 > uncoveredHour) continue;
+            const emp = deptEmps.find(e => e.user_id === s.user_id);
+            if (!emp) continue;
+            const ec = empConstraints.get(emp.user_id);
+            const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
+            const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
+            if (empWeeklyUsed >= maxWeekly) continue;
+            // Check split limit
+            const empWeeklySplits = (() => {
+              const empShifts = shifts.filter(sh => sh.user_id === emp.user_id && sh.department === dept && !sh.is_day_off && sh.start_time);
+              const byDate = new Map<string, number>();
+              for (const sh of empShifts) byDate.set(sh.date, (byDate.get(sh.date) ?? 0) + 1);
+              let count = 0;
+              for (const [, c] of byDate) if (c > 1) count += c - 1;
+              return count;
+            })();
+            const maxSplits = ec?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week;
+            if (empWeeklySplits >= maxSplits) continue;
+            const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+            const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
+            if (!canCover) continue;
+            const empName = nameMap.get(emp.user_id) ?? "Dipendente";
+            const nearestEntry = validEntries.filter(e => e >= endH + 2 && e < effectiveClose).reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, uncoveredHour);
+            const nearestExit = Math.min(validExits.find(e => e > nearestEntry) ?? nearestEntry + 4, effectiveClose);
+            if (nearestExit <= nearestEntry) continue;
+            const shiftDur = nearestExit - nearestEntry;
+            const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+            const existingDailyH = dayShifts.filter(ds => ds.user_id === emp.user_id).reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
+            if (existingDailyH + shiftDur > maxDaily) continue;
+            if (empWeeklyUsed + shiftDur > maxWeekly) continue;
+            alts.push({
+              id: `split-existing-${emp.user_id}-${dateStr}-${uncoveredHour}`,
+              label: `Spezzato ${empName} (${nearestEntry}:00-${nearestExit}:00)`,
+              description: `${empName} (turno finito alle ${endH}:00) torna per spezzato ${nearestEntry}:00-${nearestExit}:00 (${shiftDur}h). Spezzati sett: ${empWeeklySplits + 1}/${maxSplits}. Store chiude ${effectiveClose}:00.`,
+              actionType: "add_split",
+              userId: emp.user_id,
+              userName: empName,
+              newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
+              newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
+            });
+          }
+
+          // Smart memory: sort alternatives by historical acceptance score (best first)
+          alts.sort((a, b) => {
+            const aScore = a.userId ? (smartMemory.get(getSmartMemoryKey(a.userId, dow, uncoveredHour)) ?? 0) : 0;
+            const bScore = b.userId ? (smartMemory.get(getSmartMemoryKey(b.userId, dow, uncoveredHour)) ?? 0) : 0;
+            return bScore - aScore; // Higher score first
+          });
+
+          // Cap alternatives to the number of uncovered spots (exact coverage = no overbooking)
+          const uncoveredSpotsNeeded = (() => {
+            const cov = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === uncoveredHour);
+            if (!cov) return 1;
+            const assignedCount = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time).filter(s => {
+              const sh = parseInt(s.start_time!.split(":")[0], 10);
+              let eh = parseInt(s.end_time!.split(":")[0], 10);
+              if (eh === 0) eh = 24;
+              return uncoveredHour >= sh && uncoveredHour < eh;
+            }).length;
+            return Math.max(1, cov.min_staff_required - assignedCount);
+          })();
+          return alts.slice(0, uncoveredSpotsNeeded);
+        }
+
+        // Track weekly hours from best result for alternative calculations
         const weeklyHours_final = new Map<string, number>();
         for (const s of shifts) {
           if (s.is_day_off || !s.start_time || !s.end_time) continue;
           const dur = parseHour(s.end_time) - parseHour(s.start_time);
           weeklyHours_final.set(s.user_id, (weeklyHours_final.get(s.user_id) ?? 0) + dur);
         }
+        const effectiveEntries_final = allowedData
+          .filter(t => t.department === dept && t.kind === "entry" && t.is_active)
+          .map(t => t.hour).sort((a, b) => a - b);
+        const effectiveExits_final = allowedData
+          .filter(t => t.department === dept && t.kind === "exit" && t.is_active)
+          .map(t => t.hour).sort((a, b) => a - b);
 
-        // ── AUTO-RESOLVE: Apply shift extensions/additions for uncovered slots ──
-        // Instead of generating suggestions, directly fix what we can.
-        const autoResolveReport: string[] = [];
-        let autoResolved = 0;
-
-        // Build uncovered by day
+        // Uncovered slot suggestions GROUPED BY DAY (single suggestion per day per dept)
         const uncoveredByDay = new Map<string, number[]>();
         for (const slot of uncoveredSlots) {
           const h = parseInt(slot.hour.split(":")[0], 10);
@@ -2828,336 +3004,266 @@ Deno.serve(async (req) => {
           uncoveredByDay.set(slot.date, existing);
         }
 
-        // For each uncovered slot, try to auto-resolve by:
-        // 1) Extending adjacent shifts (earlier/later)
-        // 2) Adding a shift for available employees
-        // 3) Swapping day offs
         for (const [dateStr, hours] of uncoveredByDay) {
-          hours.sort((a, b) => a - b);
-          const dow = getDayOfWeek(dateStr);
-          const oh = openingHoursData.find(h => h.day_of_week === dow);
-          const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
-          const dayCloseHRaw = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
-          const effectiveCloseH = dayCloseHRaw === 0 ? 24 : dayCloseHRaw;
-          const dayShifts = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
-          const deptEntries = allowedData
-            .filter(t => t.department === dept && t.kind === "entry" && t.is_active && t.hour >= dayOpenH && t.hour < effectiveCloseH)
-            .map(t => t.hour).sort((a, b) => a - b);
-          const deptExits = allowedData
-            .filter(t => t.department === dept && t.kind === "exit" && t.is_active && t.hour > dayOpenH && t.hour <= effectiveCloseH)
-            .map(t => t.hour).sort((a, b) => a - b);
-          const validEntries = deptEntries.length > 0 ? deptEntries : [dayOpenH];
-          const validExits = deptExits.length > 0 ? deptExits : [effectiveCloseH];
-
-          for (const uncovH of [...hours]) {
-            if (uncovH < dayOpenH || uncovH >= effectiveCloseH) continue;
-            let resolved = false;
-
-            // Try extending an adjacent shift LATER
-            for (const s of dayShifts) {
-              if (resolved) break;
-              let endH = parseInt(s.end_time!.split(":")[0], 10);
-              if (endH === 0) endH = 24;
-              if (endH <= uncovH && uncovH - endH <= 1) {
-                const newEnd = uncovH + 1;
-                if (newEnd > effectiveCloseH) continue;
-                const isValidExit = validExits.some(e => e >= newEnd);
-                if (!isValidExit) continue;
-                const emp = empMapForSugg.get(s.user_id);
-                if (!emp) continue;
-                const ec = empConstraints.get(s.user_id);
-                const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-                const empDayShifts = dayShifts.filter(ds => ds.user_id === s.user_id);
-                const currentDailyH = empDayShifts.reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
-                const extraH = newEnd - endH;
-                if (currentDailyH + extraH > maxDaily) continue;
-                const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
-                const contractH = emp.weekly_contract_hours;
-                const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractH, contractH + 5);
-                if (empWeeklyUsed + extraH > maxWeekly) continue;
-
-                // AUTO-APPLY: extend the shift
-                const idx = shifts.indexOf(s);
-                if (idx >= 0) {
-                  shifts[idx] = { ...s, end_time: `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00` };
-                  weeklyHours_final.set(s.user_id, empWeeklyUsed + extraH);
-                  autoResolveReport.push(`✅ Auto: ${nameMap.get(s.user_id) ?? "?"} esteso fino alle ${newEnd}:00 (+${extraH}h) il ${dateStr}`);
-                  autoResolved++;
-                  resolved = true;
-                }
-              }
-            }
-
-            // Try extending an adjacent shift EARLIER
-            if (!resolved) {
-              for (const s of dayShifts) {
-                if (resolved) break;
-                const startH = parseInt(s.start_time!.split(":")[0], 10);
-                if (startH > uncovH && startH - uncovH <= 2) {
-                  if (uncovH < dayOpenH) continue;
-                  const isValidEntry = validEntries.some(e => e <= uncovH);
-                  if (!isValidEntry) continue;
-                  const emp = empMapForSugg.get(s.user_id);
-                  if (!emp) continue;
-                  const ec = empConstraints.get(s.user_id);
-                  const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-                  const empDayShifts = dayShifts.filter(ds => ds.user_id === s.user_id);
-                  const currentDailyH = empDayShifts.reduce((sum, ds) => sum + (parseHour(ds.end_time!) - parseHour(ds.start_time!)), 0);
-                  const extraH = startH - uncovH;
-                  if (currentDailyH + extraH > maxDaily) continue;
-                  const empWeeklyUsed = weeklyHours_final.get(s.user_id) ?? 0;
-                  const contractH = emp.weekly_contract_hours;
-                  const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? contractH, contractH + 5);
-                  if (empWeeklyUsed + extraH > maxWeekly) continue;
-
-                  const idx = shifts.indexOf(s);
-                  if (idx >= 0) {
-                    shifts[idx] = { ...s, start_time: `${String(uncovH).padStart(2, "0")}:00` };
-                    weeklyHours_final.set(s.user_id, empWeeklyUsed + extraH);
-                    autoResolveReport.push(`✅ Auto: ${nameMap.get(s.user_id) ?? "?"} anticipato alle ${uncovH}:00 (+${extraH}h) il ${dateStr}`);
-                    autoResolved++;
-                    resolved = true;
-                  }
-                }
-              }
-            }
-
-            // Try adding a shift for an available employee not working that day
-            if (!resolved) {
-              const workingUserIds = new Set(dayShifts.map(s => s.user_id));
-              const dayOffUserIds = new Set(
-                shifts.filter(s => s.date === dateStr && s.department === dept && s.is_day_off).map(s => s.user_id)
-              );
-              const deptEmps = employees.filter(e => e.department === dept && e.is_active);
-              for (const emp of deptEmps) {
-                if (resolved) break;
-                if (workingUserIds.has(emp.user_id)) continue;
-                if (dayOffUserIds.has(emp.user_id)) continue;
-                if (!isAvailable(emp.user_id, dateStr, availability, allExceptions)) continue;
-                const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
-                const canCover = empAvail.some(a => uncovH >= a.start && uncovH + 1 <= a.end);
-                if (!canCover) continue;
-                const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-                const ec = empConstraints.get(emp.user_id);
-                const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
-                if (empWeeklyUsed >= maxWeekly) continue;
-
-                const nearestEntry = validEntries.filter(e => e >= dayOpenH && e < effectiveCloseH).reduce((best, e) => Math.abs(e - uncovH) < Math.abs(best - uncovH) ? e : best, validEntries[0] ?? uncovH);
-                const nearestExit = Math.min(validExits.find(e => e > nearestEntry) ?? nearestEntry + 4, effectiveCloseH);
-                if (nearestExit <= nearestEntry) continue;
-                const shiftDuration = nearestExit - nearestEntry;
-                const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-                if (shiftDuration > maxDaily) continue;
-                if (empWeeklyUsed + shiftDuration > maxWeekly) continue;
-
-                // AUTO-APPLY: add the shift
-                shifts.push({
-                  store_id: store_id, user_id: emp.user_id, date: dateStr,
-                  start_time: `${String(nearestEntry).padStart(2, "0")}:00`,
-                  end_time: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2, "0")}:00`,
-                  department: dept, is_day_off: false, status: "draft", generation_run_id: run.id,
-                });
-                weeklyHours_final.set(emp.user_id, empWeeklyUsed + shiftDuration);
-                autoResolveReport.push(`✅ Auto: aggiunto turno ${nameMap.get(emp.user_id) ?? "?"} ${nearestEntry}:00-${nearestExit}:00 il ${dateStr} (${shiftDuration}h)`);
-                autoResolved++;
-                resolved = true;
-              }
-            }
-
-            if (resolved) {
-              // Remove from uncoveredSlots
-              const slotIdx = uncoveredSlots.findIndex(s => s.date === dateStr && parseInt(s.hour.split(":")[0], 10) === uncovH);
-              if (slotIdx >= 0) uncoveredSlots.splice(slotIdx, 1);
-            }
-          }
-        }
-
-        if (autoResolved > 0) {
-          autoResolveReport.unshift(`\n🤖 AUTO-RISOLUZIONE: ${autoResolved} problemi risolti automaticamente`);
-          bestResult!.dayLogs.push(...autoResolveReport);
-          // Recompute fitness
-          const arFitness = computeFitness(shifts, uncoveredSlots, employees, coverageData, weekDates, hourBalances, dept);
-          bestResult!.fitnessScore = arFitness.score;
-          bestResult!.hourAdjustments = arFitness.hourAdjustments;
-        }
-
-        // ── SUGGESTIONS: Only for truly unresolvable issues ──
-        // CASE 1: Remaining uncovered gaps (after all auto-resolution)
-        // Rebuild uncoveredByDay after auto-resolution
-        const finalUncovByDay = new Map<string, number[]>();
-        for (const slot of uncoveredSlots) {
-          const h = parseInt(slot.hour.split(":")[0], 10);
-          const arr = finalUncovByDay.get(slot.date) ?? [];
-          arr.push(h);
-          finalUncovByDay.set(slot.date, arr);
-        }
-
-        for (const [dateStr, hours] of finalUncovByDay) {
           const d = new Date(dateStr + "T00:00:00");
           const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
           hours.sort((a, b) => a - b);
           const hoursStr = hours.map(h => `${h}:00`).join(", ");
+
+          // Collect alternatives for the FIRST uncovered hour (most actionable)
+          const alternatives = findCorrectionAlternatives(dateStr, hours[0], dept);
+
+          // For remaining hours, try to find additional alternatives
+          for (let i = 1; i < Math.min(hours.length, 3); i++) {
+            const moreAlts = findCorrectionAlternatives(dateStr, hours[i], dept);
+            for (const alt of moreAlts) {
+              if (alternatives.length < 5 && !alternatives.some(a => a.id === alt.id)) {
+                alternatives.push(alt);
+              }
+            }
+          }
+
+          // Build contextual explanation for WHY slots are uncovered
           const dow = getDayOfWeek(dateStr);
           const oh = openingHoursData.find(h => h.day_of_week === dow);
           const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
           const dayCloseHRaw = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
           const effectiveCloseH = dayCloseHRaw === 0 ? 24 : dayCloseHRaw;
 
-          // Analyze WHY no alternatives exist
-          const deptEmps = employees.filter(e => e.department === dept && e.is_active);
-          const atMaxWeekly = deptEmps.filter(e => {
-            const used = weeklyHours_final.get(e.user_id) ?? 0;
-            const ec = empConstraints.get(e.user_id);
-            const maxW = ec?.custom_max_weekly_hours ?? e.weekly_contract_hours;
-            return used >= maxW;
-          }).length;
-          const onDayOff = deptEmps.filter(e => shifts.find(s => s.user_id === e.user_id && s.date === dateStr && s.is_day_off)).length;
-          const onException = deptEmps.filter(e => !isAvailable(e.user_id, dateStr, availability, allExceptions)).length;
-          const reasons: string[] = [];
-          if (atMaxWeekly > 0) reasons.push(`${atMaxWeekly} a max ore settimanali`);
-          if (onDayOff > 0) reasons.push(`${onDayOff} in riposo`);
-          if (onException > 0) reasons.push(`${onException} in eccezione/ferie`);
-          const contextualReason = reasons.length > 0
-            ? `Nessuna risorsa interna disponibile: ${reasons.join(", ")}. Consigliato prestito inter-store.`
-            : `Personale insufficiente. Consigliato prestito inter-store o accettazione con personale ridotto.`;
+          let contextualReason = "";
+          if (alternatives.length === 0) {
+            // Analyze WHY no alternatives exist
+            const outsideHours = hours.filter(h => h < dayOpenH || h >= effectiveCloseH);
+            const insideHours = hours.filter(h => h >= dayOpenH && h < effectiveCloseH);
+            if (outsideHours.length > 0 && insideHours.length === 0) {
+              contextualReason = `Slot fuori orario di apertura (${dayOpenH}:00-${effectiveCloseH}:00). Verifica la copertura richiesta nelle Impostazioni Store.`;
+            } else {
+              // Check if all employees are at max capacity
+              const deptEmps = employees.filter(e => e.department === dept && e.is_active);
+              const atMaxWeekly = deptEmps.filter(e => {
+                const used = weeklyHours_final.get(e.user_id) ?? 0;
+                const ec = empConstraints.get(e.user_id);
+                const maxW = ec?.custom_max_weekly_hours ?? e.weekly_contract_hours;
+                return used >= maxW;
+              }).length;
+              const onDayOff = deptEmps.filter(e => {
+                const offShift = shifts.find(s => s.user_id === e.user_id && s.date === dateStr && s.is_day_off);
+                return !!offShift;
+              }).length;
+              const onException = deptEmps.filter(e => !isAvailable(e.user_id, dateStr, availability, allExceptions)).length;
+              const reasons: string[] = [];
+              if (atMaxWeekly > 0) reasons.push(`${atMaxWeekly} a max ore settimanali`);
+              if (onDayOff > 0) reasons.push(`${onDayOff} in riposo`);
+              if (onException > 0) reasons.push(`${onException} in eccezione/ferie`);
+              contextualReason = reasons.length > 0
+                ? `Nessuna alternativa: ${reasons.join(", ")}. Valuta prestito inter-store o modifica vincoli.`
+                : `Personale insufficiente per la copertura richiesta. Valuta nuove assunzioni o prestito inter-store.`;
+            }
+          } else {
+            contextualReason = `${alternatives.length} soluzioni disponibili (validate su orari store ${dayOpenH}:00-${effectiveCloseH}:00).`;
+          }
 
           deptSuggestions.push({
             id: `uncov-${dept}-${dateStr}`,
             type: "uncovered",
             severity: "critical",
-            title: `⚠️ ${hours.length} buco/i di copertura ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            title: `${hours.length} ore non coperte ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
             description: `Slot scoperti: ${hoursStr}. ${contextualReason}`,
-            actionLabel: "Accetta buco",
-            declineLabel: "Ignora",
+            actionLabel: alternatives.length > 0 ? alternatives[0].label : "Vai al giorno",
+            declineLabel: alternatives.length > 1 ? "Altra soluzione" : "Ignora",
             date: dateStr,
             slot: `${hours[0]}:00`,
-            alternatives: [{
-              id: `accept-gap-${dept}-${dateStr}`,
-              label: `Accetta con personale ridotto`,
-              description: `Conferma che il servizio può operare con meno personale per gli slot ${hoursStr}. Il buco verrà contrassegnato come accettato.`,
-              actionType: "accept_gap",
-            }],
+            alternatives,
           });
         }
 
-        // CASE 2: Employees with >5h deviation from contract — suggest lending
-        // Also detect surplus staff situation for targeted suggestions
-        const totalAssignedHoursForSugg = deptEmployees.reduce((sum, e) => sum + (weeklyHours_final.get(e.user_id) ?? 0), 0);
-        const totalContractHoursForSugg = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
-        const totalCovDemandForSugg = weekDates.reduce((sum, dateStr) => {
+        // Surplus suggestions with specific details
+        const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
+        for (const dateStr of iterDates) {
           const dow = getDayOfWeek(dateStr);
-          return sum + coverageData.filter(c => c.department === dept && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
-        }, 0);
-        const isSurplusStaff = totalContractHoursForSugg > totalCovDemandForSugg;
-        const surplusHours = totalContractHoursForSugg - totalCovDemandForSugg;
+          const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+          const dayShifts = insertedShifts.filter(s => s.date === dateStr);
 
-        // If surplus detected, add a single consolidated suggestion
-        if (isSurplusStaff && surplusHours > 5) {
-          const underContractEmps = deptEmployees.filter(e => {
-            const used = weeklyHours_final.get(e.user_id) ?? 0;
-            return (e.weekly_contract_hours - used) > 3;
-          });
-          if (underContractEmps.length > 0) {
-            const empNames = underContractEmps.map(e => nameMap.get(e.user_id) ?? "?").join(", ");
-            const totalDeficit = underContractEmps.reduce((s, e) => s + (e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0)), 0);
-            const lendingAlts = underContractEmps.map(e => ({
-              id: `lending-surplus-${e.user_id}`,
-              label: `Prestito: ${nameMap.get(e.user_id) ?? "?"} (${e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0)}h disponibili)`,
-              description: `${nameMap.get(e.user_id) ?? "?"} ha ${weeklyHours_final.get(e.user_id) ?? 0}h/${e.weekly_contract_hours}h. Le ore rimanenti possono essere utilizzate in un altro store della stessa città.`,
-              actionType: "lending",
-              userId: e.user_id,
-              userName: nameMap.get(e.user_id) ?? "?",
-              suggestedHours: e.weekly_contract_hours - (weeklyHours_final.get(e.user_id) ?? 0),
-            }));
+          for (const cov of dayCov) {
+            const h = parseInt(cov.hour_slot.split(":")[0], 10);
+            const coveringShifts: GeneratedShift[] = [];
+            for (const s of dayShifts) {
+              const sh = parseInt(s.start_time!.split(":")[0], 10);
+              let eh = parseInt(s.end_time!.split(":")[0], 10);
+              if (eh === 0) eh = 24;
+              if (h >= sh && h < eh) coveringShifts.push(s);
+            }
 
-            deptSuggestions.push({
-              id: `surplus-${dept}`,
-              type: "surplus_staff",
-              severity: "info",
-              title: `📊 Surplus personale ${dept === "cucina" ? "Cucina" : "Sala"}: ${surplusHours}h ore contrattuali non assegnabili`,
-              description: `Il monteore contrattuale (${totalContractHoursForSugg}h) supera la domanda di copertura (${totalCovDemandForSugg}h). ${underContractEmps.length} dipendenti hanno ${totalDeficit}h totali sotto contratto. I giorni liberi extra sono stati distribuiti equamente. Consigliato: prestito inter-store per ${empNames}.`,
-              actionLabel: "Proponi prestiti",
-              declineLabel: "Compensa prossima settimana",
-              alternatives: lendingAlts,
-            });
+            const surplus = coveringShifts.length - cov.min_staff_required;
+            if (surplus >= 1) {
+              const dayD = new Date(dateStr + "T00:00:00");
+              const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+              const surplusNames = coveringShifts.slice(-surplus).map(s => nameMap.get(s.user_id) ?? "?").join(", ");
+
+              deptSuggestions.push({
+                id: `surplus-${dept}-${dateStr}-${h}`,
+                type: "surplus",
+                severity: surplus >= 2 ? "warning" : "info",
+                title: `${surplus} persona/e in più ${dayLabel} alle ${h}:00`,
+                description: `Presenti ${coveringShifts.length} su ${cov.min_staff_required} richiesti. Surplus: ${surplusNames}`,
+                actionLabel: "Vedi Dettagli",
+                declineLabel: "Ignora",
+                date: dateStr,
+                slot: `${h}:00`,
+                surplusCount: surplus,
+                surplusReason: `${coveringShifts.length} presenti vs ${cov.min_staff_required} richiesti alle ${h}:00`,
+                alternatives: coveringShifts.slice(-surplus).map(s => {
+                  const empName = nameMap.get(s.user_id) ?? "Dipendente";
+                  const empBal = hourBalances.get(s.user_id) ?? 0;
+                  return {
+                    id: `remove-${s.user_id}-${dateStr}-${h}`,
+                    label: `Rimuovi turno ${empName}`,
+                    description: `${empName} ha ${weeklyHours_final.get(s.user_id) ?? 0}h questa settimana (contratto: ${empMapForSugg.get(s.user_id)?.weekly_contract_hours ?? 40}h, bilancio: ${empBal > 0 ? "+" : ""}${empBal}h)`,
+                    actionType: "remove_surplus",
+                    userId: s.user_id,
+                    userName: empName,
+                    shiftId: s.generation_run_id, // reference
+                  };
+                }),
+              });
+            }
           }
         }
 
-        // Individual >5h deviations
+        // Weekly hour deviation suggestions — for deficits, also propose inter-store lending
         for (const emp of deptEmployees) {
           const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
           const delta = weeklyUsed - emp.weekly_contract_hours;
-          // ONLY flag deviations > 5h
-          if (Math.abs(delta) > 5) {
+          // Only flag significant deviations (>=3h) within this generated week
+          if (Math.abs(delta) >= 3) {
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             const direction = delta > 0 ? "eccesso" : "deficit";
             const absDelta = Math.abs(delta);
-            // Skip individual deficit suggestions if already covered by surplus suggestion
-            if (delta < 0 && isSurplusStaff) continue;
-
+            
+            // For deficits: suggest lending to another store in the same city
             const lendingAlternatives: any[] = [];
             if (delta < 0) {
+              // This employee has remaining contract hours — suggest lending them to stores that need help
               lendingAlternatives.push({
                 id: `lending-deficit-${emp.user_id}`,
                 label: `Proponi prestito inter-store per ${empName}`,
-                description: `${empName} ha ${absDelta}h non utilizzate questa settimana (${weeklyUsed}/${emp.weekly_contract_hours}h). Può essere prestato/a ad un altro store della stessa città.`,
+                description: `${empName} ha ${absDelta}h non utilizzate questa settimana. Può essere prestato/a ad un altro store della stessa città per coprire fabbisogni. Il sistema cercherà automaticamente slot scoperti negli altri locali.`,
                 actionType: "lending",
                 userId: emp.user_id,
                 userName: empName,
                 suggestedHours: absDelta,
               });
             }
-
+            
             deptSuggestions.push({
               id: `weekdelta-${emp.user_id}`,
               type: "overtime_balance",
-              severity: "warning",
-              title: `⚠️ ${empName}: ${direction} di ${absDelta}h (oltre soglia ±5h)`,
+              severity: absDelta >= 5 ? "warning" : "info",
+              title: `${empName}: ${direction} di ${absDelta}h questa settimana`,
               description: delta > 0
-                ? `${empName} ha ${weeklyUsed}h assegnate su ${emp.weekly_contract_hours}h contratto. Superamento significativo: valuta ridistribuzione o riduzione turni.`
-                : `${empName} ha solo ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto. Consigliato prestito inter-store per utilizzare le ore rimanenti.`,
-              actionLabel: delta > 0 ? "Rivedi turni" : (lendingAlternatives.length > 0 ? "Proponi Prestito" : "Info"),
-              declineLabel: "Compensa prossima settimana",
+                ? `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito ridurre di ${Math.min(absDelta, 2)}h.`
+                : `${empName} ha ${weeklyUsed}h assegnate su ${emp.weekly_contract_hours}h contratto. Le ore rimanenti possono essere coperte con un prestito inter-store o estendendo i turni esistenti.`,
+              actionLabel: delta > 0 ? "Applica Riduzione" : (lendingAlternatives.length > 0 ? "Proponi Prestito" : "Vai al giorno"),
+              declineLabel: delta > 0 ? "Ignora" : "Compensa prossima settimana",
               userId: emp.user_id,
               userName: empName,
-              suggestedHours: absDelta,
+              suggestedHours: Math.min(absDelta, 2),
               alternatives: lendingAlternatives.length > 0 ? lendingAlternatives : undefined,
             });
           }
         }
-        // ── Also save auto-resolved adjustments to generation_adjustments ──
-        // Track hours added by auto-resolution for next-week compensation
-        const autoResolveAdjustments: { userId: string; extraHours: number }[] = [];
-        for (const emp of deptEmployees) {
-          const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-          const delta = weeklyUsed - emp.weekly_contract_hours;
-          if (delta > 0 && delta <= 5) {
-            autoResolveAdjustments.push({ userId: emp.user_id, extraHours: delta });
+
+        // ─── Smart post-generation suggestions ─────────────────────────
+        // Condition 1: Still uncovered slots AND no internal alternatives left → suggest increase splits
+        const uncoveredWithNoAlts = deptSuggestions.filter(
+          (s: any) => s.type === "uncovered" && (!s.alternatives || s.alternatives.length === 0)
+        );
+        if (uncoveredSlots.length > 0 && uncoveredWithNoAlts.length > 0) {
+          const currentSplitLimit = rules.max_split_shifts_per_employee_per_week + (fallbackUsed ? 1 : 0);
+          deptSuggestions.push({
+            id: `smart-increase-splits-${dept}`,
+            type: "uncovered",
+            severity: "warning",
+            title: `Aumentare spezzati a ${currentSplitLimit + 1}/settimana? (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            description: `Ci sono ancora ${uncoveredSlots.length} slot scoperti e nessuna alternativa interna disponibile. Aumentando il limite spezzati da ${currentSplitLimit} a ${currentSplitLimit + 1} per dipendente, l'algoritmo potrebbe coprire più slot.`,
+            actionLabel: "Sì, aumenta spezzati",
+            declineLabel: "No, mantieni limite",
+            alternatives: [{
+              id: `action-increase-splits-${dept}`,
+              label: `Aumenta spezzati a ${currentSplitLimit + 1}`,
+              description: `Porta il limite spezzati settimanali da ${currentSplitLimit} a ${currentSplitLimit + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} e rigenera i turni.`,
+              actionType: "increase_splits",
+              suggestedHours: currentSplitLimit + 1,
+            }],
+          });
+        }
+
+        // Condition 2: ALL slots covered AND frequent surplus → suggest increase days off
+        if (uncoveredSlots.length === 0) {
+          // Count how many surplus slots exist
+          const surplusSuggestions = deptSuggestions.filter((s: any) => s.type === "surplus");
+          if (surplusSuggestions.length >= 3) {
+            const currentDaysOff = rules.mandatory_days_off_per_week;
+            deptSuggestions.push({
+              id: `smart-increase-daysoff-${dept}`,
+              type: "surplus",
+              severity: "info",
+              title: `Aggiungere +1 giorno libero a testa? (${dept === "cucina" ? "Cucina" : "Sala"})`,
+              description: `Tutti gli slot sono coperti e ci sono ${surplusSuggestions.length} slot con surplus. Aumentando i giorni liberi da ${currentDaysOff} a ${currentDaysOff + 1} si riduce il sovraffollamento e si migliora il benessere del team.`,
+              actionLabel: "Sì, +1 giorno libero",
+              declineLabel: "No, mantieni",
+              alternatives: [{
+                id: `action-increase-daysoff-${dept}`,
+                label: `Porta giorni liberi a ${currentDaysOff + 1}`,
+                description: `Aumenta i giorni liberi obbligatori da ${currentDaysOff} a ${currentDaysOff + 1} per ogni dipendente di ${dept === "cucina" ? "Cucina" : "Sala"} per questa settimana e rigenera.`,
+                actionType: "increase_days_off",
+                suggestedHours: currentDaysOff + 1,
+              }],
+            });
           }
         }
-        if (autoResolveAdjustments.length > 0) {
-          const arInserts = autoResolveAdjustments.map(ar => ({
-            store_id,
-            user_id: ar.userId,
-            week_start: week_start_date,
-            adjustment_type: "auto_resolve",
-            extra_hours: ar.extraHours,
-            notes: `[Auto-risoluzione] +${ar.extraHours}h per copertura. Compensazione automatica settimana successiva.`,
-          }));
-          await adminClient.from("generation_adjustments").insert(arInserts);
+
+        // ── Staffing Analysis Suggestion ──
+        // Calculate weekly required hours from coverage data
+        {
+          const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
+          const totalWeeklyRequired = weekDates.reduce((sum, dateStr) => {
+            const dow = getDayOfWeek(dateStr);
+            const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+            return sum + dayCov.reduce((s, c) => s + c.min_staff_required, 0);
+          }, 0);
+          const avgContract = deptEmployees.length > 0
+            ? deptEmployees.reduce((s, e) => s + e.weekly_contract_hours, 0) / deptEmployees.length
+            : 40;
+          const idealCount = Math.ceil(totalWeeklyRequired / avgContract);
+          const actualCount = deptEmployees.length;
+          const delta = actualCount - idealCount;
+          if (delta !== 0) {
+            deptSuggestions.push({
+              id: `staffing-${dept}`,
+              type: "surplus",
+              severity: delta < 0 ? "warning" : "info",
+              title: delta > 0
+                ? `Organico ${deptLabel}: +${delta} rispetto al fabbisogno`
+                : `Organico ${deptLabel}: ${delta} rispetto al fabbisogno`,
+              description: `Servono ${totalWeeklyRequired}h/settimana (${idealCount} dipendenti ideali a ${Math.round(avgContract)}h). Presenti: ${actualCount}.`,
+              actionLabel: "Info",
+              declineLabel: "Ok",
+              surplusCount: Math.abs(delta),
+              surplusReason: delta > 0 ? "Surplus organico" : "Deficit organico",
+            });
+          }
         }
 
         // Update run with notes (including AI strategy report) AND suggestions
-        const autoResolveSection = autoResolveReport.length > 0 ? "\n\n--- AUTO-RISOLUZIONE ---\n" + autoResolveReport.join("\n") : "";
         const statusNotes = [
-          uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "✅ Generazione completata — tutti i turni sistemati",
-          autoResolved > 0 ? `${autoResolved} problemi auto-risolti` : null,
+          uncoveredSlots.length > 0 ? `${uncoveredSlots.length} slot non coperti` : "Generazione completata",
           `fitness: ${fitnessScore.toFixed(1)}`,
-          "Gemini 2.5 AI",
+          "Gemini 2.5 AI", // Always AI — no fallback
           fallbackUsed ? "spezzati attivati" : null,
           isPatchMode ? "modalità patch" : null,
         ].filter(Boolean).join(" | ");
-        const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n") + autoResolveSection + "\n\n--- LOG GIORNALIERO DETTAGLIATO ---\n" + (bestDayLogs ?? []).join("\n");
+        const fullNotes = statusNotes + "\n\n--- REPORT STRATEGIA ---\n" + strategyReport.join("\n") + "\n\n--- LOG GIORNALIERO DETTAGLIATO ---\n" + (bestDayLogs ?? []).join("\n");
 
         // ── Save flex adjustments to generation_adjustments for next-week rebalancing ──
         if (flexAdjustments.length > 0) {
@@ -3170,58 +3276,26 @@ Deno.serve(async (req) => {
             notes: `[Auto-flex] ${fa.reason}. Compensazione automatica settimana successiva.`,
           }));
           await adminClient.from("generation_adjustments").insert(adjustInserts);
-          // NO suggestion for flex — it's auto-resolved
+          
+          // Add flex adjustment info to suggestions
+          deptSuggestions.push({
+            id: `flex-adjustments-${dept}`,
+            type: "hour_reduction" as any,
+            severity: "info",
+            title: `Ore flex applicate a ${flexAdjustments.length} dipendente/i (${dept === "cucina" ? "Cucina" : "Sala"})`,
+            description: `Per coprire slot scoperti, sono state aggiunte ore extra: ${flexAdjustments.map(fa => `${fa.userName} +${fa.extraHours}h`).join(", ")}. Queste ore verranno compensate automaticamente nella generazione della settimana successiva.`,
+            actionLabel: "Info",
+            declineLabel: "Ok",
+          });
         }
         
         // ── Add flex report to notes ──
         const flexSection = flexReport.length > 0 ? "\n\n--- FLEX ±5h ---\n" + flexReport.join("\n") : "";
-
-        // ── Hour deviation summary in report (with reasons for transparency) ──
-        const deviationReport: string[] = [];
-        const totalAssignedAllEmps = deptEmployees.reduce((sum, e) => sum + (weeklyHours_final.get(e.user_id) ?? 0), 0);
-        const totalContractAllEmps = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
-        const totalCovDemandForReport = weekDates.reduce((sum, dateStr) => {
-          const dow = getDayOfWeek(dateStr);
-          return sum + coverageData.filter(c => c.department === dept && c.day_of_week === dow).reduce((s, c) => s + c.min_staff_required, 0);
-        }, 0);
-        const hasSurplus = totalContractAllEmps > totalCovDemandForReport;
-
-        if (hasSurplus) {
-          deviationReport.push(`⚠️ SURPLUS PERSONALE RILEVATO`);
-          deviationReport.push(`Monteore contrattuale: ${totalContractAllEmps}h | Domanda copertura: ${totalCovDemandForReport}h | Eccedenza: ${totalContractAllEmps - totalCovDemandForReport}h`);
-          deviationReport.push(`I giorni liberi extra sono stati distribuiti equamente a tutto il team.`);
-          deviationReport.push(`Suggerimento: considera il prestito inter-store per sfruttare le ore contrattuali inutilizzate.\n`);
-        }
-        deviationReport.push(`Totale ore assegnate: ${totalAssignedAllEmps}h/${totalContractAllEmps}h contratto\n`);
-
-        for (const emp of deptEmployees) {
-          const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-          const delta = weeklyUsed - emp.weekly_contract_hours;
-          const empName = nameMap.get(emp.user_id) ?? emp.user_id.slice(0, 8);
-          let reason = "";
-          if (delta < -5) {
-            reason = hasSurplus ? " — surplus personale, ore non assegnabili" : " — copertura insufficiente";
-            reason += " ⚠️ OLTRE SOGLIA";
-          } else if (delta < -1) {
-            reason = hasSurplus ? " — surplus personale" : " — bassa domanda copertura";
-          } else if (delta > 5) {
-            reason = " — copertura critica ⚠️ OLTRE SOGLIA";
-          } else if (delta > 1) {
-            reason = " — copertura extra necessaria";
-          }
-          deviationReport.push(`${empName}: ${weeklyUsed}h/${emp.weekly_contract_hours}h (${delta > 0 ? "+" : ""}${delta}h)${reason}`);
-        }
-
-        if (hasSurplus) {
-          deviationReport.push(`\n⏩ Le ore non assegnate verranno compensate la settimana successiva tramite riequilibrio automatico.`);
-        }
-
-        const deviationSection = "\n\n--- BILANCIO ORE ---\n" + deviationReport.join("\n");
-
+        
         await adminClient.from("generation_runs").update({
           status: "completed",
           completed_at: new Date().toISOString(),
-          notes: fullNotes + flexSection + deviationSection,
+          notes: fullNotes + flexSection,
           fitness_score: fitnessScore,
           iterations_run: iterationsRun,
           hour_adjustments: hourAdjustments,

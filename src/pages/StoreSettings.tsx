@@ -232,7 +232,7 @@ const StoreSettings = () => {
               onOpenChange={setCoverageOpen}
               hours={hours}
               coverage={coverage}
-              onSave={(rows) => storeId && saveCoverage.mutate({ storeId, rows: rows as any })}
+              onSave={(rows) => storeId && saveCoverage.mutate({ storeId, rows })}
               isSaving={saveCoverage.isPending}
               readOnly={readOnly}
             />
