@@ -56,6 +56,7 @@ export function useGenerateShifts() {
           mode: params.mode,
           affected_user_id: params.affected_user_id,
           locked_shift_ids: params.locked_shift_ids,
+          department: params.department,
         },
       });
       if (error) throw error;
