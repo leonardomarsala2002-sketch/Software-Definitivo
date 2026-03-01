@@ -1,11 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, Sparkles, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatEndTime } from "@/lib/shiftColors";
@@ -13,6 +14,7 @@ import { getShiftColor } from "@/lib/shiftColors";
 import type { ShiftRow } from "@/hooks/useShifts";
 import type { OpeningHour } from "@/hooks/useStoreSettings";
 import type { LendingRecord } from "@/hooks/useLendingData";
+import { DraggableShiftBar } from "./DraggableShiftBar";
 import { EmployeeWeekDrawer } from "./EmployeeWeekDrawer";
 
 interface Employee {
@@ -36,6 +38,8 @@ interface DayDetailDialogProps {
   onCreateShift: (shift: { user_id: string; date: string; start_time: string | null; end_time: string | null; is_day_off: boolean }) => void;
   onUpdateShift: (id: string, updates: Partial<Pick<ShiftRow, "start_time" | "end_time" | "is_day_off">>) => void;
   onDeleteShift: (id: string) => void;
+  onRebalanceAfterEdit?: () => void;
+  isRebalancing?: boolean;
 }
 
 
@@ -44,8 +48,10 @@ export function DayDetailDialog({
   openingHours, allowedEntries, allowedExits, canEdit,
   lendings = [], currentStoreId,
   onCreateShift, onUpdateShift, onDeleteShift,
+  onRebalanceAfterEdit, isRebalancing,
 }: DayDetailDialogProps) {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [pendingManualEdits, setPendingManualEdits] = useState<Map<string, { start_time?: string; end_time?: string }>>(new Map());
 
   const deptShiftsForDate = shifts.filter(s => s.department === department && s.date === date);
   const isArchived = deptShiftsForDate.length > 0 && deptShiftsForDate.every(s => s.status === "archived");
@@ -74,6 +80,24 @@ export function DayDetailDialog({
     return map;
   }, [deptShifts]);
 
+  const handleDragUpdate = useCallback((id: string, updates: { start_time?: string; end_time?: string }) => {
+    // Apply the shift change immediately
+    onUpdateShift(id, updates);
+    // Track that a manual edit happened
+    setPendingManualEdits(prev => {
+      const next = new Map(prev);
+      next.set(id, updates);
+      return next;
+    });
+  }, [onUpdateShift]);
+
+  const handleConfirmRebalance = useCallback(() => {
+    if (onRebalanceAfterEdit) {
+      onRebalanceAfterEdit();
+      setPendingManualEdits(new Map());
+    }
+  }, [onRebalanceAfterEdit]);
+
   const dateLabel = date ? format(parseISO(date), "EEEE d MMMM yyyy", { locale: it }) : "";
   const totalSpan = effectiveClose - openH;
 
@@ -94,6 +118,30 @@ export function DayDetailDialog({
 
         <ScrollArea className="max-h-[calc(85vh-80px)]">
           <div className="px-6 py-4">
+            {/* Rebalance banner */}
+            {pendingManualEdits.size > 0 && canEdit && onRebalanceAfterEdit && (
+              <div className="mb-3 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5">
+                <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-xs text-primary font-medium flex-1">
+                  <strong>{pendingManualEdits.size}</strong> turno/i modificato/i manualmente. Rigenera con AI per ribilanciare gli altri dipendenti.
+                </span>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-7 text-[11px] px-3 gap-1.5 rounded-[32px]"
+                  onClick={handleConfirmRebalance}
+                  disabled={isRebalancing}
+                >
+                  {isRebalancing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  Ribilancia AI
+                </Button>
+              </div>
+            )}
+
             {/* Timeline header */}
             <div className="flex mb-1">
               <div className="w-32 shrink-0" />
@@ -149,30 +197,18 @@ export function DayDetailDialog({
                       ) : (
                         empShifts
                           .filter((s) => !s.is_day_off && s.start_time && s.end_time)
-                          .map((s) => {
-                            const sH = parseInt(s.start_time!.split(":")[0]);
-                            let eH = parseInt(s.end_time!.split(":")[0]);
-                            if (eH === 0) eH = 24;
-                            const left = ((sH - openH) / totalSpan) * 100;
-                            const width = ((eH - sH) / totalSpan) * 100;
-                            const color = getShiftColor(s);
-
-                            return (
-                              <div
-                                key={s.id}
-                                className={cn(
-                                  "absolute top-0.5 bottom-0.5 rounded-md border flex items-center justify-center",
-                                  color.bg,
-                                  color.border
-                                )}
-                                style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, width)}%` }}
-                              >
-                                <span className={cn("text-[10px] font-semibold", color.text)}>
-                                  {s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}
-                                </span>
-                              </div>
-                            );
-                          })
+                          .map((s) => (
+                            <DraggableShiftBar
+                              key={s.id}
+                              shift={s}
+                              openH={openH}
+                              totalSpan={totalSpan}
+                              canEdit={canEdit && !isArchived}
+                              onShiftUpdate={handleDragUpdate}
+                              allowedEntries={allowedEntries}
+                              allowedExits={allowedExits}
+                            />
+                          ))
                       )}
                     </div>
                   </div>

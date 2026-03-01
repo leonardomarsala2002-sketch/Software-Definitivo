@@ -1242,8 +1242,9 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending } = body;
+    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending, locked_shift_ids } = body;
     const isPatchMode = mode === "patch";
+    const isRebalanceMode = mode === "rebalance";
     const MAX_ITERATIONS = 12;
     const START_TIME = Date.now();
     const MAX_EXECUTION_MS = 120_000; // 120s hard limit (edge fn ~150s timeout)
@@ -1380,7 +1381,38 @@ Deno.serve(async (req) => {
     // CLEAN REGENERATION: delete ALL previous data for this store+week
     // before generating new shifts. Only in FULL mode (not patch).
     // ═══════════════════════════════════════════════════════════════════
-    if (!isPatchMode) {
+    // ═══════════════════════════════════════════════════════════════════
+    // REBALANCE MODE: keep locked shifts, regenerate everything else
+    // ═══════════════════════════════════════════════════════════════════
+    const lockedShiftIds = new Set<string>(Array.isArray(locked_shift_ids) ? locked_shift_ids : []);
+    
+    if (isRebalanceMode && lockedShiftIds.size > 0) {
+      console.log(`[REBALANCE] Keeping ${lockedShiftIds.size} locked shifts, regenerating others for store=${store_id}, week=${week_start_date}..${weekEnd}`);
+
+      // Delete NON-locked draft shifts for this store+week
+      const { data: existingDrafts } = await adminClient.from("shifts").select("id")
+        .eq("store_id", store_id).eq("status", "draft")
+        .gte("date", week_start_date).lte("date", weekEnd);
+      
+      const toDelete = (existingDrafts ?? []).filter(s => !lockedShiftIds.has(s.id)).map(s => s.id);
+      if (toDelete.length > 0) {
+        // Delete in batches
+        for (let i = 0; i < toDelete.length; i += 100) {
+          await adminClient.from("shifts").delete().in("id", toDelete.slice(i, i + 100));
+        }
+      }
+      console.log(`[REBALANCE] Deleted ${toDelete.length} non-locked drafts, kept ${lockedShiftIds.size} locked`);
+
+      // Delete old generation_runs (but keep the locked shifts in place)
+      const { data: oldRuns } = await adminClient.from("generation_runs").select("id")
+        .eq("store_id", store_id).eq("week_start", week_start_date);
+      const oldRunIds = (oldRuns ?? []).map(r => r.id);
+      if (oldRunIds.length > 0) {
+        await adminClient.from("lending_suggestions").delete().in("generation_run_id", oldRunIds);
+        await adminClient.from("generation_runs").delete().in("id", oldRunIds);
+      }
+    } else if (!isPatchMode) {
+      // CLEAN REGENERATION: delete ALL previous data for this store+week
       console.log(`[CLEANUP] Deleting previous data for store=${store_id}, week=${week_start_date}..${weekEnd}`);
 
       // 1) Delete lending_request_messages for lending_requests involving this store+week
@@ -2430,6 +2462,8 @@ I turni proposti sono in stato <strong>Draft</strong> e richiedono la tua approv
       departments: results,
       lending_suggestions_created: lendingSuggestionsCreated,
       is_patch: isPatchMode,
+      is_rebalance: isRebalanceMode,
+      locked_shifts_kept: lockedShiftIds.size,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
