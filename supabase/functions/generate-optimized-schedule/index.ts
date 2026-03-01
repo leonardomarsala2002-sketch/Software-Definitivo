@@ -160,8 +160,8 @@ const PENALTY_OVERCROWDED = -10;
 const PENALTY_DRIFT_PER_H = -5;
 const PENALTY_REST_VIOLATION = -200;  // 11h rest violation (HARD)
 const PENALTY_NO_DAY_OFF = -500;      // Employee has 0 days off (HARD)
-const PENALTY_EQUITY_SPLIT = -30;     // Spezzati equity
-const PENALTY_EQUITY_DAYSOFF = -30;   // Days off equity
+const PENALTY_EQUITY_SPLIT = -50;     // Spezzati equity (strict: any diff penalized)
+const PENALTY_EQUITY_DAYSOFF = -50;   // Days off equity (strict: any diff penalized)
 const BONUS_BALANCED = 3;
 
 function computeFitness(
@@ -269,19 +269,18 @@ function computeFitness(
     const splitValues = [...splitCounts.values()];
     const maxSplit = Math.max(...splitValues);
     const minSplit = Math.min(...splitValues);
-    if (maxSplit - minSplit > 1) {
-      score += (maxSplit - minSplit - 1) * PENALTY_EQUITY_SPLIT;
+    // STRICT: penalize ANY difference (tolerance 0)
+    if (maxSplit - minSplit > 0) {
+      score += (maxSplit - minSplit) * PENALTY_EQUITY_SPLIT;
     }
   }
 
-  // 6) EQUITY: penalize days off imbalance (soft) + HARD penalty for 0 days off
+  // 6) EQUITY: penalize days off imbalance (STRICT tolerance 0) + HARD penalty for 0 days off
   const daysOffCounts = new Map<string, number>();
   for (const emp of deptEmployees) {
-    // Count days off = days where employee has a day_off shift OR simply doesn't work
     const workDays = new Set(deptShifts.filter(s => s.user_id === emp.user_id && !s.is_day_off && s.start_time).map(s => s.date));
     const offCount = weekDates.length - workDays.size;
     daysOffCounts.set(emp.user_id, offCount);
-    // HARD penalty: if employee has 0 days off, massive penalty
     if (offCount === 0) {
       score += PENALTY_NO_DAY_OFF;
     }
@@ -291,8 +290,9 @@ function computeFitness(
     const offValues = [...daysOffCounts.values()];
     const maxOff = Math.max(...offValues);
     const minOff = Math.min(...offValues);
-    if (maxOff - minOff > 1) {
-      score += (maxOff - minOff - 1) * PENALTY_EQUITY_DAYSOFF;
+    // STRICT: penalize ANY difference (tolerance 0)
+    if (maxOff - minOff > 0) {
+      score += (maxOff - minOff) * PENALTY_EQUITY_DAYSOFF;
     }
   }
 
@@ -475,9 +475,11 @@ REGOLE INVIOLABILI:
 - Rispetta entrate/uscite ammesse per il reparto ${context.department}
 - Il limite settimanale di OGNI dipendente è il suo contratto individuale (ore_contrattuali), NON un valore store generico
 - Ogni dipendente DEVE avere almeno ${context.rules.mandatory_days_off_per_week} giorno/i libero/i
+- EQUITÀ RIGOROSA: tutti i dipendenti senza vincoli personalizzati DEVONO avere lo STESSO numero di giorni liberi e lo STESSO numero di spezzati. Tolleranza ZERO.
 - Le eccezioni (ferie, malattia) bloccano COMPLETAMENTE il dipendente in quelle date
 - Le richieste approvate DEVONO essere rispettate
 - Il bilancio ore deve guidare la distribuzione: chi ha ore in eccesso riceve meno
+- UTILIZZA IL MONTEORE COMPLETO: ogni dipendente deve ricevere ore il più possibile vicine al proprio contratto. Se la copertura interna è piena, proponi prestito inter-store.
 - NON proporre MAI soluzioni generiche: ogni strategia deve essere calibrata sui dati REALI
 
 DISTRIBUZIONE STRATEGIE:
@@ -872,21 +874,27 @@ function equalizeEquity(
   }
 
   // ── 1) EQUALIZE DAYS OFF ──
-  // Target: all employees should have the same number of days off if possible
-  const MAX_EQUITY_PASSES = 3;
+  // Target: EXACT equality for non-custom employees (tolerance 0)
+  // Employees with custom days off constraints are excluded from strict equity
+  const MAX_EQUITY_PASSES = 5;
+  const hasCustomDaysOff = (uid: string) => empConstraints.get(uid)?.custom_days_off != null;
+  const standardEmps = deptEmployees.filter(e => !hasCustomDaysOff(e.user_id));
+  
   for (let pass = 0; pass < MAX_EQUITY_PASSES; pass++) {
     const stats = computeStats(result);
-    const offValues = [...stats.daysOffMap.values()];
-    const avgOff = offValues.reduce((a, b) => a + b, 0) / offValues.length;
+    // Only check equity among standard employees (no custom constraints)
+    const stdOffValues = standardEmps.map(e => stats.daysOffMap.get(e.user_id) ?? 0);
+    if (stdOffValues.length < 2) break;
+    const avgOff = stdOffValues.reduce((a, b) => a + b, 0) / stdOffValues.length;
     const targetOff = Math.round(avgOff);
-    const maxOff = Math.max(...offValues);
-    const minOff = Math.min(...offValues);
-    if (maxOff - minOff <= 1) break; // Already balanced enough
+    const maxOff = Math.max(...stdOffValues);
+    const minOff = Math.min(...stdOffValues);
+    if (maxOff === minOff) break; // STRICT: exact equality required (tolerance 0)
 
-    // Find employees with too many days off (donors) and too few (receivers)
-    const donors = deptEmployees.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) > targetOff)
+    // Find employees with too many days off (donors) and too few (receivers) — only standard employees
+    const donors = standardEmps.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) > targetOff)
       .sort((a, b) => (stats.daysOffMap.get(b.user_id) ?? 0) - (stats.daysOffMap.get(a.user_id) ?? 0));
-    const receivers = deptEmployees.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) < targetOff)
+    const receivers = standardEmps.filter(e => (stats.daysOffMap.get(e.user_id) ?? 0) < targetOff)
       .sort((a, b) => (stats.daysOffMap.get(a.user_id) ?? 0) - (stats.daysOffMap.get(b.user_id) ?? 0));
 
     let swapped = false;
@@ -978,15 +986,19 @@ function equalizeEquity(
   }
 
   // ── 2) EQUALIZE SPLIT SHIFTS ──
-  // If some employees have many more splits than others, try to swap
+  // STRICT: all standard employees must have exactly the same number of splits
+  const hasCustomSplits = (uid: string) => empConstraints.get(uid)?.custom_max_split_shifts != null;
+  const standardEmpsForSplits = deptEmployees.filter(e => !hasCustomSplits(e.user_id));
+  
   for (let pass = 0; pass < MAX_EQUITY_PASSES; pass++) {
     const stats = computeStats(result);
-    const splitValues = [...stats.splitsMap.values()];
-    const maxSplits = Math.max(...splitValues);
-    const minSplits = Math.min(...splitValues);
-    if (maxSplits - minSplits <= 1) break;
+    const stdSplitValues = standardEmpsForSplits.map(e => stats.splitsMap.get(e.user_id) ?? 0);
+    if (stdSplitValues.length < 2) break;
+    const maxSplits = Math.max(...stdSplitValues);
+    const minSplits = Math.min(...stdSplitValues);
+    if (maxSplits === minSplits) break; // STRICT: exact equality (tolerance 0)
 
-    const overloaded = deptEmployees.filter(e => (stats.splitsMap.get(e.user_id) ?? 0) > minSplits + 1)
+    const overloaded = standardEmpsForSplits.filter(e => (stats.splitsMap.get(e.user_id) ?? 0) > minSplits)
       .sort((a, b) => (stats.splitsMap.get(b.user_id) ?? 0) - (stats.splitsMap.get(a.user_id) ?? 0));
 
     let swapped = false;
@@ -1016,30 +1028,38 @@ function equalizeEquity(
 
   // ── 3) GENERATE EQUITY REPORT ──
   const finalStats = computeStats(result);
-  equityReport.push(`\n📊 RIEPILOGO EQUITÀ:`);
-  const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
-  const splitValues = [...finalStats.splitsMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
+  equityReport.push(`\n📊 RIEPILOGO EQUITÀ (tolleranza ZERO per dipendenti standard):`);
+  const offValues = [...finalStats.daysOffMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v, isCustom: empConstraints.get(uid)?.custom_days_off != null }));
+  const splitValues = [...finalStats.splitsMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v, isCustom: empConstraints.get(uid)?.custom_max_split_shifts != null }));
   const hoursValues = [...finalStats.hoursMap.entries()].map(([uid, v]) => ({ name: getEmpName(uid), value: v }));
 
-  const avgOff = offValues.reduce((a, b) => a + b.value, 0) / Math.max(offValues.length, 1);
-  const avgSplits = splitValues.reduce((a, b) => a + b.value, 0) / Math.max(splitValues.length, 1);
+  const stdOff = offValues.filter(v => !v.isCustom);
+  const stdSplits = splitValues.filter(v => !v.isCustom);
+  const avgOff = stdOff.reduce((a, b) => a + b.value, 0) / Math.max(stdOff.length, 1);
+  const avgSplits = stdSplits.reduce((a, b) => a + b.value, 0) / Math.max(stdSplits.length, 1);
   const avgHours = hoursValues.reduce((a, b) => a + b.value, 0) / Math.max(hoursValues.length, 1);
 
-  equityReport.push(`Media riposi: ${avgOff.toFixed(1)} | Media spezzati: ${avgSplits.toFixed(1)} | Media ore: ${avgHours.toFixed(1)}`);
+  const stdOffEqual = stdOff.length > 0 && stdOff.every(v => v.value === stdOff[0].value);
+  const stdSplitsEqual = stdSplits.length > 0 && stdSplits.every(v => v.value === stdSplits[0].value);
+  equityReport.push(`Riposi standard: ${stdOffEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdOff.map(v => `${v.name}=${v.value}`).join(", ")})`);
+  equityReport.push(`Spezzati standard: ${stdSplitsEqual ? "✅ UGUALI" : "⚠️ NON uguali"} (${stdSplits.map(v => `${v.name}=${v.value}`).join(", ")})`);
+  equityReport.push(`Media ore: ${avgHours.toFixed(1)}`);
 
   for (const emp of deptEmployees) {
     const off = finalStats.daysOffMap.get(emp.user_id) ?? 0;
     const splits = finalStats.splitsMap.get(emp.user_id) ?? 0;
     const hours = finalStats.hoursMap.get(emp.user_id) ?? 0;
-    const offDelta = off - avgOff;
-    const splitDelta = splits - avgSplits;
-    const hourDelta = hours - avgHours;
+    const empObj = employees.find(e => e.user_id === emp.user_id);
+    const hourDelta = hours - (empObj?.weekly_contract_hours ?? 40);
+    const isCustomOff = empConstraints.get(emp.user_id)?.custom_days_off != null;
+    const isCustomSplit = empConstraints.get(emp.user_id)?.custom_max_split_shifts != null;
     const flags: string[] = [];
-    if (Math.abs(offDelta) >= 1) flags.push(`riposi ${offDelta > 0 ? "+" : ""}${offDelta.toFixed(0)} vs media`);
-    if (Math.abs(splitDelta) >= 1) flags.push(`spezzati ${splitDelta > 0 ? "+" : ""}${splitDelta.toFixed(0)} vs media`);
-    if (Math.abs(hourDelta) >= 3) flags.push(`ore ${hourDelta > 0 ? "+" : ""}${hourDelta.toFixed(0)}h vs media`);
+    if (!isCustomOff && Math.abs(off - avgOff) >= 0.5) flags.push(`riposi ${off} vs media ${avgOff.toFixed(0)}`);
+    if (!isCustomSplit && Math.abs(splits - avgSplits) >= 0.5) flags.push(`spezzati ${splits} vs media ${avgSplits.toFixed(0)}`);
+    if (Math.abs(hourDelta) >= 3) flags.push(`${hourDelta > 0 ? "+" : ""}${hourDelta}h vs contratto`);
+    const customTag = (isCustomOff || isCustomSplit) ? " [personalizzato]" : "";
     const status = flags.length === 0 ? "✅" : `⚠️ ${flags.join(", ")}`;
-    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h — ${status}`);
+    equityReport.push(`  ${getEmpName(emp.user_id)}: ${off} riposi, ${splits} spezzati, ${hours}h/${empObj?.weekly_contract_hours ?? "?"}h${customTag} — ${status}`);
   }
 
   return { rebalancedShifts: result, equityReport };
@@ -2988,7 +3008,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Weekly hour deviation suggestions (only based on THIS generated week, not historical balances)
+        // Weekly hour deviation suggestions — for deficits, also propose inter-store lending
         for (const emp of deptEmployees) {
           const weeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
           const delta = weeklyUsed - emp.weekly_contract_hours;
@@ -2997,6 +3017,22 @@ Deno.serve(async (req) => {
             const empName = nameMap.get(emp.user_id) ?? "Dipendente";
             const direction = delta > 0 ? "eccesso" : "deficit";
             const absDelta = Math.abs(delta);
+            
+            // For deficits: suggest lending to another store in the same city
+            const lendingAlternatives: any[] = [];
+            if (delta < 0) {
+              // This employee has remaining contract hours — suggest lending them to stores that need help
+              lendingAlternatives.push({
+                id: `lending-deficit-${emp.user_id}`,
+                label: `Proponi prestito inter-store per ${empName}`,
+                description: `${empName} ha ${absDelta}h non utilizzate questa settimana. Può essere prestato/a ad un altro store della stessa città per coprire fabbisogni. Il sistema cercherà automaticamente slot scoperti negli altri locali.`,
+                actionType: "lending",
+                userId: emp.user_id,
+                userName: empName,
+                suggestedHours: absDelta,
+              });
+            }
+            
             deptSuggestions.push({
               id: `weekdelta-${emp.user_id}`,
               type: "overtime_balance",
@@ -3004,12 +3040,13 @@ Deno.serve(async (req) => {
               title: `${empName}: ${direction} di ${absDelta}h questa settimana`,
               description: delta > 0
                 ? `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito ridurre di ${Math.min(absDelta, 2)}h.`
-                : `Assegnate ${weeklyUsed}h su ${emp.weekly_contract_hours}h contratto per questa settimana. Suggerito aumentare di ${Math.min(absDelta, 2)}h.`,
-              actionLabel: delta > 0 ? "Applica Riduzione" : "Applica Aumento",
-              declineLabel: "Ignora",
+                : `${empName} ha ${weeklyUsed}h assegnate su ${emp.weekly_contract_hours}h contratto. Le ore rimanenti possono essere coperte con un prestito inter-store o estendendo i turni esistenti.`,
+              actionLabel: delta > 0 ? "Applica Riduzione" : (lendingAlternatives.length > 0 ? "Proponi Prestito" : "Vai al giorno"),
+              declineLabel: delta > 0 ? "Ignora" : "Compensa prossima settimana",
               userId: emp.user_id,
               userName: empName,
               suggestedHours: Math.min(absDelta, 2),
+              alternatives: lendingAlternatives.length > 0 ? lendingAlternatives : undefined,
             });
           }
         }
