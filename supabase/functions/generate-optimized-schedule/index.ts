@@ -2955,7 +2955,6 @@ Deno.serve(async (req) => {
             return Math.max(1, cov.min_staff_required - assignedCount);
           })();
           const dayShifts = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
-          const dow = getDayOfWeek(dateStr);
 
           // ── Get REAL opening hours for THIS specific day ──
           const oh = openingHoursData.find(h => h.day_of_week === dow);
