@@ -1,0 +1,1 @@
+ALTER TABLE engine_rules ADD COLUMN IF NOT EXISTS rule_type text DEFAULT NULL;

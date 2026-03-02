@@ -4,9 +4,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Info, Pencil, Trash2, Plus, Save, X } from "lucide-react";
 import { useEngineRules, useUpsertEngineRule, useDeleteEngineRule, type EngineRule } from "@/hooks/useEngineRules";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const RULE_TYPE_OPTIONS = [
+  { label: "Solo testo per Gemini", value: "__null__" },
+  { label: "Prestito come prima alternativa", value: "lending_first" },
+  { label: "Prestito se nessuna alternativa interna", value: "lending_last_resort" },
+  { label: "Aumenta peso memoria storica", value: "memory_weight_boost" },
+  { label: "Privilegia spezzati (copertura alta)", value: "strategy_splits_high" },
+  { label: "Privilegia turni continui (copertura bassa)", value: "strategy_splits_low" },
+] as const;
+
+function getRuleTypeLabel(value: string | null): string {
+  const opt = RULE_TYPE_OPTIONS.find(o => (value === null ? o.value === "__null__" : o.value === value));
+  return opt?.label ?? "Solo testo per Gemini";
+}
 
 export default function EngineRulesCard() {
   const { data: rules = [], isLoading } = useEngineRules();
@@ -16,12 +31,14 @@ export default function EngineRulesCard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editRuleType, setEditRuleType] = useState<string>("__null__");
   const [isNew, setIsNew] = useState(false);
 
   const startEdit = (rule: EngineRule) => {
     setEditingId(rule.id);
     setEditLabel(rule.label);
     setEditDesc(rule.description);
+    setEditRuleType(rule.rule_type ?? "__null__");
     setIsNew(false);
   };
 
@@ -29,6 +46,7 @@ export default function EngineRulesCard() {
     setEditingId("__new__");
     setEditLabel("");
     setEditDesc("");
+    setEditRuleType("__null__");
     setIsNew(true);
   };
 
@@ -46,6 +64,7 @@ export default function EngineRulesCard() {
         label: editLabel.trim(),
         description: editDesc.trim(),
         sort_order: isNew ? maxSort + 1 : (rules.find((r) => r.id === editingId)?.sort_order ?? maxSort + 1),
+        rule_type: editRuleType === "__null__" ? null : editRuleType,
       },
       { onSuccess: () => cancelEdit() }
     );
@@ -55,6 +74,46 @@ export default function EngineRulesCard() {
     if (editingId === id) cancelEdit();
     remove.mutate(id);
   };
+
+  const renderForm = () => (
+    <div className="space-y-2">
+      <Input
+        value={editLabel}
+        onChange={(e) => setEditLabel(e.target.value)}
+        placeholder="Titolo regola"
+        className="text-xs h-8"
+      />
+      <Textarea
+        value={editDesc}
+        onChange={(e) => setEditDesc(e.target.value)}
+        placeholder="Descrizione regola"
+        className="text-xs min-h-[60px]"
+      />
+      <div>
+        <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Tipo comportamento</label>
+        <Select value={editRuleType} onValueChange={setEditRuleType}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {RULE_TYPE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-1.5 justify-end">
+        <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-7 text-xs">
+          <X className="h-3 w-3 mr-1" /> Annulla
+        </Button>
+        <Button size="sm" onClick={handleSave} disabled={upsert.isPending} className="h-7 text-xs">
+          <Save className="h-3 w-3 mr-1" /> Salva
+        </Button>
+      </div>
+    </div>
+  );
 
   if (isLoading) {
     return <Skeleton className="h-40 w-full rounded-xl mt-6" />;
@@ -74,33 +133,19 @@ export default function EngineRulesCard() {
         <ul className="space-y-2">
           {rules.map((rule) =>
             editingId === rule.id ? (
-              <li key={rule.id} className="rounded-lg border border-primary/30 bg-background p-3 space-y-2">
-                <Input
-                  value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  placeholder="Titolo regola"
-                  className="text-xs h-8"
-                />
-                <Textarea
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  placeholder="Descrizione regola"
-                  className="text-xs min-h-[60px]"
-                />
-                <div className="flex gap-1.5 justify-end">
-                  <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-7 text-xs">
-                    <X className="h-3 w-3 mr-1" /> Annulla
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={upsert.isPending} className="h-7 text-xs">
-                    <Save className="h-3 w-3 mr-1" /> Salva
-                  </Button>
-                </div>
+              <li key={rule.id} className="rounded-lg border border-primary/30 bg-background p-3">
+                {renderForm()}
               </li>
             ) : (
               <li key={rule.id} className="text-xs flex items-start gap-2 group">
                 <div className="flex-1">
                   <span className="font-medium text-foreground">{rule.label}:</span>{" "}
                   <span className="text-muted-foreground">{rule.description}</span>
+                  {rule.rule_type && (
+                    <Badge variant="outline" className="ml-1.5 text-[9px] px-1 py-0 align-middle">
+                      {getRuleTypeLabel(rule.rule_type)}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => startEdit(rule)}>
@@ -120,29 +165,9 @@ export default function EngineRulesCard() {
             )
           )}
 
-          {/* New rule form */}
           {isNew && editingId === "__new__" && (
-            <li className="rounded-lg border border-primary/30 bg-background p-3 space-y-2">
-              <Input
-                value={editLabel}
-                onChange={(e) => setEditLabel(e.target.value)}
-                placeholder="Titolo regola"
-                className="text-xs h-8"
-              />
-              <Textarea
-                value={editDesc}
-                onChange={(e) => setEditDesc(e.target.value)}
-                placeholder="Descrizione regola"
-                className="text-xs min-h-[60px]"
-              />
-              <div className="flex gap-1.5 justify-end">
-                <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-7 text-xs">
-                  <X className="h-3 w-3 mr-1" /> Annulla
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={upsert.isPending} className="h-7 text-xs">
-                  <Save className="h-3 w-3 mr-1" /> Salva
-                </Button>
-              </div>
+            <li className="rounded-lg border border-primary/30 bg-background p-3">
+              {renderForm()}
             </li>
           )}
         </ul>
