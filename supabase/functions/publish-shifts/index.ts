@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
           }
         }
         for (const [date, count] of datesByDow) {
-          if (count > cov.min_staff_required) {
+          if (count > (cov.max_staff_required ?? cov.min_staff_required)) {
             overbookedSlots.push(`${date} ${cov.hour_slot} ${cov.department}: ${count}/${cov.min_staff_required}`);
           }
         }
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
       if (run.hour_adjustments && typeof run.hour_adjustments === "object") {
         for (const [userId, delta] of Object.entries(run.hour_adjustments as Record<string, number>)) {
           if (delta === 0) continue;
-          const clampedDelta = Math.max(-5, Math.min(5, delta));
+          const clampedDelta = delta;
           
           const { data: existing } = await adminClient
             .from("employee_stats")
