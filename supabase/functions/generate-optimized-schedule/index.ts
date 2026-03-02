@@ -377,6 +377,9 @@ async function generateAIStrategies(context: {
   approvedRequests: { user_id: string; request_date: string; request_type: string; selected_hour: number | null }[];
   hourBalances: Record<string, number>;
   engineRulesText: string;
+  memoryWeightBoost: boolean;
+  stratSplitsHigh: boolean;
+  stratSplitsLow: boolean;
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -499,7 +502,15 @@ DISTRIBUZIONE STRATEGIE:
 ${context.smartMemorySummary}
 
 REGOLE MOTORE (rispettare sempre nelle strategie):
-${context.engineRulesText}`;
+${context.engineRulesText}${(() => {
+  const behaviorInstructions: string[] = [];
+  if (context.memoryWeightBoost) behaviorInstructions.push("MEMORIA STORICA: dai peso triplo alle combinazioni dipendente/giorno con 3+ esiti positivi nelle ultime 8 settimane.");
+  if (context.stratSplitsHigh) behaviorInstructions.push("STRATEGIA COPERTURA ALTA (rapporto >0.8): genera almeno 20 strategie con maxSplits >= 2 e preferShort = true.");
+  if (context.stratSplitsLow) behaviorInstructions.push("STRATEGIA COPERTURA BASSA (rapporto <0.5): genera almeno 20 strategie con maxSplits = 0 e preferShort = false.");
+  return behaviorInstructions.length > 0
+    ? "\n\nCOMPORTAMENTI OBBLIGATORI ATTIVATI DALL'ADMIN:\n" + behaviorInstructions.join("\n")
+    : "";
+})()}`;
 
   const userPrompt = `Reparto: ${context.department}
 Dipendenti: ${context.employees.length} (${context.employees.map(e => `${e.first_name ?? e.user_id.slice(0,6)}: ${e.weekly_contract_hours}h`).join(', ')})
@@ -1361,6 +1372,7 @@ function runIteration(
   smartMemory: SmartMemoryScores,
   preferShortShifts: boolean = false,
   reserveForSplit: number = 0,
+  memoryWeightBoost: boolean = false,
 ): IterationResult {
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   const deptCoverage = coverage.filter(c => c.department === department);
@@ -1657,7 +1669,7 @@ function runIteration(
         }
         // Higher memory score = prioritize (sort ascending, so negate)
         // Memory influence is secondary to fill ratio
-        return fillRatio + (bMemory - aMemory) * 0.01;
+        return fillRatio + (bMemory - aMemory) * (memoryWeightBoost ? 0.05 : 0.01);
       });
     }
 
@@ -2625,13 +2637,25 @@ Deno.serve(async (req) => {
         // Fetch engine rules from database
         const { data: engineRulesData } = await adminClient
           .from("engine_rules")
-          .select("label, description, is_active")
+          .select("label, description, rule_type, is_active")
           .eq("is_active", true)
           .order("sort_order");
 
         const engineRulesText = (engineRulesData ?? [])
           .map((r: any) => `- ${r.label}: ${r.description}`)
           .join("\n");
+
+        const activeRuleTypes = new Set(
+          (engineRulesData ?? [])
+            .filter((r: any) => r.rule_type)
+            .map((r: any) => r.rule_type as string)
+        );
+
+        const lendingFirstPriority = activeRuleTypes.has("lending_first");
+        const lendingAsLastResort = activeRuleTypes.has("lending_last_resort");
+        const memoryWeightBoost = activeRuleTypes.has("memory_weight_boost");
+        const stratSplitsHigh = activeRuleTypes.has("strategy_splits_high");
+        const stratSplitsLow = activeRuleTypes.has("strategy_splits_low");
 
         // Gemini 2.5 AI is MANDATORY — no fallback allowed
         const aiResult = await generateAIStrategies({
@@ -2675,6 +2699,9 @@ Deno.serve(async (req) => {
             deptEmployees.map(e => [e.user_id, hourBalances.get(e.user_id) ?? 0])
           ),
           engineRulesText,
+          memoryWeightBoost,
+          stratSplitsHigh,
+          stratSplitsLow,
         });
         const strategies = aiResult.strategies;
         aiStrategiesUsed = true; // Always true — AI is mandatory
@@ -2745,7 +2772,7 @@ Deno.serve(async (req) => {
               allExceptions, coverageData, allowedData, adaptedRules, run.id,
               openingHoursData, hourBalances, empConstraints, strat.maxSplits,
               strat.randomize, partialDayBlocks, smartMemory, strat.preferShort,
-              strat.reserveForSplit,
+              strat.reserveForSplit, memoryWeightBoost,
             );
 
             // Apply auto-correction (iterative, up to 5 passes) to fix remaining violations
@@ -2911,8 +2938,22 @@ Deno.serve(async (req) => {
 
         // Helper: find employees who could cover an uncovered slot
         // VALIDATES all proposals against REAL store opening hours, employee constraints, and availability
-        function findCorrectionAlternatives(dateStr: string, uncoveredHour: number, dept: "sala" | "cucina"): any[] {
+        async function findCorrectionAlternatives(dateStr: string, uncoveredHour: number, dept: "sala" | "cucina", lendingFirst: boolean, lendingLastResort: boolean): Promise<any[]> {
           const alts: any[] = [];
+          const dow = getDayOfWeek(dateStr);
+
+          // Cap alternatives to the number of uncovered spots (exact coverage = no overbooking)
+          const uncoveredSpotsNeeded = (() => {
+            const cov = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === uncoveredHour);
+            if (!cov) return 1;
+            const assignedCount = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time).filter(s => {
+              const sh = parseInt(s.start_time!.split(":")[0], 10);
+              let eh = parseInt(s.end_time!.split(":")[0], 10);
+              if (eh === 0) eh = 24;
+              return uncoveredHour >= sh && uncoveredHour < eh;
+            }).length;
+            return Math.max(1, cov.min_staff_required - assignedCount);
+          })();
           const dayShifts = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time);
           const dow = getDayOfWeek(dateStr);
 
@@ -2926,6 +2967,58 @@ Deno.serve(async (req) => {
           if (uncoveredHour < dayOpenH || uncoveredHour >= effectiveClose) {
             return []; // Store is closed at this hour — no valid alternatives
           }
+
+          // Inter-store lending helper
+          const checkInterStoreLending = async (): Promise<void> => {
+            if (alts.length >= uncoveredSpotsNeeded) return;
+            const { data: cityRow } = await adminClient
+              .from("stores").select("city").eq("id", store_id).single();
+            const { data: cityStores } = await adminClient
+              .from("stores").select("id, name")
+              .eq("city", cityRow?.city ?? "")
+              .neq("id", store_id)
+              .eq("is_active", true);
+            for (const otherStore of (cityStores ?? [])) {
+              if (alts.length >= uncoveredSpotsNeeded) break;
+              const { data: otherShifts } = await adminClient
+                .from("shifts").select("user_id, start_time, end_time")
+                .eq("store_id", otherStore.id).eq("date", dateStr)
+                .eq("department", dept).eq("status", "draft").eq("is_day_off", false);
+              const coveringAtHour = (otherShifts ?? []).filter(s => {
+                const sh = parseInt(s.start_time.split(":")[0], 10);
+                let eh = parseInt(s.end_time.split(":")[0], 10);
+                if (eh === 0) eh = 24;
+                return uncoveredHour >= sh && uncoveredHour < eh;
+              });
+              const { data: otherCov } = await adminClient
+                .from("store_coverage_requirements")
+                .select("min_staff_required")
+                .eq("store_id", otherStore.id)
+                .eq("department", dept)
+                .eq("day_of_week", getDayOfWeek(dateStr))
+                .single();
+              if (coveringAtHour.length <= (otherCov?.min_staff_required ?? 0)) continue;
+              const surplus = coveringAtHour[coveringAtHour.length - 1];
+              const { data: profile } = await adminClient
+                .from("profiles").select("full_name").eq("id", surplus.user_id).single();
+              const empName = profile?.full_name ?? "Dipendente";
+              alts.push({
+                id: `lending-${surplus.user_id}-${dateStr}-${uncoveredHour}`,
+                label: `Prestito: ${empName} da ${otherStore.name}`,
+                description: `${empName} è in surplus presso ${otherStore.name}. Turno: ${surplus.start_time.slice(0,5)}-${surplus.end_time.slice(0,5)}. Richiede approvazione bilaterale.`,
+                actionType: "lending",
+                userId: surplus.user_id,
+                userName: empName,
+                newStartTime: surplus.start_time.slice(0,5),
+                newEndTime: surplus.end_time.slice(0,5),
+                sourceStoreId: otherStore.id,
+                sourceStoreName: otherStore.name,
+              });
+              break;
+            }
+          };
+
+          if (lendingFirst) await checkInterStoreLending();
 
           // Get valid entry/exit points for this day+department
           const deptEntries = allowedData
@@ -3116,18 +3209,7 @@ Deno.serve(async (req) => {
             return bScore - aScore; // Higher score first
           });
 
-          // Cap alternatives to the number of uncovered spots (exact coverage = no overbooking)
-          const uncoveredSpotsNeeded = (() => {
-            const cov = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === uncoveredHour);
-            if (!cov) return 1;
-            const assignedCount = shifts.filter(s => s.date === dateStr && s.department === dept && !s.is_day_off && s.start_time && s.end_time).filter(s => {
-              const sh = parseInt(s.start_time!.split(":")[0], 10);
-              let eh = parseInt(s.end_time!.split(":")[0], 10);
-              if (eh === 0) eh = 24;
-              return uncoveredHour >= sh && uncoveredHour < eh;
-            }).length;
-            return Math.max(1, cov.min_staff_required - assignedCount);
-          })();
+          if (lendingLastResort && alts.length === 0) await checkInterStoreLending();
           return alts.slice(0, uncoveredSpotsNeeded);
         }
 
@@ -3161,11 +3243,11 @@ Deno.serve(async (req) => {
           const hoursStr = hours.map(h => `${h}:00`).join(", ");
 
           // Collect alternatives for the FIRST uncovered hour (most actionable)
-          const alternatives = findCorrectionAlternatives(dateStr, hours[0], dept);
+          const alternatives = await findCorrectionAlternatives(dateStr, hours[0], dept, lendingFirstPriority, lendingAsLastResort);
 
           // For remaining hours, try to find additional alternatives
           for (let i = 1; i < Math.min(hours.length, 3); i++) {
-            const moreAlts = findCorrectionAlternatives(dateStr, hours[i], dept);
+            const moreAlts = await findCorrectionAlternatives(dateStr, hours[i], dept, lendingFirstPriority, lendingAsLastResort);
             for (const alt of moreAlts) {
               if (alternatives.length < 5 && !alternatives.some(a => a.id === alt.id)) {
                 alternatives.push(alt);
