@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         const contractHours = contractMap.get(entry.userId) ?? 40;
         const delta = entry.totalHours - contractHours; // positive = overtime, negative = undertime
         // Clamp to ±5h flexibility
-        const clampedDelta = Math.max(-5, Math.min(5, delta));
+        const clampedDelta = delta;
 
         // Upsert employee_stats
         const { data: existing } = await adminClient
