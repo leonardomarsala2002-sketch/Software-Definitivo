@@ -2026,6 +2026,8 @@ function runIteration(
         const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
         const worked = daysWorked.get(emp.user_id)!;
         if (worked.size >= maxDaysWorked && !worked.has(dateStr)) return false;
+        const plannedOff3 = prePlannedDaysOff.get(emp.user_id);
+        if (plannedOff3?.has(dateStr)) return false;
         return true;
       });
       gapFillers = randomize ? shuffle(gapFillers) : gapFillers;
@@ -2351,7 +2353,7 @@ Deno.serve(async (req) => {
     const baseExceptions = (excRes.data ?? []) as ExceptionBlock[];
     // Only full-day approved requests become full-day exceptions.
     // Partial-day requests (mattina_libera, sera_libera) are handled as availability constraints, not exceptions.
-    const fullDayRequestTypes = ["giorno_libero", "ferie", "malattia"];
+    const fullDayRequestTypes = ["full_day_off", "giorno_libero", "ferie", "permesso", "malattia"];
     const approvedFullDayRequests = (requestsRes.data ?? [])
       .filter((r: any) => fullDayRequestTypes.includes(r.request_type))
       .map((r: any) => ({
@@ -3037,51 +3039,14 @@ Deno.serve(async (req) => {
             if (alts.length >= 5) break;
           }
 
-          // 3b) Propose swapping a day off: employees with day_off TODAY could swap to another day
-          if (alts.length < 5) {
-            for (const dayOffUserId of dayOffUserIds) {
-              if (alts.length >= 5) break;
-              const emp = deptEmps.find(e => e.user_id === dayOffUserId);
-              if (!emp) continue;
-              const empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
-              const canCover = empAvail.some(a => uncoveredHour >= a.start && uncoveredHour + 1 <= a.end);
-              if (!canCover) continue;
-              const ec = empConstraints.get(emp.user_id);
-              const empWeeklyUsed = weeklyHours_final.get(emp.user_id) ?? 0;
-              const maxWeekly = Math.min(ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours, emp.weekly_contract_hours + 5);
-              if (empWeeklyUsed >= maxWeekly) continue;
-              const empName = nameMap.get(emp.user_id) ?? "Dipendente";
-              const empWorkDays = shifts
-                .filter(s => s.user_id === emp.user_id && s.department === dept && !s.is_day_off && s.start_time && s.end_time)
-                .map(s => s.date);
-              const swapDay = empWorkDays.find(d => {
-                const otherUncovered = uncoveredByDay.get(d);
-                return !otherUncovered || otherUncovered.length === 0;
-              });
-              if (!swapDay) continue;
-              const swapDayLabel = new Date(swapDay + "T00:00:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
-              const nearestEntry = validEntries.filter(e => e >= dayOpenH).reduce((best, e) => Math.abs(e - uncoveredHour) < Math.abs(best - uncoveredHour) ? e : best, validEntries[0] ?? uncoveredHour);
-              const nearestExit = Math.min(validExits.find(e => e > nearestEntry) ?? nearestEntry + 4, effectiveClose);
-              if (nearestExit <= nearestEntry) continue;
-              alts.push({
-                id: `swap-dayoff-${emp.user_id}-${dateStr}-${uncoveredHour}`,
-                label: `Sposta riposo ${empName} a ${swapDayLabel}`,
-                description: `${empName} sposta il giorno libero da oggi a ${swapDayLabel} e copre ${nearestEntry}:00-${nearestExit}:00. Ore sett.: ${empWeeklyUsed}/${emp.weekly_contract_hours}h. Store: ${dayOpenH}:00-${effectiveClose}:00.`,
-                actionType: "add_split",
-                userId: emp.user_id,
-                userName: empName,
-                newStartTime: `${String(nearestEntry).padStart(2,"0")}:00`,
-                newEndTime: `${String(nearestExit === 24 ? 0 : nearestExit).padStart(2,"0")}:00`,
-              });
-            }
-          }
+
 
           // 4) Employees already working that day who finished early enough for a split
           for (const s of dayShifts) {
             if (alts.length >= 5) break;
             let endH = parseInt(s.end_time!.split(":")[0], 10);
             if (endH === 0) endH = 24;
-            if (endH + 2 > uncoveredHour) continue;
+            if (uncoveredHour - endH < 2) continue;
             const emp = deptEmps.find(e => e.user_id === s.user_id);
             if (!emp) continue;
             const ec = empConstraints.get(emp.user_id);
