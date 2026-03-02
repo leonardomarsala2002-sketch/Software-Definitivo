@@ -59,7 +59,8 @@ export function EmployeeWeekDrawer({
 
   const totalWeekHours = useMemo(() => {
     let total = 0;
-    for (const [, dayShifts] of shiftsByDate) {
+    for (const dateStr of weekDates) {
+      const dayShifts = shiftsByDate.get(dateStr) ?? [];
       for (const s of dayShifts) {
         if (s.is_day_off || !s.start_time || !s.end_time) continue;
         const sh = parseInt(s.start_time.split(":")[0], 10);
@@ -69,7 +70,7 @@ export function EmployeeWeekDrawer({
       }
     }
     return total;
-  }, [shiftsByDate]);
+  }, [shiftsByDate, weekDates]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
