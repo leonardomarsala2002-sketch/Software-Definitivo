@@ -376,6 +376,7 @@ async function generateAIStrategies(context: {
   exceptions: { user_id: string; start_date: string; end_date: string }[];
   approvedRequests: { user_id: string; request_date: string; request_type: string; selected_hour: number | null }[];
   hourBalances: Record<string, number>;
+  engineRulesText: string;
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -450,6 +451,7 @@ async function generateAIStrategies(context: {
       ore_disponibili_totali: context.totalEmployeeHours,
       rapporto: parseFloat(ratio),
     },
+    regole_motore: context.engineRulesText,
   };
 
   const systemPrompt = `Sei un esperto di pianificazione turni per ristoranti italiani. Genera ESATTAMENTE 40 strategie DIVERSE per la generazione automatica degli orari settimanali.
@@ -494,7 +496,10 @@ DISTRIBUZIONE STRATEGIE:
 - Se rapporto copertura/disponibilità >0.8: privilegia più spezzati
 - Se <0.5: privilegia turni lunghi e continui
 
-${context.smartMemorySummary}`;
+${context.smartMemorySummary}
+
+REGOLE MOTORE (rispettare sempre nelle strategie):
+${context.engineRulesText}`;
 
   const userPrompt = `Reparto: ${context.department}
 Dipendenti: ${context.employees.length} (${context.employees.map(e => `${e.first_name ?? e.user_id.slice(0,6)}: ${e.weekly_contract_hours}h`).join(', ')})
@@ -950,6 +955,10 @@ function autoCorrectViolations(
               const closeH = oh ? (parseInt(oh.closing_time.split(":")[0], 10) || 24) : 24;
               if (shiftEnd > closeH) shiftEnd = closeH;
               if (shiftEnd <= h) continue;
+              const validEntryHours = allowedTimes.filter(t => t.department === department && t.kind === "entry" && t.is_active).map(t => t.hour);
+              const validExitHours = allowedTimes.filter(t => t.department === department && t.kind === "exit" && t.is_active).map(t => t.hour);
+              if (validEntryHours.length > 0 && !validEntryHours.includes(h)) continue;
+              if (validExitHours.length > 0 && !validExitHours.includes(shiftEnd)) continue;
 
               const storeId = corrected[0]?.store_id ?? "";
               const runId = corrected[0]?.generation_run_id ?? "";
@@ -2613,6 +2622,17 @@ Deno.serve(async (req) => {
           ? `MEMORIA STORICA: ${goodP} pattern positivi, ${badP} negativi su ${memoryEntries.length}`
           : "MEMORIA STORICA: nessun dato";
 
+        // Fetch engine rules from database
+        const { data: engineRulesData } = await adminClient
+          .from("engine_rules")
+          .select("label, description, is_active")
+          .eq("is_active", true)
+          .order("sort_order");
+
+        const engineRulesText = (engineRulesData ?? [])
+          .map((r: any) => `- ${r.label}: ${r.description}`)
+          .join("\n");
+
         // Gemini 2.5 AI is MANDATORY — no fallback allowed
         const aiResult = await generateAIStrategies({
           rules,
@@ -2654,6 +2674,7 @@ Deno.serve(async (req) => {
           hourBalances: Object.fromEntries(
             deptEmployees.map(e => [e.user_id, hourBalances.get(e.user_id) ?? 0])
           ),
+          engineRulesText,
         });
         const strategies = aiResult.strategies;
         aiStrategiesUsed = true; // Always true — AI is mandatory
