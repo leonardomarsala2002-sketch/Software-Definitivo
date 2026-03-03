@@ -247,11 +247,8 @@ function computeFitness(
       score += (Math.abs(delta) - 5) * PENALTY_DRIFT_PER_H;
     }
     // Symmetric penalty for employees too far BELOW contract
-    if (delta < -5) {
-      score -= (Math.abs(delta) - 5) * 2.0;
-    }
-    if (delta < -8) {
-      score -= (Math.abs(delta) - 8) * 3.0;
+    if (delta < -2) {
+      score += (delta + 2) * 15;
     }
     if (Math.abs(delta) <= 2) {
       score += BONUS_BALANCED;
