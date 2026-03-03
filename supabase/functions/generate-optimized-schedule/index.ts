@@ -246,6 +246,13 @@ function computeFitness(
     if (Math.abs(delta) > 5) {
       score += (Math.abs(delta) - 5) * PENALTY_DRIFT_PER_H;
     }
+    // Symmetric penalty for employees too far BELOW contract
+    if (delta < -5) {
+      score -= (Math.abs(delta) - 5) * 2.0;
+    }
+    if (delta < -8) {
+      score -= (Math.abs(delta) - 8) * 3.0;
+    }
     if (Math.abs(delta) <= 2) {
       score += BONUS_BALANCED;
     }
@@ -274,6 +281,13 @@ function computeFitness(
     // STRICT: penalize ANY difference (tolerance 0)
     if (maxSplit - minSplit > 0) {
       score += (maxSplit - minSplit) * PENALTY_EQUITY_SPLIT;
+    }
+  }
+
+  // 5b) Split shift reward: +6.0 per employee with at least one split (doubled incentive)
+  for (const [, splits] of splitCounts) {
+    if (splits > 0) {
+      score += 6.0;
     }
   }
 
