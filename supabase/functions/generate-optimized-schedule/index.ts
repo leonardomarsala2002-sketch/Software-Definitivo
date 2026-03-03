@@ -1697,10 +1697,16 @@ function runIteration(
       const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
       const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
       // If reserveForSplit > 0 and this is the first shift today, cap daily hours
-      // to leave room for a potential split shift later
+      // to leave room for a potential split shift later.
+      // ALSO: always reserve hours if employee has 0 splits and needs contract hours
       const empDaySplitCount0 = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
-      const cappedDaily = reserveForSplit > 0 && empDaySplitCount0 === 0
-        ? Math.max(empMaxDaily - reserveForSplit, 3)
+      const empWeeklySplitCount0 = weeklySplits.get(emp.user_id) ?? 0;
+      const empNeedsContractHours = empWeeklyUsed < adjustedTarget - 4;
+      const effectiveReserve = empDaySplitCount0 === 0 && empWeeklySplitCount0 === 0 && empNeedsContractHours
+        ? Math.max(reserveForSplit, 3) // always reserve at least 3h for a mandatory split
+        : reserveForSplit;
+      const cappedDaily = effectiveReserve > 0 && empDaySplitCount0 === 0
+        ? Math.max(empMaxDaily - effectiveReserve, 3)
         : empMaxDaily;
       const maxRemaining = Math.min(
         empMaxWeekly - empWeeklyUsed,
@@ -2286,13 +2292,13 @@ function runIteration(
               const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
               if (!withinAvail) continue;
 
-              // Relaxed overbooking: allow max_staff + 1
+              // STRICT overbooking check: respect max_staff exactly
               let wouldOverbook = false;
               for (let h = entry; h < exit; h++) {
                 const maxNeeded = maxStaffMap.get(h);
                 if (maxNeeded !== undefined) {
                   const current = staffAssigned.get(h) ?? 0;
-                  if (current >= maxNeeded + 1) { wouldOverbook = true; break; }
+                  if (current >= maxNeeded) { wouldOverbook = true; break; }
                 }
               }
               if (wouldOverbook) continue;
@@ -2344,7 +2350,123 @@ function runIteration(
       }
     }
 
-    // Assign days off
+    // ── FIFTH PASS: Mandatory split for employees with 0 splits who need hours ──
+    // Ensures at least 1 split per employee to distribute contract hours via shorter shifts
+    {
+      const empsNeedingSplit = deptEmployees.filter(emp => {
+        const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+        const balance = hourBalances.get(emp.user_id) ?? 0;
+        const target = emp.weekly_contract_hours - balance;
+        const empSplitCount = weeklySplits.get(emp.user_id) ?? 0;
+        return empSplitCount === 0 && empWeeklyUsed < target - 2; // needs at least 2h more
+      });
+
+      if (empsNeedingSplit.length > 0) {
+        dayLogs.push(`  🔀 5° pass (spezzati obbligatori): ${empsNeedingSplit.length} dipendenti senza spezzati`);
+        for (const emp of empsNeedingSplit) {
+          if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) continue;
+          const plannedOff5 = prePlannedDaysOff.get(emp.user_id);
+          if (plannedOff5?.has(dateStr)) continue;
+
+          const ec = empConstraints.get(emp.user_id);
+          const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+          const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+          const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
+          if (empWeeklyUsed >= empMaxWeekly) continue;
+
+          // Must already have a shift today
+          const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
+          if (todayShifts.length === 0) continue;
+          if (todayShifts.length >= 2) continue; // already has a split
+
+          // Check weekly split limit
+          const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
+          if ((weeklySplits.get(emp.user_id) ?? 0) >= maxSplitsWeek) continue;
+
+          const dailyHoursUsed = todayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+          const maxRemainingDaily = empMaxDaily - dailyHoursUsed;
+          const maxRemainingWeekly = empMaxWeekly - empWeeklyUsed;
+          const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly);
+          if (maxRemaining < 3) continue;
+
+          const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
+          const earliestSplitStart = lastEndToday + 2;
+
+          let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+          const blocks5 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
+          if (blocks5) empAvail = applyPartialBlocks(empAvail, blocks5);
+          if (empAvail.length === 0) continue;
+
+          let bestStart5 = -1, bestEnd5 = -1, bestScore5 = -1;
+          for (const entry of effectiveEntries) {
+            if (entry < earliestSplitStart) continue;
+            for (const exit of effectiveExits) {
+              if (exit <= entry) continue;
+              const duration = exit - entry;
+              if (duration < 3 || duration > maxRemaining) continue;
+              if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
+
+              const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
+              if (!withinAvail) continue;
+
+              // STRICT: no overbooking
+              let wouldOverbook = false;
+              let coverScore = 0;
+              for (let h = entry; h < exit; h++) {
+                const maxNeeded = maxStaffMap.get(h);
+                if (maxNeeded !== undefined) {
+                  const current = staffAssigned.get(h) ?? 0;
+                  if (current >= maxNeeded) { wouldOverbook = true; break; }
+                  const minNeeded = hourCoverage.get(h);
+                  if (minNeeded !== undefined && current < minNeeded) coverScore += 2;
+                  else coverScore += 1; // between min and max
+                }
+              }
+              if (wouldOverbook) continue;
+
+              const score = coverScore * 10 + duration;
+              if (score > bestScore5) {
+                bestScore5 = score;
+                bestStart5 = entry;
+                bestEnd5 = exit;
+              }
+            }
+          }
+
+          if (bestStart5 >= 0 && bestEnd5 > bestStart5) {
+            const duration = bestEnd5 - bestStart5;
+            dayLogs.push(`    ✅ ${getEmpName(emp.user_id)}: spezzato forzato ${bestStart5}:00-${bestEnd5 === 24 ? 0 : bestEnd5}:00 (${duration}h)`);
+
+            shifts.push({
+              store_id: storeId, user_id: emp.user_id, date: dateStr,
+              start_time: `${String(bestStart5).padStart(2, "0")}:00`,
+              end_time: `${String(bestEnd5 === 24 ? 0 : bestEnd5).padStart(2, "0")}:00`,
+              department, is_day_off: false, status: "draft", generation_run_id: runId,
+            });
+
+            weeklyHours.set(emp.user_id, empWeeklyUsed + duration);
+            daysWorked.get(emp.user_id)!.add(dateStr);
+            dailyTeamHoursUsed += duration;
+            weeklyTeamHoursUsed += duration;
+
+            const empDailySplits = dailySplits.get(emp.user_id)!;
+            empDailySplits.set(dateStr, (empDailySplits.get(dateStr) ?? 0) + 1);
+            weeklySplits.set(emp.user_id, (weeklySplits.get(emp.user_id) ?? 0) + 1);
+
+            const existingEnd = lastShiftEnd.get(emp.user_id);
+            if (!existingEnd || dateStr > existingEnd.date || (dateStr === existingEnd.date && bestEnd5 > existingEnd.endHour)) {
+              lastShiftEnd.set(emp.user_id, { date: dateStr, endHour: bestEnd5 === 24 ? 24 : bestEnd5 });
+            }
+
+            for (let h = bestStart5; h < bestEnd5; h++) {
+              if (staffAssigned.has(h)) {
+                staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
+              }
+            }
+          }
+        }
+      }
+    }
     for (const emp of deptEmployees) {
       if (!daysWorked.get(emp.user_id)?.has(dateStr)) {
         if (isAvailable(emp.user_id, dateStr, availability, exceptions)) {
