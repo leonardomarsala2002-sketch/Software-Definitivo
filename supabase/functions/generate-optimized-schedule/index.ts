@@ -2055,7 +2055,7 @@ function runIteration(
       let gapFillers = deptEmployees.filter(emp => {
         if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) return false;
         const ec = empConstraints.get(emp.user_id);
-      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         if (empWeeklyUsed >= empMaxWeekly) return false;
         // Check days off limit
@@ -2080,7 +2080,7 @@ function runIteration(
         const ec = empConstraints.get(emp.user_id);
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-        const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+        const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
 
         // Check if already has shifts today
         const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
@@ -2188,6 +2188,156 @@ function runIteration(
           for (let h = bestStart; h < bestEnd; h++) {
             if (staffAssigned.has(h)) {
               staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
+            }
+          }
+        }
+      }
+    }
+
+    // ── FOURTH PASS: Contract-filling for under-hours employees ──
+    // When coverage is met but employees are still far under contract,
+    // allow them to work shifts even if max_staff is already reached (max+1 tolerance)
+    {
+      const underContractEmps = deptEmployees.filter(emp => {
+        const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+        const balance = hourBalances.get(emp.user_id) ?? 0;
+        const target = emp.weekly_contract_hours - balance;
+        return empWeeklyUsed < target - 4; // at least 4h under target
+      });
+
+      if (underContractEmps.length > 0) {
+        // Sort by most under-contract first
+        underContractEmps.sort((a, b) => {
+          const aUsed = weeklyHours.get(a.user_id) ?? 0;
+          const bUsed = weeklyHours.get(b.user_id) ?? 0;
+          const aBalance = hourBalances.get(a.user_id) ?? 0;
+          const bBalance = hourBalances.get(b.user_id) ?? 0;
+          const aDeficit = (a.weekly_contract_hours - aBalance) - aUsed;
+          const bDeficit = (b.weekly_contract_hours - bBalance) - bUsed;
+          return bDeficit - aDeficit; // largest deficit first
+        });
+
+        for (const emp of underContractEmps) {
+          if (!isAvailable(emp.user_id, dateStr, availability, exceptions)) continue;
+          const plannedOff4 = prePlannedDaysOff.get(emp.user_id);
+          if (plannedOff4?.has(dateStr)) continue;
+
+          const ec = empConstraints.get(emp.user_id);
+          const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
+          const balance = hourBalances.get(emp.user_id) ?? 0;
+          const adjustedTarget = emp.weekly_contract_hours - balance;
+          const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+          const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
+
+          const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
+          const dailyHoursUsed = todayShifts.reduce((sum, s) => sum + (parseHour(s.end_time!) - parseHour(s.start_time!)), 0);
+          const maxRemainingDaily = empMaxDaily - dailyHoursUsed;
+          const maxRemainingWeekly = empMaxWeekly - empWeeklyUsed;
+          const maxRemaining = Math.min(maxRemainingDaily, maxRemainingWeekly);
+          if (maxRemaining < 3) continue;
+
+          // Check days worked limit
+          const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
+          const worked = daysWorked.get(emp.user_id)!;
+          if (worked.size >= maxDaysWorked && !worked.has(dateStr)) continue;
+
+          // If already has a shift today, enforce split constraints
+          if (todayShifts.length > 0) {
+            const empWeeklySplitCount = weeklySplits.get(emp.user_id) ?? 0;
+            const maxSplitsWeek = Math.min(maxSplitsAllowed, ec?.custom_max_split_shifts ?? maxSplitsAllowed);
+            if (empWeeklySplitCount >= maxSplitsWeek) continue;
+          }
+
+          // 11h rest
+          let earliestStart = 0;
+          const prev = lastShiftEnd.get(emp.user_id);
+          if (prev) {
+            const prevDate = new Date(prev.date + "T00:00:00Z");
+            const currDate = new Date(dateStr + "T00:00:00Z");
+            const dayDiff = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (dayDiff === 1) {
+              earliestStart = Math.max(0, 11 - (24 - prev.endHour));
+            }
+          }
+
+          // If has a shift today, enforce 2h gap
+          if (todayShifts.length > 0) {
+            const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
+            earliestStart = Math.max(earliestStart, lastEndToday + 2);
+          }
+
+          let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
+          const blocks4 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
+          if (blocks4) empAvail = applyPartialBlocks(empAvail, blocks4);
+          if (empAvail.length === 0) continue;
+
+          // Find the LONGEST valid shift (to fill contract hours)
+          // Allow max_staff + 1 tolerance since coverage is already met
+          let bestStart4 = -1, bestEnd4 = -1, bestDuration4 = 0;
+          for (const entry of effectiveEntries) {
+            if (entry < earliestStart) continue;
+            for (const exit of effectiveExits) {
+              if (exit <= entry) continue;
+              const duration = exit - entry;
+              if (duration < 3) continue;
+              if (duration > maxRemaining) continue;
+              if (dailyTeamHoursUsed + duration > maxDailyTeamHours) continue;
+
+              const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
+              if (!withinAvail) continue;
+
+              // Relaxed overbooking: allow max_staff + 1
+              let wouldOverbook = false;
+              for (let h = entry; h < exit; h++) {
+                const maxNeeded = maxStaffMap.get(h);
+                if (maxNeeded !== undefined) {
+                  const current = staffAssigned.get(h) ?? 0;
+                  if (current >= maxNeeded + 1) { wouldOverbook = true; break; }
+                }
+              }
+              if (wouldOverbook) continue;
+
+              // Prefer longest shift to fill contract
+              if (duration > bestDuration4) {
+                bestDuration4 = duration;
+                bestStart4 = entry;
+                bestEnd4 = exit;
+              }
+            }
+          }
+
+          if (bestStart4 >= 0 && bestEnd4 > bestStart4) {
+            const duration = bestEnd4 - bestStart4;
+            const isSplit = todayShifts.length > 0;
+            dayLogs.push(`  📈 4° pass (contract-fill): ${getEmpName(emp.user_id)}: ${bestStart4}:00-${bestEnd4 === 24 ? 0 : bestEnd4}:00 (${duration}h) — deficit: ${Math.round(adjustedTarget - empWeeklyUsed)}h${isSplit ? " [SPEZZATO]" : ""}`);
+
+            shifts.push({
+              store_id: storeId, user_id: emp.user_id, date: dateStr,
+              start_time: `${String(bestStart4).padStart(2, "0")}:00`,
+              end_time: `${String(bestEnd4 === 24 ? 0 : bestEnd4).padStart(2, "0")}:00`,
+              department, is_day_off: false, status: "draft", generation_run_id: runId,
+            });
+
+            weeklyHours.set(emp.user_id, empWeeklyUsed + duration);
+            daysWorked.get(emp.user_id)!.add(dateStr);
+            dailyTeamHoursUsed += duration;
+            weeklyTeamHoursUsed += duration;
+
+            const empDailySplits = dailySplits.get(emp.user_id)!;
+            empDailySplits.set(dateStr, (empDailySplits.get(dateStr) ?? 0) + 1);
+            if (isSplit) {
+              weeklySplits.set(emp.user_id, (weeklySplits.get(emp.user_id) ?? 0) + 1);
+            }
+
+            const existingEnd = lastShiftEnd.get(emp.user_id);
+            if (!existingEnd || dateStr > existingEnd.date || (dateStr === existingEnd.date && bestEnd4 > existingEnd.endHour)) {
+              lastShiftEnd.set(emp.user_id, { date: dateStr, endHour: bestEnd4 === 24 ? 24 : bestEnd4 });
+            }
+
+            for (let h = bestStart4; h < bestEnd4; h++) {
+              if (staffAssigned.has(h)) {
+                staffAssigned.set(h, (staffAssigned.get(h) ?? 0) + 1);
+              }
             }
           }
         }
