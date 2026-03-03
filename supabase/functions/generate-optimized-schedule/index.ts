@@ -3255,6 +3255,7 @@ Deno.serve(async (req) => {
           }
 
           // Build contextual explanation for WHY slots are uncovered
+          const dow = getDayOfWeek(dateStr);
           const oh = openingHoursData.find(h => h.day_of_week === dow);
           const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
           const dayCloseHRaw = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
