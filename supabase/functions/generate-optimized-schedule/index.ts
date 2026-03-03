@@ -2928,6 +2928,109 @@ Deno.serve(async (req) => {
           strategyReport.push(`✅ Post-validazione: tutte le regole rispettate`);
         }
 
+        // ─── FILL UNCOVERED SLOTS BY EXTENDING EXISTING SHIFTS ──────────────
+        // Before reporting uncovered slots, try to extend existing shifts of employees
+        // who have hours available within their contract +5h tolerance
+        if (bestResult && bestResult.uncoveredSlots.length > 0) {
+          const filledShifts = [...bestResult.shifts];
+          const remainingUncovered: { date: string; hour: string }[] = [];
+
+          for (const slot of bestResult.uncoveredSlots) {
+            const slotH = parseInt(slot.hour.split(":")[0], 10);
+            const dow = getDayOfWeek(slot.date);
+            const oh = openingHoursData.find(h => h.day_of_week === dow);
+            const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
+            const dayCloseHRaw = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
+            const effectiveClose = dayCloseHRaw === 0 ? 24 : dayCloseHRaw;
+
+            const validExits = allowedData
+              .filter(t => t.department === dept && t.kind === "exit" && t.is_active && t.hour <= effectiveClose)
+              .map(t => t.hour).sort((a, b) => a - b);
+            const validEntries = allowedData
+              .filter(t => t.department === dept && t.kind === "entry" && t.is_active && t.hour >= dayOpenH)
+              .map(t => t.hour).sort((a, b) => a - b);
+
+            // Check current coverage for this slot
+            const currentCoverage = filledShifts.filter(s =>
+              !s.is_day_off && s.date === slot.date && s.department === dept &&
+              s.start_time && s.end_time &&
+              parseHour(s.start_time) <= slotH && parseHour(s.end_time) > slotH
+            ).length;
+
+            const covReq = coverageData.find(c => c.department === dept && c.day_of_week === dow && parseInt(c.hour_slot.split(":")[0], 10) === slotH);
+            const minRequired = covReq?.min_staff_required ?? 1;
+
+            if (currentCoverage >= minRequired) continue; // already covered
+
+            let filled = false;
+
+            // Try to extend an existing shift on that day
+            const dayShiftsForExt = filledShifts.filter(s =>
+              !s.is_day_off && s.date === slot.date && s.department === dept &&
+              s.start_time && s.end_time
+            );
+
+            for (const s of dayShiftsForExt) {
+              const startH = parseHour(s.start_time!);
+              const endH = parseHour(s.end_time!);
+
+              // Check employee hours availability
+              const empWeeklyH = filledShifts
+                .filter(sh => sh.user_id === s.user_id && !sh.is_day_off && sh.start_time && sh.end_time)
+                .reduce((sum, sh) => sum + parseHour(sh.end_time!) - parseHour(sh.start_time!), 0);
+
+              const emp = employees.find(e => e.user_id === s.user_id);
+              if (!emp) continue;
+
+              const balance = hourBalances.get(s.user_id) ?? 0;
+              const target = emp.weekly_contract_hours - balance;
+              const ec = empConstraints.get(s.user_id);
+              const maxW = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
+              if (empWeeklyH >= maxW) continue;
+
+              const maxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
+              const dailyH = dayShiftsForExt
+                .filter(sh => sh.user_id === s.user_id)
+                .reduce((sum, sh) => sum + parseHour(sh.end_time!) - parseHour(sh.start_time!), 0);
+
+              // Try extending end time to cover slot
+              if (endH <= slotH) {
+                const newEnd = validExits.find(e => e > slotH && e <= effectiveClose);
+                if (newEnd && dailyH + (newEnd - endH) <= maxDaily && empWeeklyH + (newEnd - endH) <= maxW) {
+                  s.end_time = `${String(newEnd === 24 ? 0 : newEnd).padStart(2, "0")}:00`;
+                  filled = true;
+                  break;
+                }
+              }
+
+              // Try extending start time to cover slot
+              if (startH > slotH) {
+                const newStart = validEntries.filter(e => e <= slotH && e >= dayOpenH).pop();
+                if (newStart !== undefined && dailyH + (startH - newStart) <= maxDaily && empWeeklyH + (startH - newStart) <= maxW) {
+                  s.start_time = `${String(newStart).padStart(2, "0")}:00`;
+                  filled = true;
+                  break;
+                }
+              }
+            }
+
+            if (!filled) {
+              remainingUncovered.push(slot);
+            }
+          }
+
+          if (remainingUncovered.length < bestResult.uncoveredSlots.length) {
+            const newFitness = computeFitness(filledShifts, remainingUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            bestResult = {
+              shifts: filledShifts,
+              uncoveredSlots: remainingUncovered,
+              fitnessScore: newFitness.score,
+              hourAdjustments: newFitness.hourAdjustments,
+              dayLogs: bestResult.dayLogs,
+            };
+          }
+        }
+
         const { shifts, uncoveredSlots, fitnessScore, hourAdjustments, dayLogs: bestDayLogs } = bestResult!;
 
         // Insert best shifts
