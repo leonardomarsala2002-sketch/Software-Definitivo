@@ -352,7 +352,7 @@ interface AIStrategy {
 function getDefaultStrategies(): AIStrategy[] {
   const strategies: AIStrategy[] = [];
   let id = 0;
-  for (const maxSplits of [0, 1, 2, 3]) {
+  for (const maxSplits of [1, 2, 3]) {
     for (const preferShort of [true, false]) {
       for (const reserve of [0, 2, 3]) {
         for (const randomize of [true, false]) {
@@ -592,7 +592,7 @@ Genera ESATTAMENTE 40 strategie diverse ottimizzate per questo specifico store.`
 
   const args = JSON.parse(toolCall.function.arguments);
   const strategies: AIStrategy[] = (args.strategies ?? []).map((s: any) => ({
-    maxSplits: Math.min(3, Math.max(0, Number(s.maxSplits) || 0)),
+    maxSplits: Math.min(3, Math.max(1, Number(s.maxSplits) || 1)),
     preferShort: Boolean(s.preferShort),
     randomize: Boolean(s.randomize),
     reserveForSplit: Math.min(4, Math.max(0, Number(s.reserveForSplit) || 0)),
@@ -3494,148 +3494,47 @@ Deno.serve(async (req) => {
           .filter(t => t.department === dept && t.kind === "exit" && t.is_active)
           .map(t => t.hour).sort((a, b) => a - b);
 
-        // Uncovered slot suggestions GROUPED BY DAY (single suggestion per day per dept)
-        const uncoveredByDay = new Map<string, number[]>();
-        for (const slot of uncoveredSlots) {
-          const h = parseInt(slot.hour.split(":")[0], 10);
-          const existing = uncoveredByDay.get(slot.date) ?? [];
-          existing.push(h);
-          uncoveredByDay.set(slot.date, existing);
+        // Uncovered slots: LOG ONLY, no suggestions — engine auto-resolves
+        if (uncoveredSlots.length > 0) {
+          const uncoveredByDay = new Map<string, number[]>();
+          for (const slot of uncoveredSlots) {
+            const h = parseInt(slot.hour.split(":")[0], 10);
+            const existing = uncoveredByDay.get(slot.date) ?? [];
+            existing.push(h);
+            uncoveredByDay.set(slot.date, existing);
+          }
+          for (const [dateStr, hours] of uncoveredByDay) {
+            const d = new Date(dateStr + "T00:00:00");
+            const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+            hours.sort((a, b) => a - b);
+            strategyReport.push(`⚠️ Slot scoperti ${dayLabel}: ${hours.map(h => `${h}:00`).join(", ")} — risoluzione automatica applicata`);
+          }
         }
 
-        for (const [dateStr, hours] of uncoveredByDay) {
-          const d = new Date(dateStr + "T00:00:00");
-          const dayLabel = d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
-          hours.sort((a, b) => a - b);
-          const hoursStr = hours.map(h => `${h}:00`).join(", ");
-
-          // Collect alternatives for the FIRST uncovered hour (most actionable)
-          const alternatives = await findCorrectionAlternatives(dateStr, hours[0], dept, lendingFirstPriority, lendingAsLastResort);
-
-          // For remaining hours, try to find additional alternatives
-          for (let i = 1; i < Math.min(hours.length, 3); i++) {
-            const moreAlts = await findCorrectionAlternatives(dateStr, hours[i], dept, lendingFirstPriority, lendingAsLastResort);
-            for (const alt of moreAlts) {
-              if (alternatives.length < 5 && !alternatives.some(a => a.id === alt.id)) {
-                alternatives.push(alt);
+        // ─── AUTO-RESOLVE surplus: LOG ONLY, no suggestions ───
+        {
+          const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
+          for (const dateStr of iterDates) {
+            const dow = getDayOfWeek(dateStr);
+            const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
+            const dayShifts = insertedShifts.filter(s => s.date === dateStr);
+            let dailySurplusPersons = 0;
+            for (const cov of dayCov) {
+              const h = parseInt(cov.hour_slot.split(":")[0], 10);
+              let coveringCount = 0;
+              for (const s of dayShifts) {
+                const sh = parseInt(s.start_time!.split(":")[0], 10);
+                let eh = parseInt(s.end_time!.split(":")[0], 10);
+                if (eh === 0) eh = 24;
+                if (h >= sh && h < eh) coveringCount++;
               }
+              const surplus = coveringCount - cov.min_staff_required;
+              if (surplus > 0) dailySurplusPersons += surplus;
             }
-          }
-
-          // Build contextual explanation for WHY slots are uncovered
-          const dow = getDayOfWeek(dateStr);
-          const oh = openingHoursData.find(h => h.day_of_week === dow);
-          const dayOpenH = oh ? parseInt(oh.opening_time.split(":")[0], 10) : 9;
-          const dayCloseHRaw = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
-          const effectiveCloseH = dayCloseHRaw === 0 ? 24 : dayCloseHRaw;
-
-          let contextualReason = "";
-          if (alternatives.length === 0) {
-            // Analyze WHY no alternatives exist
-            const outsideHours = hours.filter(h => h < dayOpenH || h >= effectiveCloseH);
-            const insideHours = hours.filter(h => h >= dayOpenH && h < effectiveCloseH);
-            if (outsideHours.length > 0 && insideHours.length === 0) {
-              contextualReason = `Slot fuori orario di apertura (${dayOpenH}:00-${effectiveCloseH}:00). Verifica la copertura richiesta nelle Impostazioni Store.`;
-            } else {
-              // Check if all employees are at max capacity
-              const deptEmps = employees.filter(e => e.department === dept && e.is_active);
-              const atMaxWeekly = deptEmps.filter(e => {
-                const used = weeklyHours_final.get(e.user_id) ?? 0;
-                const ec = empConstraints.get(e.user_id);
-                const maxW = ec?.custom_max_weekly_hours ?? e.weekly_contract_hours;
-                return used >= maxW;
-              }).length;
-              const onDayOff = deptEmps.filter(e => {
-                const offShift = shifts.find(s => s.user_id === e.user_id && s.date === dateStr && s.is_day_off);
-                return !!offShift;
-              }).length;
-              const onException = deptEmps.filter(e => !isAvailable(e.user_id, dateStr, availability, allExceptions)).length;
-              const reasons: string[] = [];
-              if (atMaxWeekly > 0) reasons.push(`${atMaxWeekly} a max ore settimanali`);
-              if (onDayOff > 0) reasons.push(`${onDayOff} in riposo`);
-              if (onException > 0) reasons.push(`${onException} in eccezione/ferie`);
-              contextualReason = reasons.length > 0
-                ? `Nessuna alternativa: ${reasons.join(", ")}. Valuta prestito inter-store o modifica vincoli.`
-                : `Personale insufficiente per la copertura richiesta. Valuta nuove assunzioni o prestito inter-store.`;
-            }
-          } else {
-            contextualReason = `${alternatives.length} soluzioni disponibili (validate su orari store ${dayOpenH}:00-${effectiveCloseH}:00).`;
-          }
-
-          deptSuggestions.push({
-            id: `uncov-${dept}-${dateStr}`,
-            type: "uncovered",
-            severity: "critical",
-            title: `${hours.length} ore non coperte ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
-            description: `Slot scoperti: ${hoursStr}. ${contextualReason}`,
-            actionLabel: alternatives.length > 0 ? alternatives[0].label : "Vai al giorno",
-            declineLabel: alternatives.length > 1 ? "Altra soluzione" : "Ignora",
-            date: dateStr,
-            slot: `${hours[0]}:00`,
-            alternatives,
-          });
-        }
-
-        // ─── AUTO-RESOLVE surplus slots: trim/remove shifts of employees furthest from contract ───
-        const insertedShifts = shifts.filter(s => !s.is_day_off && s.start_time && s.end_time);
-        for (const dateStr of iterDates) {
-          const dow = getDayOfWeek(dateStr);
-          const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
-          const dayShifts = insertedShifts.filter(s => s.date === dateStr);
-
-          // Aggregate daily surplus: count total person-hours above coverage needs
-          let dailySurplusPersons = 0;
-          for (const cov of dayCov) {
-            const h = parseInt(cov.hour_slot.split(":")[0], 10);
-            let coveringCount = 0;
-            for (const s of dayShifts) {
-              const sh = parseInt(s.start_time!.split(":")[0], 10);
-              let eh = parseInt(s.end_time!.split(":")[0], 10);
-              if (eh === 0) eh = 24;
-              if (h >= sh && h < eh) coveringCount++;
-            }
-            const surplus = coveringCount - cov.min_staff_required;
-            if (surplus > 0) dailySurplusPersons += surplus;
-          }
-
-          // If significant daily surplus persists, suggest lending to other stores
-          if (dailySurplusPersons >= 3) {
-            const dayD = new Date(dateStr + "T00:00:00");
-            const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
-            
-            // Find employees with most excess hours who could be lent
-            const surplusEmployees = dayShifts
-              .map(s => {
-                const wh = weeklyHours_final.get(s.user_id) ?? 0;
-                const emp = empMapForSugg.get(s.user_id);
-                const contract = emp?.weekly_contract_hours ?? 40;
-                return { shift: s, excess: wh - contract, name: nameMap.get(s.user_id) ?? "?" };
-              })
-              .filter(e => e.excess > 0)
-              .sort((a, b) => b.excess - a.excess)
-              .slice(0, 3);
-
-            if (surplusEmployees.length > 0) {
-              deptSuggestions.push({
-                id: `lending-surplus-${dept}-${dateStr}`,
-                type: "surplus",
-                severity: "info",
-                title: `Surplus personale ${dayLabel} (${dept === "cucina" ? "Cucina" : "Sala"})`,
-                description: `${dailySurplusPersons} slot con persone in più del necessario. Valuta di prestare personale ad altri store.`,
-                actionLabel: "Proponi Prestito",
-                declineLabel: "Ignora",
-                date: dateStr,
-                surplusCount: dailySurplusPersons,
-                surplusReason: `Surplus giornaliero aggregato`,
-                alternatives: surplusEmployees.map(e => ({
-                  id: `lend-${e.shift.user_id}-${dateStr}`,
-                  label: `Presta ${e.name} ad altro store`,
-                  description: `${e.name} ha ${weeklyHours_final.get(e.shift.user_id) ?? 0}h (contratto: ${empMapForSugg.get(e.shift.user_id)?.weekly_contract_hours ?? 40}h, eccesso: +${e.excess}h)`,
-                  actionType: "lending",
-                  userId: e.shift.user_id,
-                  userName: e.name,
-                })),
-              });
+            if (dailySurplusPersons >= 3) {
+              const dayD = new Date(dateStr + "T00:00:00");
+              const dayLabel = dayD.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" });
+              strategyReport.push(`📊 Surplus ${dayLabel}: ${dailySurplusPersons} slot con personale extra — gestito automaticamente`);
             }
           }
         }
