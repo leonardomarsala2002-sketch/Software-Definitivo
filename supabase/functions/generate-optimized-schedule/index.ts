@@ -1695,7 +1695,7 @@ function runIteration(
       const balance = hourBalances.get(emp.user_id) ?? 0;
       const adjustedTarget = emp.weekly_contract_hours - balance;
       const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
       // If reserveForSplit > 0 and this is the first shift today, cap daily hours
       // to leave room for a potential split shift later
       const empDaySplitCount0 = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
@@ -1703,7 +1703,6 @@ function runIteration(
         ? Math.max(empMaxDaily - reserveForSplit, 3)
         : empMaxDaily;
       const maxRemaining = Math.min(
-        Math.max(adjustedTarget - empWeeklyUsed, 0),
         empMaxWeekly - empWeeklyUsed,
         cappedDaily,
       );
@@ -1812,9 +1811,14 @@ function runIteration(
               bestEnd = exit;
             }
           } else {
-            // Strategy: max coverage first, then fill count (between min-max), then shortest duration
+            // Strategy: max coverage first, then fill count, then LONGEST duration
+            // to fill employee contract hours. Prefer longer shifts when employee needs hours.
+            const empHoursNeeded = Math.max(adjustedTarget - empWeeklyUsed, 0);
             const effectiveCover = coverCount * 1000 + fillCount;
-            if (effectiveCover > bestCoverage || (effectiveCover === bestCoverage && duration < (bestEnd - bestStart))) {
+            // If employee needs hours, prefer longer shifts; otherwise prefer shorter
+            const durationScore = empHoursNeeded > 0 ? duration : -duration;
+            if (effectiveCover > bestCoverage || 
+                (effectiveCover === bestCoverage && durationScore > (bestEnd > 0 ? (empHoursNeeded > 0 ? (bestEnd - bestStart) : -(bestEnd - bestStart)) : -Infinity))) {
               bestCoverage = effectiveCover;
               bestStart = entry;
               bestEnd = exit;
@@ -1917,7 +1921,7 @@ function runIteration(
         const balance = hourBalances.get(emp.user_id) ?? 0;
         const adjustedTarget = emp.weekly_contract_hours - balance;
         const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-      const empMaxWeekly = ec?.custom_max_weekly_hours ?? emp.weekly_contract_hours;
+      const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
 
         // Calculate hours already worked today
         const todayShifts = shifts.filter(s => s.user_id === emp.user_id && s.date === dateStr && !s.is_day_off && s.start_time && s.end_time);
