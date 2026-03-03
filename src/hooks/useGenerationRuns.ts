@@ -69,14 +69,10 @@ export function useGenerateShifts() {
       qc.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
       qc.invalidateQueries({ queryKey: ["lending-suggestions"] });
       const depts = data?.departments ?? [];
-      const totalUncovered = depts.reduce((acc: number, d: any) => acc + (d.uncovered ?? 0), 0);
+      const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
       if (data?.is_rebalance) {
-        const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
         toast.success(`🔄 Ribilanciamento AI completato: ${totalShifts} turni rigenerati, ${data?.locked_shifts_kept ?? 0} turni manuali preservati`);
-      } else if (totalUncovered > 0) {
-        toast.warning(`Turni generati con ${totalUncovered} slot non coperti. Controlla i suggerimenti nel pannello Health Check.`);
       } else {
-        const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
         toast.success(`Turni generati: ${totalShifts} turni`);
       }
     },
