@@ -1680,7 +1680,10 @@ function runIteration(
         }
         // Higher memory score = prioritize (sort ascending, so negate)
         // Memory influence is secondary to fill ratio
-        return fillRatio + (bMemory - aMemory) * (memoryWeightBoost ? 0.05 : 0.01);
+        const aUnderHours = Math.max(0, aTarget - aUsed);
+        const bUnderHours = Math.max(0, bTarget - bUsed);
+        const memWeight = memoryWeightBoost ? 0.05 : 0.01;
+        return fillRatio + (bUnderHours - aUnderHours) * 0.3 + (bMemory - aMemory) * memWeight;
       });
     }
 
