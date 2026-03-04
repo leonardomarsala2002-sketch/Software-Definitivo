@@ -161,9 +161,9 @@ const PENALTY_OVERCROWDED = -10;
 const PENALTY_DRIFT_PER_H = -30;
 const PENALTY_REST_VIOLATION = -200;  // 11h rest violation (HARD)
 const PENALTY_NO_DAY_OFF = -500;      // Employee has 0 days off (HARD)
-const PENALTY_EQUITY_SPLIT = -50;     // Spezzati equity (strict: any diff penalized)
+const PENALTY_EQUITY_SPLIT = -15;     // Spezzati equity (strict: any diff penalized)
 const PENALTY_EQUITY_DAYSOFF = -50;   // Days off equity (strict: any diff penalized)
-const BONUS_BALANCED = 3;
+const BONUS_BALANCED = 8;
 
 function computeFitness(
   shifts: GeneratedShift[],
