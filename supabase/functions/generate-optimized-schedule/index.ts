@@ -1027,6 +1027,7 @@ function equalizeEquity(
   exceptions: ExceptionBlock[],
   allowedTimes: AllowedTime[],
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
+  hourBalances: Map<string, number>,
 ): { rebalancedShifts: GeneratedShift[]; equityReport: string[] } {
   let result = [...shifts];
   const equityReport: string[] = [];
@@ -1279,7 +1280,137 @@ function equalizeEquity(
     if (!swapped) break;
   }
 
-  // ── 3) POST-PROCESSING: Uniform day-off assignment ──
+  // ── 3) BALANCE HOURS VIA SPLITS ──
+  // If hours are unbalanced beyond ±3h from contract target, try to add splits
+  // to under-hours employees and shorten shifts of over-hours employees.
+  // Only applies to standard employees. Splits stay equal for all.
+  {
+    const stats3 = computeStats(result);
+    const stdEmpsForBalance = deptEmployees.filter(e => !hasCustomDaysOff(e.user_id));
+
+    // Find employees significantly under their contract target
+    const underEmps = stdEmpsForBalance.filter(e => {
+      const assigned = stats3.hoursMap.get(e.user_id) ?? 0;
+      const balance = hourBalances.get(e.user_id) ?? 0;
+      const target = e.weekly_contract_hours - balance;
+      return assigned < target - 3;
+    });
+    // Find employees significantly over their contract target
+    const overEmps = stdEmpsForBalance.filter(e => {
+      const assigned = stats3.hoursMap.get(e.user_id) ?? 0;
+      const balance = hourBalances.get(e.user_id) ?? 0;
+      const target = e.weekly_contract_hours - balance;
+      return assigned > target + 3;
+    });
+
+    // Try to shorten shifts of over-hours employees
+    for (const emp of overEmps) {
+      const balance = hourBalances.get(emp.user_id) ?? 0;
+      const target = emp.weekly_contract_hours - balance;
+      const empShifts = result
+        .filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time)
+        .sort((a, b) => parseHour(b.end_time!) - parseHour(a.end_time!)); // longest first
+      for (const s of empShifts) {
+        const currentH = stats3.hoursMap.get(emp.user_id) ?? 0;
+        if (currentH <= target + 1) break;
+        const startH = parseHour(s.start_time!);
+        const endH = parseHour(s.end_time!);
+        const duration = endH - startH;
+        const excess = currentH - target;
+        const newDuration = Math.max(3, duration - Math.ceil(excess));
+        const newEnd = startH + newDuration;
+        const validExit = allowedTimes
+          .filter(t => t.department === department && t.kind === "exit" && t.is_active && t.hour >= newEnd - 1 && t.hour <= newEnd + 1)
+          .sort((a, b) => Math.abs(a.hour - newEnd) - Math.abs(b.hour - newEnd))[0];
+        if (validExit && validExit.hour < endH) {
+          s.end_time = `${String(validExit.hour === 24 ? 0 : validExit.hour).padStart(2, "0")}:00`;
+        }
+      }
+    }
+
+    // Try to add splits to under-hours employees (only if all standard employees get same number)
+    if (underEmps.length > 0) {
+      const currentSplitCounts = stdEmpsForBalance.map(e => stats3.splitsMap.get(e.user_id) ?? 0);
+      const minSplitsNow = Math.min(...currentSplitCounts);
+      const targetSplits = minSplitsNow + 1;
+      const maxSplitsAllowedForAll = Math.min(
+        rules.max_split_shifts_per_employee_per_week,
+        ...stdEmpsForBalance.map(e => empConstraints.get(e.user_id)?.custom_max_split_shifts ?? rules.max_split_shifts_per_employee_per_week)
+      );
+
+      if (targetSplits <= maxSplitsAllowedForAll) {
+        let allCanGetSplit = true;
+        const splitCandidates: { emp: EmployeeData; date: string; startH: number; endH: number }[] = [];
+
+        for (const emp of stdEmpsForBalance) {
+          const empShifts = result.filter(s => s.user_id === emp.user_id && s.department === department && !s.is_day_off && s.start_time && s.end_time);
+          const ec = empConstraints.get(emp.user_id);
+          const maxW = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
+          const assigned = stats3.hoursMap.get(emp.user_id) ?? 0;
+          let found = false;
+
+          for (const dateStr of weekDates) {
+            const todayShifts = empShifts.filter(s => s.date === dateStr);
+            if (todayShifts.length !== 1) continue;
+
+            const lastEnd = parseHour(todayShifts[0].end_time!);
+            const oh = openingHours.find(h => h.day_of_week === getDayOfWeek(dateStr));
+            const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
+            const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
+
+            const splitStart = lastEnd + 2;
+            if (splitStart >= effectiveClose) continue;
+            const validEntry = allowedTimes
+              .filter(t => t.department === department && t.kind === "entry" && t.is_active && t.hour >= splitStart && t.hour < effectiveClose)
+              .sort((a, b) => a.hour - b.hour)[0];
+            const validExit2 = validEntry ? allowedTimes
+              .filter(t => t.department === department && t.kind === "exit" && t.is_active && t.hour > validEntry.hour && t.hour <= effectiveClose)
+              .sort((a, b) => a.hour - b.hour)[0] : null;
+            if (!validEntry || !validExit2) continue;
+            const splitDur = validExit2.hour - validEntry.hour;
+            if (assigned + splitDur > maxW) continue;
+            if (splitDur < 2) continue;
+
+            // Check no overbooking
+            const dow2 = getDayOfWeek(dateStr);
+            let wouldOverbook2 = false;
+            for (let h = validEntry.hour; h < validExit2.hour; h++) {
+              const covSlot = coverage.find(c => c.department === department && c.day_of_week === dow2 && parseInt(c.hour_slot.split(":")[0], 10) === h);
+              if (!covSlot) continue;
+              const maxNeeded2 = covSlot.max_staff_required ?? covSlot.min_staff_required;
+              const current2 = result.filter(s => !s.is_day_off && s.date === dateStr && s.department === department && s.start_time && s.end_time && parseHour(s.start_time) <= h && parseHour(s.end_time) > h).length;
+              if (current2 >= maxNeeded2) { wouldOverbook2 = true; break; }
+            }
+            if (wouldOverbook2) continue;
+
+            splitCandidates.push({ emp, date: dateStr, startH: validEntry.hour, endH: validExit2.hour });
+            found = true;
+            break;
+          }
+          if (!found) { allCanGetSplit = false; break; }
+        }
+
+        if (allCanGetSplit && splitCandidates.length === stdEmpsForBalance.length) {
+          for (const candidate of splitCandidates) {
+            result.push({
+              user_id: candidate.emp.user_id,
+              store_id: result[0]?.store_id ?? "",
+              generation_run_id: result[0]?.generation_run_id ?? "",
+              date: candidate.date,
+              department: department,
+              start_time: `${String(candidate.startH).padStart(2, "0")}:00`,
+              end_time: `${String(candidate.endH === 24 ? 0 : candidate.endH).padStart(2, "0")}:00`,
+              is_day_off: false,
+              status: "draft",
+            } as GeneratedShift);
+            equityReport.push(`SPLIT aggiunto: ${getEmpName(candidate.emp.user_id)} spezzato ${candidate.date} ${candidate.startH}:00-${candidate.endH}:00`);
+          }
+        }
+      }
+    }
+  }
+
+  // ── 4) POST-PROCESSING: Uniform day-off assignment ──
   // Ensure all standard employees have exactly the same number of is_day_off markers.
   // First, remove ALL existing day-off markers and recalculate from scratch.
   result = result.filter(s => !(s.department === department && s.is_day_off));
@@ -3075,7 +3206,7 @@ Deno.serve(async (req) => {
             const { rebalancedShifts, equityReport } = equalizeEquity(
               correctedShifts, employees, rules, empConstraints, dept,
               coverageData, weekDates, availability, allExceptions,
-              allowedData, openingHoursData,
+              allowedData, openingHoursData, hourBalances,
             );
             // Recompute fitness with equity-rebalanced shifts
             const correctedUncovered: { date: string; hour: string }[] = [];
@@ -3144,7 +3275,7 @@ Deno.serve(async (req) => {
             const { rebalancedShifts: finalRebalanced, equityReport: finalEquity } = equalizeEquity(
               correctedShifts, employees, rules, empConstraints, dept,
               coverageData, weekDates, availability, allExceptions,
-              allowedData, openingHoursData,
+              allowedData, openingHoursData, hourBalances,
             );
             // Recompute uncovered after final correction + equity
             const finalUncovered: { date: string; hour: string }[] = [];
@@ -3544,7 +3675,6 @@ Deno.serve(async (req) => {
             });
             if (alts.length >= 5) break;
           }
-
 
 
           // 4) Employees already working that day who finished early enough for a split
