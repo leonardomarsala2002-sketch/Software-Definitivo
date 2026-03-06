@@ -498,6 +498,7 @@ REGOLE INVIOLABILI:
 - Il limite settimanale di OGNI dipendente è il suo contratto individuale (ore_contrattuali), NON un valore store generico
 - Ogni dipendente DEVE avere almeno ${context.rules.mandatory_days_off_per_week} giorno/i libero/i
 - EQUITÀ RIGOROSA: tutti i dipendenti senza vincoli personalizzati DEVONO avere lo STESSO numero di giorni liberi e lo STESSO numero di spezzati. Tolleranza ZERO.
+- PAUSA SPEZZATO: tra due turni dello stesso giorno (spezzato) ci devono essere ALMENO 3 ore di pausa. Es: se il primo turno finisce alle 15:00, il secondo può iniziare al più presto alle 18:00.
 - Le eccezioni (ferie, malattia) bloccano COMPLETAMENTE il dipendente in quelle date
 - Le richieste approvate DEVONO essere rispettate
 - Il bilancio ore deve guidare la distribuzione: chi ha ore in eccesso riceve meno
@@ -667,11 +668,21 @@ function postValidateShifts(
     const minDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
     if (7 - daysWorked < minDaysOff) violations.push(`${emp.user_id}: ${7 - daysWorked} giorni liberi < min ${minDaysOff}`);
 
-    // 11h rest between days
+    // Split gap (min 3h between same-day shifts)
     const sorted = empShifts.sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date);
       return parseHour(a.start_time!) - parseHour(b.start_time!);
     });
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].date === sorted[i + 1].date) {
+        const endH = parseHour(sorted[i].end_time!);
+        const nextStartH = parseHour(sorted[i + 1].start_time!);
+        const gap = nextStartH - endH;
+        if (gap < 3) violations.push(`${emp.user_id} ${sorted[i].date}: pausa spezzato ${gap}h < min 3h`);
+      }
+    }
+
+    // 11h rest between days
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].date !== sorted[i + 1].date) {
         const endH = parseHour(sorted[i].end_time!);
@@ -3238,14 +3249,20 @@ Deno.serve(async (req) => {
               coverageData, weekDates, availability, allExceptions,
               allowedData, openingHoursData, hourBalances,
             );
-            // Recompute fitness with equity-rebalanced shifts
+            // Run a SECOND auto-correction pass after equity rebalancing
+            // to catch any split gap violations or other issues introduced by equity swaps
+            const { correctedShifts: finalCorrected, corrections: finalCorrections } = autoCorrectViolations(
+              rebalancedShifts, employees, rules, empConstraints, dept, coverageData, weekDates,
+              availability, allExceptions, allowedData, openingHoursData,
+            );
+            // Recompute fitness with final corrected shifts
             const correctedUncovered: { date: string; hour: string }[] = [];
             for (const dateStr of iterDates) {
               const dow = getDayOfWeek(dateStr);
               const dayCov = coverageData.filter(c => c.department === dept && c.day_of_week === dow);
               for (const c of dayCov) {
                 const h = parseInt(c.hour_slot.split(":")[0], 10);
-                const assigned = rebalancedShifts.filter(s =>
+                const assigned = finalCorrected.filter(s =>
                   !s.is_day_off && s.date === dateStr && s.department === dept &&
                   s.start_time !== null && s.end_time !== null &&
                   parseHour(s.start_time!) <= h && parseHour(s.end_time!) > h
@@ -3255,22 +3272,22 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            const correctedFitness = computeFitness(rebalancedShifts, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const correctedFitness = computeFitness(finalCorrected, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept);
             const correctedResult: IterationResult = {
-              shifts: rebalancedShifts,
+              shifts: finalCorrected,
               uncoveredSlots: correctedUncovered,
               fitnessScore: correctedFitness.score,
               hourAdjustments: correctedFitness.hourAdjustments,
-              dayLogs: [...result.dayLogs, ...equityReport],
+              dayLogs: [...result.dayLogs, ...equityReport, ...finalCorrections],
             };
 
             // Track ALL corrections + equity swaps for this candidate
-            const candidateValid = postValidateShifts(rebalancedShifts, employees, rules, empConstraints, dept);
+            const candidateValid = postValidateShifts(finalCorrected, employees, rules, empConstraints, dept);
 
             if (!bestResult || correctedResult.fitnessScore > bestResult.fitnessScore) {
               bestResult = correctedResult;
               bestStrategyIdx = i;
-              adaptationNotes = [...corrections, ...equityReport.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE"))];
+              adaptationNotes = [...corrections, ...finalCorrections, ...equityReport.filter(r => r.startsWith("SWAP") || r.startsWith("RIDUZIONE"))];
               if (round.daysOffDelta !== 0 || round.splitsDelta !== 0) {
                 adaptationNotes.push(`Adattamento: ${round.label}`);
               }
