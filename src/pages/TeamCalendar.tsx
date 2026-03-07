@@ -720,18 +720,24 @@ const TeamCalendar = () => {
           onUpdateShift={(id, updates) => updateShift.mutate({ id, updates, storeId })}
           onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
           isRebalancing={isRebalancing}
-          onRebalanceAfterEdit={() => {
+          onRebalanceAfterEdit={(editedDate?: string) => {
             if (!storeId) return;
             setIsRebalancing(true);
-            // Collect IDs of manually-edited draft shifts to lock
-            const draftShiftIds = shifts
-              .filter(s => s.status === "draft" && s.department === department)
-              .map(s => s.id);
+            // Se abbiamo la data della modifica, blocchiamo i turni PRIMA di quella data
+            // e rigeneriamo solo da quella data in poi
+            const lockedShiftIds = editedDate
+              ? shifts
+                  .filter(s => s.status === "draft" && s.department === department && s.date < editedDate)
+                  .map(s => s.id)
+              : shifts
+                  .filter(s => s.status === "draft" && s.department === department)
+                  .map(s => s.id);
             generateShifts.mutate({
               store_id: storeId,
               week_start: currentWeekStart,
               mode: "rebalance",
-              locked_shift_ids: draftShiftIds,
+              locked_shift_ids: lockedShiftIds,
+              exception_start_date: editedDate ?? currentWeekStart,
             }, {
               onSettled: () => setIsRebalancing(false),
             });
