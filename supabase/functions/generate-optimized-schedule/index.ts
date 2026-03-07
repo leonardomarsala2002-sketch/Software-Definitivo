@@ -221,9 +221,6 @@ function computeFitness(
         restHours = (24 - endH) + nextStartH;
       }
 
-      if (empShifts[i].date === empShifts[i + 1].date && restHours < 3) {
-        score += PENALTY_REST_VIOLATION; // Split gap too short (min 3h)
-      }
       if (restHours < 11 && empShifts[i].date !== empShifts[i + 1].date) {
         score += PENALTY_REST_VIOLATION;
       }
@@ -826,33 +823,7 @@ function autoCorrectViolations(
         }
       }
 
-      // 5) Fix split gap violations: same-day shifts must have >= 3h gap
-      const allEmpShiftsSorted = empShifts().sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return parseHour(a.start_time!) - parseHour(b.start_time!);
-      });
-      for (let i = 0; i < allEmpShiftsSorted.length - 1; i++) {
-        if (allEmpShiftsSorted[i].date === allEmpShiftsSorted[i + 1].date) {
-          const endH = parseHour(allEmpShiftsSorted[i].end_time!);
-          const nextStartH = parseHour(allEmpShiftsSorted[i + 1].start_time!);
-          const gap = nextStartH - endH;
-          if (gap < 3) {
-            const needed = 3 - gap;
-            const newStart = nextStartH + needed;
-            const idx = corrected.indexOf(allEmpShiftsSorted[i + 1]);
-            if (idx >= 0 && newStart < parseHour(corrected[idx].end_time!)) {
-              corrected[idx] = { ...corrected[idx], start_time: `${String(newStart).padStart(2, "0")}:00` };
-              passCorrections.push(`FIX pausa spezzato [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${allEmpShiftsSorted[i + 1].date} posticipato ingresso a ${newStart}:00 (gap min 3h)`);
-            } else if (idx >= 0) {
-              // Can't fix by postponing, remove the split
-              corrected = corrected.filter(s => s !== allEmpShiftsSorted[i + 1]);
-              passCorrections.push(`FIX pausa spezzato [pass ${pass+1}]: ${emp.user_id.slice(0,8)} ${allEmpShiftsSorted[i + 1].date} rimosso spezzato (gap ${gap}h < 3h)`);
-            }
-          }
-        }
-      }
-
-      // 6) Fix 11h rest violations: postpone next day's start
+      // 5) Fix 11h rest violations: postpone next day's start
       const allEmpShifts = empShifts().sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return parseHour(a.start_time!) - parseHour(b.start_time!);
@@ -1322,14 +1293,14 @@ function equalizeEquity(
       const assigned = stats3.hoursMap.get(e.user_id) ?? 0;
       const balance = hourBalances.get(e.user_id) ?? 0;
       const target = e.weekly_contract_hours - balance;
-      return assigned < target - 2;
+      return assigned < target - 3;
     });
     // Find employees significantly over their contract target
     const overEmps = stdEmpsForBalance.filter(e => {
       const assigned = stats3.hoursMap.get(e.user_id) ?? 0;
       const balance = hourBalances.get(e.user_id) ?? 0;
       const target = e.weekly_contract_hours - balance;
-      return assigned > target + 2;
+      return assigned > target + 3;
     });
 
     // Try to shorten shifts of over-hours employees
@@ -1387,8 +1358,7 @@ function equalizeEquity(
             const dayCloseH = oh ? parseInt(oh.closing_time.split(":")[0], 10) : 22;
             const effectiveClose = dayCloseH === 0 ? 24 : dayCloseH;
 
-            const MIN_SPLIT_GAP = 3;
-            const splitStart = lastEnd + MIN_SPLIT_GAP;
+            const splitStart = lastEnd + 2;
             if (splitStart >= effectiveClose) continue;
             const validEntry = allowedTimes
               .filter(t => t.department === department && t.kind === "entry" && t.is_active && t.hour >= splitStart && t.hour < effectiveClose)
@@ -2120,11 +2090,11 @@ function runIteration(
         }
         if (!stillUncovered) break;
 
-        // Find the end hour of the last shift today for this employee (for 3h gap)
+        // Find the end hour of the last shift today for this employee (for 2h gap)
         const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
 
-        // The new split shift must start at least 3h after the last shift ended
-        const earliestSplitStart = lastEndToday + 3;
+        // The new split shift must start at least 2h after the last shift ended
+        const earliestSplitStart = lastEndToday + 2;
 
         let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
         const blocks2 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
@@ -2279,10 +2249,10 @@ function runIteration(
           }
         }
 
-        // If has a shift today, enforce 3h gap for split
+        // If has a shift today, enforce 2h gap
         if (todayShifts.length > 0) {
           const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
-          earliestStart = Math.max(earliestStart, lastEndToday + 3);
+          earliestStart = Math.max(earliestStart, lastEndToday + 2);
         }
 
         let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
@@ -2372,7 +2342,7 @@ function runIteration(
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         const balance = hourBalances.get(emp.user_id) ?? 0;
         const target = emp.weekly_contract_hours - balance;
-        return empWeeklyUsed < target - 2; // at least 2h under target
+        return empWeeklyUsed < target - 4; // at least 4h under target
       });
 
       if (underContractEmps.length > 0) {
@@ -2430,10 +2400,10 @@ function runIteration(
             }
           }
 
-          // If has a shift today, enforce 3h gap for split
+          // If has a shift today, enforce 2h gap
           if (todayShifts.length > 0) {
             const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
-            earliestStart = Math.max(earliestStart, lastEndToday + 3);
+            earliestStart = Math.max(earliestStart, lastEndToday + 2);
           }
 
           let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
@@ -2554,7 +2524,7 @@ function runIteration(
           if (maxRemaining < 3) continue;
 
           const lastEndToday = Math.max(...todayShifts.map(s => parseHour(s.end_time!)));
-          const earliestSplitStart = lastEndToday + 3;
+          const earliestSplitStart = lastEndToday + 2;
 
           let empAvail = getAvailableHoursForDay(emp.user_id, dateStr, availability);
           const blocks5 = partialDayBlocks.get(emp.user_id)?.get(dateStr);
