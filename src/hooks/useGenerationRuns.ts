@@ -48,7 +48,6 @@ export function useGenerateShifts() {
       mode?: "full" | "patch" | "rebalance";
       affected_user_id?: string;
       locked_shift_ids?: string[];
-      exception_start_date?: string;
     }) => {
       const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
         body: {
@@ -58,7 +57,6 @@ export function useGenerateShifts() {
           affected_user_id: params.affected_user_id,
           locked_shift_ids: params.locked_shift_ids,
           department: params.department,
-          exception_start_date: params.exception_start_date,
         },
       });
       if (error) throw error;
