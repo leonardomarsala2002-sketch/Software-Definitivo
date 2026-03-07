@@ -39,7 +39,7 @@ interface DayDetailDialogProps {
   onCreateShift: (shift: { user_id: string; date: string; start_time: string | null; end_time: string | null; is_day_off: boolean }) => void;
   onUpdateShift: (id: string, updates: Partial<Pick<ShiftRow, "start_time" | "end_time" | "is_day_off">>) => void;
   onDeleteShift: (id: string) => void;
-  onRebalanceAfterEdit?: () => void;
+  onRebalanceAfterEdit?: (editedDate?: string) => void;
   isRebalancing?: boolean;
 }
 
@@ -94,10 +94,10 @@ export function DayDetailDialog({
 
   const handleConfirmRebalance = useCallback(() => {
     if (onRebalanceAfterEdit) {
-      onRebalanceAfterEdit();
+      onRebalanceAfterEdit(date ?? undefined);
       setPendingManualEdits(new Map());
     }
-  }, [onRebalanceAfterEdit]);
+  }, [onRebalanceAfterEdit, date]);
 
   const dateLabel = date ? format(parseISO(date), "EEEE d MMMM yyyy", { locale: it }) : "";
   const totalSpan = effectiveClose - openH;
