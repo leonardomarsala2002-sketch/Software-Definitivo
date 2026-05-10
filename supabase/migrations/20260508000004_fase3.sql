@@ -30,14 +30,17 @@ CREATE INDEX IF NOT EXISTS idx_illness_certificates_store
 
 ALTER TABLE public.illness_certificates ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "illness_certificates_employee_own" ON public.illness_certificates;
 CREATE POLICY "illness_certificates_employee_own"
   ON public.illness_certificates FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "illness_certificates_employee_insert" ON public.illness_certificates;
 CREATE POLICY "illness_certificates_employee_insert"
   ON public.illness_certificates FOR INSERT TO authenticated
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "illness_certificates_manager_select" ON public.illness_certificates;
 CREATE POLICY "illness_certificates_manager_select"
   ON public.illness_certificates FOR SELECT TO authenticated
   USING (
@@ -48,6 +51,7 @@ CREATE POLICY "illness_certificates_manager_select"
     )
   );
 
+DROP POLICY IF EXISTS "illness_certificates_manager_update" ON public.illness_certificates;
 CREATE POLICY "illness_certificates_manager_update"
   ON public.illness_certificates FOR UPDATE TO authenticated
   USING (
@@ -120,10 +124,12 @@ CREATE INDEX IF NOT EXISTS idx_leave_balances_user
 
 ALTER TABLE public.employee_leave_balances ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "leave_balances_employee_own" ON public.employee_leave_balances;
 CREATE POLICY "leave_balances_employee_own"
   ON public.employee_leave_balances FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "leave_balances_manager_select" ON public.employee_leave_balances;
 CREATE POLICY "leave_balances_manager_select"
   ON public.employee_leave_balances FOR SELECT TO authenticated
   USING (
@@ -134,6 +140,7 @@ CREATE POLICY "leave_balances_manager_select"
     )
   );
 
+DROP POLICY IF EXISTS "leave_balances_admin_all" ON public.employee_leave_balances;
 CREATE POLICY "leave_balances_admin_all"
   ON public.employee_leave_balances FOR ALL TO authenticated
   USING (
@@ -176,11 +183,13 @@ CREATE TABLE IF NOT EXISTS public.employee_preferences (
 
 ALTER TABLE public.employee_preferences ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "preferences_employee_own" ON public.employee_preferences;
 CREATE POLICY "preferences_employee_own"
   ON public.employee_preferences FOR ALL TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "preferences_manager_select" ON public.employee_preferences;
 CREATE POLICY "preferences_manager_select"
   ON public.employee_preferences FOR SELECT TO authenticated
   USING (

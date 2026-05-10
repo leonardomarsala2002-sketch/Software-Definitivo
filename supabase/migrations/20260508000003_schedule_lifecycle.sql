@@ -56,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_schedule_versions_store_week
 ALTER TABLE public.schedule_versions ENABLE ROW LEVEL SECURITY;
 
 -- Managers can read/write versions for their stores
+DROP POLICY IF EXISTS "schedule_versions_manager_select" ON public.schedule_versions;
 CREATE POLICY "schedule_versions_manager_select"
   ON public.schedule_versions FOR SELECT
   USING (
@@ -72,6 +73,7 @@ CREATE POLICY "schedule_versions_manager_select"
     )
   );
 
+DROP POLICY IF EXISTS "schedule_versions_manager_insert" ON public.schedule_versions;
 CREATE POLICY "schedule_versions_manager_insert"
   ON public.schedule_versions FOR INSERT
   WITH CHECK (
