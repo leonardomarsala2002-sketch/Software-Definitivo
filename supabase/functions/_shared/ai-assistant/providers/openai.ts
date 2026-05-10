@@ -1,4 +1,4 @@
-import type { AIProvider, AIMessage, ChatOptions } from "./base";
+import type { AIProvider, AIMessage, ChatOptions } from "./base.ts";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_MODEL = "gpt-4o";

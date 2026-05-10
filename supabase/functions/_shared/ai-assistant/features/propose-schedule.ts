@@ -1,7 +1,7 @@
-import type { AIProvider } from "../providers/base";
-import type { AIContext, AIScheduleProposal, ProposeScheduleParams } from "../types";
-import { serializeContextForPrompt } from "../context-builder";
-import { extractJSON, SCHEDULE_SYSTEM_PREAMBLE } from "../prompt-utils";
+import type { AIProvider } from "../providers/base.ts";
+import type { AIContext, AIScheduleProposal, ProposeScheduleParams } from "../types.ts";
+import { serializeContextForPrompt } from "../context-builder.ts";
+import { extractJSON, SCHEDULE_SYSTEM_PREAMBLE } from "../prompt-utils.ts";
 
 const RESPONSE_FORMAT = `{
   "shifts": [

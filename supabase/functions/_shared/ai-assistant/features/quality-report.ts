@@ -1,8 +1,8 @@
-import type { AIProvider } from "../providers/base";
-import type { AIContext, AITextResponse, QualityReportParams } from "../types";
-import { serializeContextForPrompt } from "../context-builder";
-import { validateSchedule } from "../../scheduling-engine/validator";
-import { truncate } from "../prompt-utils";
+import type { AIProvider } from "../providers/base.ts";
+import type { AIContext, AITextResponse, QualityReportParams } from "../types.ts";
+import { serializeContextForPrompt } from "../context-builder.ts";
+import { validateSchedule } from "../../scheduling-engine/validator.ts";
+import { truncate } from "../prompt-utils.ts";
 
 /**
  * Generates a human-readable quality report for an existing schedule.

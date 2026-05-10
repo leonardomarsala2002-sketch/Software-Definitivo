@@ -1,7 +1,7 @@
-import type { AIProvider } from "../providers/base";
-import type { AIContext, AIScheduleProposal, SuggestModificationsParams, ShiftInput } from "../types";
-import { serializeContextForPrompt } from "../context-builder";
-import { extractJSON, SCHEDULE_SYSTEM_PREAMBLE } from "../prompt-utils";
+import type { AIProvider } from "../providers/base.ts";
+import type { AIContext, AIScheduleProposal, SuggestModificationsParams, ShiftInput } from "../types.ts";
+import { serializeContextForPrompt } from "../context-builder.ts";
+import { extractJSON, SCHEDULE_SYSTEM_PREAMBLE } from "../prompt-utils.ts";
 
 function serializeShifts(shifts: ShiftInput[]): string {
   const lines = shifts.map(s =>

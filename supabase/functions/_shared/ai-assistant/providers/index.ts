@@ -1,10 +1,10 @@
-export type { AIProvider, AIMessage, ChatOptions } from "./base";
-export { AnthropicProvider } from "./anthropic";
-export { OpenAIProvider } from "./openai";
+export type { AIProvider, AIMessage, ChatOptions } from "./base.ts";
+export { AnthropicProvider } from "./anthropic.ts";
+export { OpenAIProvider } from "./openai.ts";
 
-import { AnthropicProvider } from "./anthropic";
-import { OpenAIProvider } from "./openai";
-import type { AIProvider } from "./base";
+import { AnthropicProvider } from "./anthropic.ts";
+import { OpenAIProvider } from "./openai.ts";
+import type { AIProvider } from "./base.ts";
 
 export interface ProviderConfig {
   provider?: string;

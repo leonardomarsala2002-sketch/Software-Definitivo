@@ -8,7 +8,7 @@ import type {
   ApprovedTimeOff,
   StoreRules,
   DayOpeningHours,
-} from "../scheduling-engine/types";
+} from "../scheduling-engine/types.ts";
 
 // ─── Re-export scheduling-engine types used by consumers ─────────────────────
 

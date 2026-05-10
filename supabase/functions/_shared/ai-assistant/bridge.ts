@@ -4,9 +4,9 @@ import type {
   ProcessedProposal,
   ShiftInput,
   RuleViolation,
-} from "./types";
-import { validateSchedule } from "../scheduling-engine/validator";
-import { shiftDuration } from "../scheduling-engine/hard-rules";
+} from "./types.ts";
+import { validateSchedule } from "../scheduling-engine/validator.ts";
+import { shiftDuration } from "../scheduling-engine/hard-rules.ts";
 
 /**
  * Validates and auto-corrects an AI-proposed schedule.

@@ -27,26 +27,26 @@ export type {
   PartialRegenParams,
   QualityReportParams,
   HighlightCriticalitiesParams,
-} from "./types";
+} from "./types.ts";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
-export { buildAIContext, serializeContextForPrompt } from "./context-builder";
+export { buildAIContext, serializeContextForPrompt } from "./context-builder.ts";
 
 // ─── Bridge ───────────────────────────────────────────────────────────────────
-export { processAIOutput, describeHardViolations } from "./bridge";
+export { processAIOutput, describeHardViolations } from "./bridge.ts";
 
 // ─── Providers ────────────────────────────────────────────────────────────────
-export type { AIProvider, AIMessage, ChatOptions } from "./providers/base";
-export { AnthropicProvider } from "./providers/anthropic";
-export { OpenAIProvider } from "./providers/openai";
-export { createProvider } from "./providers/index";
-export type { ProviderConfig } from "./providers/index";
+export type { AIProvider, AIMessage, ChatOptions } from "./providers/base.ts";
+export { AnthropicProvider } from "./providers/anthropic.ts";
+export { OpenAIProvider } from "./providers/openai.ts";
+export { createProvider } from "./providers/index.ts";
+export type { ProviderConfig } from "./providers/index.ts";
 
 // ─── Features ────────────────────────────────────────────────────────────────
-export { proposeSchedule } from "./features/propose-schedule";
-export { suggestModifications } from "./features/suggest-modifications";
-export { explainAssignment } from "./features/explain-assignment";
-export { suggestAlternatives } from "./features/suggest-alternatives";
-export { partialRegen } from "./features/partial-regen";
-export { qualityReport } from "./features/quality-report";
-export { highlightCriticalities } from "./features/highlight-criticalities";
+export { proposeSchedule } from "./features/propose-schedule.ts";
+export { suggestModifications } from "./features/suggest-modifications.ts";
+export { explainAssignment } from "./features/explain-assignment.ts";
+export { suggestAlternatives } from "./features/suggest-alternatives.ts";
+export { partialRegen } from "./features/partial-regen.ts";
+export { qualityReport } from "./features/quality-report.ts";
+export { highlightCriticalities } from "./features/highlight-criticalities.ts";

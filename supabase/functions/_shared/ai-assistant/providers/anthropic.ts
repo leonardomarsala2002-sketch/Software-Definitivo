@@ -1,4 +1,4 @@
-import type { AIProvider, AIMessage, ChatOptions } from "./base";
+import type { AIProvider, AIMessage, ChatOptions } from "./base.ts";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-sonnet-4-6";

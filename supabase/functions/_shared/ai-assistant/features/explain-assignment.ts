@@ -1,7 +1,7 @@
-import type { AIProvider } from "../providers/base";
-import type { AIContext, AITextResponse, ExplainAssignmentParams, ShiftInput } from "../types";
-import { serializeContextForPrompt } from "../context-builder";
-import { truncate } from "../prompt-utils";
+import type { AIProvider } from "../providers/base.ts";
+import type { AIContext, AITextResponse, ExplainAssignmentParams, ShiftInput } from "../types.ts";
+import { serializeContextForPrompt } from "../context-builder.ts";
+import { truncate } from "../prompt-utils.ts";
 
 /**
  * Explains in natural Italian why a specific employee was assigned to a shift.

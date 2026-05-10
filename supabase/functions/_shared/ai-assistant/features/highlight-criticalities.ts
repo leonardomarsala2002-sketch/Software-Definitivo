@@ -1,9 +1,9 @@
-import type { AIProvider } from "../providers/base";
-import type { AIContext, AICriticalityReport, HighlightCriticalitiesParams } from "../types";
-import { serializeContextForPrompt } from "../context-builder";
-import { validateSchedule } from "../../scheduling-engine/validator";
-import { shiftDuration } from "../../scheduling-engine/hard-rules";
-import { extractJSON } from "../prompt-utils";
+import type { AIProvider } from "../providers/base.ts";
+import type { AIContext, AICriticalityReport, HighlightCriticalitiesParams } from "../types.ts";
+import { serializeContextForPrompt } from "../context-builder.ts";
+import { validateSchedule } from "../../scheduling-engine/validator.ts";
+import { shiftDuration } from "../../scheduling-engine/hard-rules.ts";
+import { extractJSON } from "../prompt-utils.ts";
 
 /**
  * Analyzes an existing schedule and highlights critical issues.

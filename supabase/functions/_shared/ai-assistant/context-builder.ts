@@ -2,8 +2,8 @@ import type {
   AIRawData,
   AIContext,
   EmployeeAIPreferences,
-} from "./types";
-import type { EmployeeInfo } from "../scheduling-engine/types";
+} from "./types.ts";
+import type { EmployeeInfo } from "../scheduling-engine/types.ts";
 
 /**
  * Builds a clean, serializable AIContext from raw DB data.
