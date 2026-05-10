@@ -391,6 +391,7 @@ async function generateAIStrategies(context: {
   memoryWeightBoost: boolean;
   stratSplitsHigh: boolean;
   stratSplitsLow: boolean;
+  employeePreferences?: Record<string, unknown>;
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -458,6 +459,7 @@ async function generateAIStrategies(context: {
           tipo: r.request_type,
           ora_selezionata: r.selected_hour,
         })) : [],
+        preferenze: context.employeePreferences?.[e.user_id] ?? null,
       };
     }),
     metriche: {
@@ -1582,11 +1584,19 @@ function runIteration(
 
       // Find best days for this employee's days off
       // Sort candidate days: prefer low-demand days, break ties by fewer employees already off
-      const candidateDays = sortedDays.filter(d => 
+      // Also prefer employee's preferred_days_off (soft hint from employee_preferences)
+      const empPref = empPrefs.get(emp.user_id);
+      const preferredDowSet = new Set<number>(
+        (empPref?.preferred_days_off ?? []).map((d: string) => PREF_DAY_MAP[d] ?? -1).filter((n: number) => n >= 0)
+      );
+      const candidateDays = sortedDays.filter(d =>
         isAvailable(emp.user_id, d, availability, exceptions)
       );
       candidateDays.sort((a, b) => {
-        const demandDiff = (dailyDemand.get(a) ?? 0) - (dailyDemand.get(b) ?? 0);
+        // Boost preferred days off
+        const aPreferred = preferredDowSet.has(getDayOfWeek(a)) ? -5 : 0;
+        const bPreferred = preferredDowSet.has(getDayOfWeek(b)) ? -5 : 0;
+        const demandDiff = ((dailyDemand.get(a) ?? 0) + aPreferred) - ((dailyDemand.get(b) ?? 0) + bPreferred);
         if (demandDiff !== 0) return demandDiff;
         return (dayOffCounts.get(a) ?? 0) - (dayOffCounts.get(b) ?? 0);
       });
@@ -2769,7 +2779,7 @@ Deno.serve(async (req) => {
     const weekDates = getWeekDates(week_start_date);
 
     // Fetch all data in parallel
-    const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes, constraintsRes] = await Promise.all([
+    const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes, constraintsRes, prefsRes] = await Promise.all([
       adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active, first_name, last_name"),
       adminClient.from("employee_availability").select("user_id, day_of_week, start_time, end_time").eq("store_id", store_id),
       adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", week_start_date),
@@ -2781,6 +2791,7 @@ Deno.serve(async (req) => {
         .eq("store_id", store_id).eq("status", "approved").gte("request_date", week_start_date).lte("request_date", weekEnd),
       adminClient.from("employee_stats").select("user_id, current_balance").eq("store_id", store_id),
       adminClient.from("employee_constraints").select("*").eq("store_id", store_id),
+      adminClient.from("employee_preferences").select("user_id, preferred_shift_type, preferred_days_off, weekend_availability, prefers_opening, prefers_closing, hour_distribution"),
     ]);
 
     if (rulesRes.error || !rulesRes.data) throw new Error("Store rules not found");
@@ -2853,6 +2864,24 @@ Deno.serve(async (req) => {
     for (const c of (constraintsRes.data ?? [])) {
       empConstraints.set(c.user_id, c as EmployeeConstraints);
     }
+
+    // Employee preferences (FASE 3) — soft hints for schedule generation
+    interface EmpPreferences {
+      preferred_shift_type: string | null;
+      preferred_days_off: string[] | null;
+      weekend_availability: string | null;
+      prefers_opening: boolean;
+      prefers_closing: boolean;
+      hour_distribution: string | null;
+    }
+    const PREF_DAY_MAP: Record<string, number> = {
+      monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
+    };
+    const empPrefs = new Map<string, EmpPreferences>();
+    for (const p of (prefsRes.data ?? [])) {
+      empPrefs.set(p.user_id, p as EmpPreferences);
+    }
+    console.log(`[Preferences] Loaded preferences for ${empPrefs.size} employees`);
 
     // ─── Smart Memory: fetch historical outcomes (last 8 weeks) ──────
     const SMART_MEMORY_WEEKS = 8;
@@ -3123,6 +3152,11 @@ Deno.serve(async (req) => {
           memoryWeightBoost,
           stratSplitsHigh,
           stratSplitsLow,
+          employeePreferences: Object.fromEntries(
+            deptEmployees
+              .filter(e => empPrefs.has(e.user_id))
+              .map(e => [e.user_id, empPrefs.get(e.user_id)])
+          ),
         });
         const strategies = aiResult.strategies;
         aiStrategiesUsed = true; // Always true — AI is mandatory

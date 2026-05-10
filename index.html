@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,16 +8,32 @@
     <meta name="author" content="Gestionale Turni" />
     <meta name="theme-color" content="#18181b" />
 
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Turni" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Gestionale Turni">
     <meta property="og:description" content="Gestionale turni multi-store con pianificazione intelligente">
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Gestionale Turni">
     <meta name="twitter:description" content="Gestionale turni multi-store con pianificazione intelligente">
-</head>
+  </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

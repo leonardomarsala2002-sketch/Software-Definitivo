@@ -47,8 +47,15 @@ function RecentRequestsTable() {
   const typeLabels: Record<string, string> = {
     ferie: "Ferie",
     permesso: "Permesso",
+    permesso_104: "Perm. 104",
     malattia: "Malattia",
     cambio_turno: "Cambio turno",
+    giorno_libero: "Giorno libero",
+    mattina_libera: "Mattina libera",
+    sera_libera: "Sera libera",
+    full_day_off: "Giorno libero",
+    morning_off: "Mattina libera",
+    evening_off: "Sera libera",
   };
 
   return (

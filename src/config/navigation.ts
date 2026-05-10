@@ -6,6 +6,7 @@ import {
   Settings,
   FileText,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -29,6 +30,7 @@ export const navItems: NavItem[] = [
   { title: "Richieste", url: "/requests", icon: Inbox, section: "main", roles: ["admin", "store_manager", "employee"], tutorialId: "nav-requests" },
   { title: "Messaggi", url: "/messages", icon: MessageSquare, section: "main", tutorialId: "nav-messages" },
   { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-employees" },
+  { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles, section: "secondary", roles: ["admin", "store_manager"] },
   { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-store-settings" },
   { title: "Audit Log", url: "/audit-log", icon: FileText, section: "secondary", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-audit-log" },
 ];

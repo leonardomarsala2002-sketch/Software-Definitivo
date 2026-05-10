@@ -4,21 +4,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedTimes } from "@/hooks/useStoreSettings";
 import { useOpeningHours } from "@/hooks/useStoreSettings";
 import { useCreateRequest } from "@/hooks/useRequests";
 import { cn } from "@/lib/utils";
+import IllnessCertificateUploadDialog from "./IllnessCertificateUploadDialog";
 
 const REQUEST_TYPES = [
-  { value: "full_day_off", label: "Giorno libero" },
-  { value: "morning_off", label: "Mattina libera (Fino alle…)" },
-  { value: "evening_off", label: "Sera libera (Dalle…)" },
+  { value: "giorno_libero", label: "Giorno libero" },
+  { value: "mattina_libera", label: "Mattina libera (Fino alle…)" },
+  { value: "sera_libera", label: "Sera libera (Dalle…)" },
   { value: "ferie", label: "Ferie" },
   { value: "permesso", label: "Permesso" },
-  { value: "malattia", label: "Malattia" },
+  { value: "permesso_104", label: "Permesso 104" },
+  { value: "malattia", label: "Malattia (+ certificato)" },
 ];
 
 interface Props {
@@ -34,74 +36,52 @@ export default function RequestForm({ department, storeId, onClose, autoApprove 
   const { data: openingHours } = useOpeningHours(storeId);
   const createReq = useCreateRequest();
 
-  const [reqType, setReqType] = useState("full_day_off");
+  const [reqType, setReqType] = useState("giorno_libero");
   const [date, setDate] = useState("");
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
+  const [showCertUpload, setShowCertUpload] = useState(false);
 
-  // Thursday cutoff: check if the selected date falls in the "next week" that is being generated
   const isDateLocked = useMemo(() => {
     if (!date) return false;
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun
-    // If today is Thursday (4) or later (Fri=5, Sat=6, Sun=0), lock next week
+    const dayOfWeek = now.getDay();
     const isThursdayOrLater = dayOfWeek >= 4 || dayOfWeek === 0;
     if (!isThursdayOrLater) return false;
-
-    // Calculate next Monday
     const daysUntilMon = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
     const nextMon = new Date(now);
     nextMon.setDate(nextMon.getDate() + daysUntilMon);
     const nextSun = new Date(nextMon);
     nextSun.setDate(nextSun.getDate() + 6);
-
     const selectedDate = new Date(date + "T00:00:00");
     return selectedDate >= nextMon && selectedDate <= nextSun;
   }, [date]);
 
-  const needsHour = reqType === "morning_off" || reqType === "evening_off";
+  const needsHour = reqType === "mattina_libera" || reqType === "sera_libera";
+  const isMalattia = reqType === "malattia";
 
-  // Get allowed hours for the selected type/department
-  const kind = reqType === "morning_off" ? "exit" : "entry";
+  const kind = reqType === "mattina_libera" ? "exit" : "entry";
   const filteredHours = (allowedTimes ?? [])
-    .filter(
-      (t) =>
-        t.department === department &&
-        t.kind === kind &&
-        t.is_active
-    )
+    .filter((t) => t.department === department && t.kind === kind && t.is_active)
     .map((t) => t.hour)
     .sort((a, b) => a - b);
 
-  // Filter by opening hours for the selected day
   const dayOfWeek = date ? ((new Date(date).getDay() + 6) % 7) : null;
-  const dayHours = dayOfWeek !== null
-    ? openingHours?.find((h) => h.day_of_week === dayOfWeek)
-    : null;
-
+  const dayHours = dayOfWeek !== null ? openingHours?.find((h) => h.day_of_week === dayOfWeek) : null;
   const openH = dayHours ? parseInt(dayHours.opening_time.split(":")[0], 10) : 0;
   const closeH = dayHours ? parseInt(dayHours.closing_time.split(":")[0], 10) : 24;
-
   const availableHours = filteredHours.filter((h) => h >= openH && h <= closeH);
-
   const noHoursConfigured = needsHour && filteredHours.length === 0;
 
   const handleSubmit = () => {
-    if (!user || !date) {
-      toast.error("Seleziona una data");
-      return;
-    }
+    if (!user || !date) { toast.error("Seleziona una data"); return; }
     if (isDateLocked) {
       toast.error("La generazione turni per la prossima settimana è già in corso. Le richieste per quella settimana sono bloccate.");
       return;
     }
-    if (needsHour && selectedHour === null) {
-      toast.error("Seleziona un orario");
-      return;
-    }
+    if (needsHour && selectedHour === null) { toast.error("Seleziona un orario"); return; }
     if (needsHour && selectedHour !== null && !filteredHours.includes(selectedHour)) {
-      toast.error("Orario non consentito");
-      return;
+      toast.error("Orario non consentito"); return;
     }
 
     createReq.mutate(
@@ -115,9 +95,27 @@ export default function RequestForm({ department, storeId, onClose, autoApprove 
         notes: notes || null,
         autoApprove,
       },
-      { onSuccess: onClose }
+      {
+        onSuccess: () => {
+          if (isMalattia) {
+            setShowCertUpload(true);
+          } else {
+            onClose();
+          }
+        },
+      }
     );
   };
+
+  if (showCertUpload) {
+    return (
+      <IllnessCertificateUploadDialog
+        storeId={storeId}
+        date={date}
+        onDone={onClose}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -149,15 +147,12 @@ export default function RequestForm({ department, storeId, onClose, autoApprove 
       {needsHour && (
         <div className="space-y-2">
           <Label className="text-xs">
-            {reqType === "morning_off" ? "Fino alle (uscita)" : "Dalle (entrata)"}
+            {reqType === "mattina_libera" ? "Fino alle (uscita)" : "Dalle (entrata)"}
           </Label>
-
           {noHoursConfigured ? (
             <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
               <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-              <p className="text-xs text-destructive">
-                Orari consentiti non configurati per {department}. Contatta un admin.
-              </p>
+              <p className="text-xs text-destructive">Orari consentiti non configurati per {department}. Contatta un admin.</p>
             </div>
           ) : !date ? (
             <p className="text-xs text-muted-foreground">Seleziona prima una data</p>
@@ -182,6 +177,15 @@ export default function RequestForm({ department, storeId, onClose, autoApprove 
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {isMalattia && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/40 p-3">
+          <Upload className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Dopo la richiesta potrai caricare il certificato medico.
+          </p>
         </div>
       )}
 

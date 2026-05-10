@@ -40,10 +40,12 @@ import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import RequestForm from "@/components/requests/RequestForm";
+import { EmployeeOnboardingModal } from "@/components/employees/EmployeeOnboardingModal";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { TeamHoursCard } from "@/components/dashboard/TeamHoursCard";
 import { VacationBalanceCard } from "@/components/dashboard/VacationBalanceCard";
+import { QualityScoreCard } from "@/components/dashboard/QualityScoreCard";
 import { useAppointments, useRespondAppointment, useCancelAppointment } from "@/hooks/useAppointments";
 import { AppointmentFormDialog } from "@/components/dashboard/AppointmentFormDialog";
 import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
@@ -130,6 +132,7 @@ const Dashboard = () => {
   const [declineTarget, setDeclineTarget] = useState<{ id: string; created_by: string } | null>(null);
   const [declineReason, setDeclineReason] = useState("");
   const [viewAllStores, setViewAllStores] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const isSuperAdmin = role === "super_admin";
 
   const { data: myDetails } = useQuery({
@@ -303,10 +306,28 @@ const Dashboard = () => {
   if (!isAdmin) {
     return (
       <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-in fade-in duration-500">
-        {/* Vacation Balance - Employee only */}
+        {/* Vacation Balance + Preferences - Employee only */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-shrink-0">
           <VacationBalanceCard />
+          {activeStore?.id && (
+            <div className="flex items-start">
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="flex flex-col gap-1.5 w-full rounded-xl border border-dashed border-border p-4 text-left hover:bg-accent/50 transition-colors"
+              >
+                <span className="text-xs font-semibold text-foreground">Le mie preferenze turni</span>
+                <span className="text-xs text-muted-foreground">Tipo turno, giorni liberi, weekend →</span>
+              </button>
+            </div>
+          )}
         </div>
+        {activeStore?.id && (
+          <EmployeeOnboardingModal
+            open={showOnboarding}
+            onOpenChange={setShowOnboarding}
+            storeId={activeStore.id}
+          />
+        )}
 
         {/* Weekly Timeline */}
         <Card className="p-4 flex flex-col flex-shrink-0">
@@ -574,13 +595,14 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Team Hours + Vacation Balance */}
+      {/* Team Hours + Vacation Balance + Quality */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
         <div className="lg:col-span-2">
           <TeamHoursCard />
         </div>
         <div className="flex flex-col gap-4">
           {(role === "admin" || role === "store_manager") && <VacationBalanceCard />}
+          {(role === "admin" || role === "store_manager") && <QualityScoreCard />}
           <DashboardCharts />
         </div>
       </div>

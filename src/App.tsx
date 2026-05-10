@@ -23,6 +23,7 @@ import SetPassword from "@/pages/SetPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import Messages from "@/pages/Messages";
+import AIAssistant from "@/pages/AIAssistant";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/invitations" element={<Invitations />} />
                 <Route path="/info" element={<Info />} />
                 <Route path="/manage-stores" element={<ManageStores />} />
+                <Route path="/ai-assistant" element={<AIAssistant />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
