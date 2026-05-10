@@ -232,7 +232,8 @@ Deno.serve(async (req) => {
   let provider;
   try {
     provider = createProvider({
-      provider: Deno.env.get("AI_PROVIDER") ?? "anthropic",
+      provider: Deno.env.get("AI_PROVIDER"),
+      lovableApiKey: Deno.env.get("LOVABLE_API_KEY"),
       anthropicApiKey: Deno.env.get("ANTHROPIC_API_KEY"),
       openaiApiKey: Deno.env.get("OPENAI_API_KEY"),
       model: Deno.env.get("AI_MODEL"),
