@@ -83,10 +83,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify caller is the inviter or has permission (admin/super_admin of that store)
+    // Verify caller is the inviter or has permission (manager role of that store)
     const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: userId });
     if (callerRole !== "super_admin") {
-      if (callerRole !== "admin") {
+      if (callerRole !== "admin" && callerRole !== "store_manager") {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

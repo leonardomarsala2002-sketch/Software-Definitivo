@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     // Role check
     const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: userId });
-    if (callerRole !== "super_admin" && callerRole !== "admin") {
+    if (callerRole !== "super_admin" && callerRole !== "admin" && callerRole !== "store_manager") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

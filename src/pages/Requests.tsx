@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 const Requests = () => {
   const { user, role, activeStore } = useAuth();
   const storeId = activeStore?.id;
-  const isAdmin = role === "admin";
+  const isAdmin = role === "admin" || role === "store_manager";
   const isSuperAdmin = role === "super_admin";
 
   const [showForm, setShowForm] = useState(false);

@@ -88,7 +88,7 @@ const Employees = () => {
   const EmployeeCard = ({ emp }: { emp: EmployeeRow }) => {
     const ready = isEmployeeReady(emp);
     const isSala = emp.department === "sala";
-    const showRole = (role === "super_admin" || role === "admin") && emp.app_role;
+    const showRole = (role === "super_admin" || role === "admin" || role === "store_manager") && emp.app_role;
     return (
       <div
         onClick={() => handleRowClick(emp)}
@@ -265,7 +265,7 @@ const Employees = () => {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         canEdit={canEdit && (selected?.user_id !== user?.id || role === "super_admin")}
-        canEditSchedule={role === "super_admin" || role === "admin"}
+        canEditSchedule={role === "super_admin" || role === "admin" || role === "store_manager"}
       />
     </div>
   );

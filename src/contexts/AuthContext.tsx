@@ -13,16 +13,20 @@ interface StoreInfo {
 }
 
 /** Cycle order for preview role switching */
-const ROLE_CYCLE: (AppRole | null)[] = ["super_admin", "admin", "employee", null];
+const ROLE_CYCLE: (AppRole | null)[] = ["super_admin", "admin", "store_manager", "employee", null];
 
-/** Returns true when running inside Lovable preview (not published) */
+/**
+ * Returns true only in Vite dev server (import.meta.env.DEV) or on Lovable preview hostnames.
+ * Explicitly excludes localhost in production builds so deployed staging environments
+ * cannot expose the role-cycling UI.
+ */
 function isPreviewEnvironment(): boolean {
   if (typeof window === "undefined") return false;
+  if (import.meta.env.DEV) return true;
   const host = window.location.hostname;
   return (
     host.includes("-preview--") ||
-    host.includes("lovableproject.com") ||
-    host === "localhost"
+    host.includes("lovableproject.com")
   );
 }
 
@@ -142,13 +146,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // onAuthStateChange fires INITIAL_SESSION on mount (Supabase JS v2),
+    // so getSession is redundant and would cause concurrent loadUserData calls.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      (_event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
           setIsLoading(true);
+          // Defer out of the auth callback to avoid Supabase internal deadlocks.
           setTimeout(() => {
             loadUserData(newSession.user.id).finally(() => setIsLoading(false));
           }, 0);
@@ -161,17 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     );
-
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      setUser(existingSession?.user ?? null);
-
-      if (existingSession?.user) {
-        loadUserData(existingSession.user.id).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
-      }
-    });
 
     return () => subscription.unsubscribe();
   }, [loadUserData]);

@@ -24,13 +24,13 @@ export interface NavItem {
 
 export const navItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, section: "main", tutorialId: "nav-dashboard" },
-  { title: "Calendario Team", url: "/team-calendar", icon: CalendarDays, section: "main", roles: ["admin", "employee"], tutorialId: "nav-team-calendar" },
+  { title: "Calendario Team", url: "/team-calendar", icon: CalendarDays, section: "main", roles: ["admin", "store_manager", "employee"], tutorialId: "nav-team-calendar" },
   { title: "Orari Admin", url: "/admin-shifts", icon: CalendarDays, section: "main", roles: ["super_admin"], tutorialId: "nav-admin-shifts" },
-  { title: "Richieste", url: "/requests", icon: Inbox, section: "main", roles: ["admin", "employee"], tutorialId: "nav-requests" },
+  { title: "Richieste", url: "/requests", icon: Inbox, section: "main", roles: ["admin", "store_manager", "employee"], tutorialId: "nav-requests" },
   { title: "Messaggi", url: "/messages", icon: MessageSquare, section: "main", tutorialId: "nav-messages" },
-  { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin"], tutorialId: "nav-employees" },
-  { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin"], tutorialId: "nav-store-settings" },
-  { title: "Audit Log", url: "/audit-log", icon: FileText, section: "secondary", roles: ["super_admin"], tutorialId: "nav-audit-log" },
+  { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-employees" },
+  { title: "Impostazioni Store", url: "/store-settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-store-settings" },
+  { title: "Audit Log", url: "/audit-log", icon: FileText, section: "secondary", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-audit-log" },
 ];
 
 export const bottomNavItems = navItems.filter((item) => item.section === "main");

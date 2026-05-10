@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
 
     // Verify caller is admin or super_admin
     const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: userId });
-    if (callerRole !== "super_admin" && callerRole !== "admin") {
+    if (callerRole !== "super_admin" && callerRole !== "admin" && callerRole !== "store_manager") {
       return new Response(JSON.stringify({ error: "Forbidden: solo admin possono creare richieste di prestito" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

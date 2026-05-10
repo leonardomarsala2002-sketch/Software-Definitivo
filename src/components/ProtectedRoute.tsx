@@ -6,10 +6,13 @@ import { UtensilsCrossed, LogOut, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Bootstrap button only in Vite dev server or Lovable preview — never in production builds.
+// Mirrors isPreviewEnvironment() in AuthContext: uses the same specific patterns to avoid
+// accidentally matching production hostnames that contain the word "preview".
 const isDev =
-  window.location.hostname === "localhost" ||
-  window.location.hostname.includes("preview") ||
-  window.location.hostname.includes("lovable.app");
+  import.meta.env.DEV ||
+  window.location.hostname.includes("-preview--") ||
+  window.location.hostname.includes("lovableproject.com");
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthorized, signOut } = useAuth();

@@ -10,6 +10,7 @@ import { useLocation, Link, useNavigate } from "react-router-dom";
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "SA",
   admin: "A",
+  store_manager: "SM",
   employee: "E",
 };
 
@@ -25,7 +26,7 @@ export function AppSidebar() {
   const mainItems = filtered.filter((i) => i.section === "main");
   const secondaryItems = filtered.filter((i) => i.section === "secondary");
 
-  const canManageStores = realRole === "super_admin" || realRole === "admin";
+  const canManageStores = realRole === "super_admin" || realRole === "admin" || realRole === "store_manager";
 
   const isActive = (url: string) => {
     if (url === "/") return location.pathname === "/";
@@ -70,7 +71,7 @@ export function AppSidebar() {
               </TooltipTrigger>
               <TooltipContent side="right" className="font-medium text-xs">
                 {previewRole
-                  ? `Preview: ${previewRole === "super_admin" ? "Super Admin" : previewRole === "admin" ? "Admin" : "Dipendente"} — clicca per cambiare`
+                  ? `Preview: ${previewRole === "super_admin" ? "Super Admin" : previewRole === "admin" ? "Admin" : previewRole === "store_manager" ? "Store Manager" : "Dipendente"} — clicca per cambiare`
                   : "Attiva preview ruolo"}
               </TooltipContent>
             </Tooltip>

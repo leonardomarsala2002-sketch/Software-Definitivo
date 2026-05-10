@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { checkRateLimit } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: userData.user.id });
-    if (callerRole !== "super_admin" && callerRole !== "admin") {
+    if (callerRole !== "super_admin" && callerRole !== "admin" && callerRole !== "store_manager") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -52,6 +53,10 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Rate limit: max 10 approve operations per user per store per 5 minutes
+    const rlResp = await checkRateLimit(adminClient, `approve-patch:${userData.user.id}:${store_id}`, 10, 300);
+    if (rlResp) return rlResp;
 
     // Calculate week_end
     const startD = new Date(week_start + "T00:00:00Z");

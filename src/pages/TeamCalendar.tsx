@@ -43,7 +43,7 @@ const TeamCalendar = () => {
   const queryClient = useQueryClient();
   const { activeStore, role } = useAuth();
   const storeId = activeStore?.id;
-  const canEdit = role === "super_admin" || role === "admin";
+  const canEdit = role === "super_admin" || role === "admin" || role === "store_manager";
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());

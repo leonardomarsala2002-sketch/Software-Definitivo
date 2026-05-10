@@ -169,7 +169,7 @@ const Dashboard = () => {
     else setCalMonth((m) => m + 1);
   };
 
-  const isAdmin = role === "admin" || role === "super_admin";
+  const isAdmin = role === "admin" || role === "super_admin" || role === "store_manager";
 
   const { data: appointments = [] } = useAppointments(calMonth, calYear);
   const respondAppointment = useRespondAppointment();
@@ -580,7 +580,7 @@ const Dashboard = () => {
           <TeamHoursCard />
         </div>
         <div className="flex flex-col gap-4">
-          {role === "admin" && <VacationBalanceCard />}
+          {(role === "admin" || role === "store_manager") && <VacationBalanceCard />}
           <DashboardCharts />
         </div>
       </div>
@@ -678,8 +678,8 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Weekly Timeline - only for admin, not super_admin */}
-      {role === "admin" && (
+      {/* Weekly Timeline - only for admin/store_manager, not super_admin */}
+      {(role === "admin" || role === "store_manager") && (
       <Card className="p-4 flex flex-col flex-shrink-0">
         <CardHeader className="p-0 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">

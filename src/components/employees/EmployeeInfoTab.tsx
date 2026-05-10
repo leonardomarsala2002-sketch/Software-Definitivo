@@ -107,13 +107,13 @@ export default function EmployeeInfoTab({ employee, canEdit, canEditSchedule }: 
     <div className="space-y-6 py-2">
       {/* Role + Readiness + contract badge */}
       <div className="flex items-center gap-2 flex-wrap">
-        {(role === "super_admin" || role === "admin") && employee.app_role && (
+        {(role === "super_admin" || role === "admin" || role === "store_manager") && employee.app_role && (
           <Badge
             variant="outline"
             className={`text-xs ${
               employee.app_role === "super_admin"
                 ? "border-primary text-primary"
-                : employee.app_role === "admin"
+                : employee.app_role === "admin" || employee.app_role === "store_manager"
                 ? "border-blue-500 text-blue-600 dark:text-blue-400"
                 : "text-muted-foreground"
             }`}

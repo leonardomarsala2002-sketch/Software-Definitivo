@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     const { data: callerRole } = await adminClient.rpc("get_user_role", {
       _user_id: caller.id,
     });
-    if (callerRole !== "super_admin" && callerRole !== "admin") {
+    if (callerRole !== "super_admin" && callerRole !== "admin" && callerRole !== "store_manager") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -64,8 +64,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Admin can only reset passwords for users in their stores
-    if (callerRole === "admin") {
+    // Admin/store_manager can only reset passwords for users in their stores
+    if (callerRole === "admin" || callerRole === "store_manager") {
       const { data: targetRole } = await adminClient.rpc("get_user_role", {
         _user_id: target_user_id,
       });

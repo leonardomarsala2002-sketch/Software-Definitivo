@@ -99,6 +99,17 @@ Deno.serve(async (req) => {
 
     const phase1Results = await Promise.all(phase1Promises);
 
+    // Update lifecycle_status to "generated" for all successfully completed runs
+    for (const p1 of phase1Results) {
+      if (!p1.ok) continue;
+      await adminClient
+        .from("generation_runs")
+        .update({ lifecycle_status: "generated" } as any)
+        .eq("store_id", p1.store.id)
+        .eq("week_start", weekStart)
+        .eq("status", "completed");
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 2: Cross-store lending detection
     // Now that ALL stores have draft shifts, we can accurately detect
@@ -317,8 +328,8 @@ Deno.serve(async (req) => {
               .in("id", adminIds);
 
             const emailSubject = totalUncovered > 0
-              ? `⚠️ Draft turni con problemi – ${store.name}`
-              : `Draft turni generato – ${store.name}`;
+              ? `⚠️ Turni generati con problemi – ${store.name}`
+              : `Turni generati – da validare – ${store.name}`;
 
             const warningBanner = totalUncovered > 0
               ? `<tr><td style="padding:12px 36px;background:#fef2f2;border-left:4px solid #ef4444;">
@@ -354,13 +365,13 @@ Deno.serve(async (req) => {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
 <tr><td style="padding:40px 36px 16px;text-align:center;">
-<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Draft turni pronto</h1>
+<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Turni generati</h1>
 <p style="margin:0;font-size:14px;color:#71717a;">${store.name}</p>
 <p style="margin:8px 0 0;font-size:13px;color:#a1a1aa;">Settimana dal ${weekStart}</p>
 </td></tr>
 ${warningBanner}
 <tr><td style="padding:24px 36px;">
-<p style="font-size:14px;color:#52525b;margin:0 0 12px;">La generazione automatica dei turni è stata completata. Controlla il draft e pubblica quando sei pronto.</p>
+<p style="font-size:14px;color:#52525b;margin:0 0 12px;">La generazione automatica dei turni è stata completata. Rivedi il draft, poi usa &ldquo;Valida&rdquo; per verificare le regole e infine pubblica.</p>
 ${deptTable}
 </td></tr>
 <tr><td style="padding:16px 36px 32px;text-align:center;">
@@ -378,10 +389,10 @@ ${deptTable}
                   user_id: p.id,
                   store_id: store.id,
                   type: "draft_ready",
-                  title: hasCritical ? "⚠️ Draft turni con problemi" : "Draft turni pronto",
+                  title: hasCritical ? "⚠️ Turni generati con problemi" : "Turni generati – da validare",
                   message: hasCritical
-                    ? `I turni per la settimana del ${weekStart} sono stati generati per ${store.name} con ${totalUncovered} slot non coperti. Risolvi i problemi prima di pubblicare.`
-                    : `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Controlla e pubblica quando sei pronto.`,
+                    ? `I turni per la settimana del ${weekStart} sono stati generati per ${store.name} con ${totalUncovered} slot non coperti. Risolvi i problemi, valida e poi pubblica.`
+                    : `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Rivedi il draft, valida le regole e pubblica quando sei pronto.`,
                   link: "/team-calendar",
                 });
               } catch (notifErr) {

@@ -84,7 +84,7 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
           setEndDate("");
 
           // Auto-trigger regeneration for sickness or permesso
-          if ((excType === "malattia" || excType === "permesso") && storeId && (role === "admin" || role === "super_admin")) {
+          if ((excType === "malattia" || excType === "permesso") && storeId && (role === "admin" || role === "super_admin" || role === "store_manager")) {
             await triggerPatchRegeneration(storeId, startDate, endDate, userId);
           }
         },
@@ -226,7 +226,7 @@ export default function EmployeeExceptionsTab({ userId, storeId, canEdit }: Prop
             <Label className="text-xs">Note (opzionale)</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
-          {(excType === "malattia" || excType === "permesso") && (role === "admin" || role === "super_admin") && (
+          {(excType === "malattia" || excType === "permesso") && (role === "admin" || role === "super_admin" || role === "store_manager") && (
             <div className="rounded-md border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 p-2">
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
                 💡 I turni del dipendente verranno automaticamente rigenerati per coprire l'assenza. Riceverai una email con la proposta.
