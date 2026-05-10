@@ -1,0 +1,309 @@
+# FASE 0 — AUDIT TECNICO COMPLETO
+**Data:** 2026-05-08
+**Progetto:** Software-Definitivo (piattaforma scheduling multi-store)
+**Ruolo auditor:** Senior Full-Stack Developer (read-only, no modifiche)
+
+---
+
+## 1. STACK RILEVATO
+
+| Layer | Tecnologia |
+|---|---|
+| Frontend | React 18 + TypeScript + Vite (SWC) |
+| UI Library | shadcn/ui + Radix UI + Tailwind CSS |
+| State management | TanStack Query v5 |
+| Routing | React Router v6 |
+| Backend (BaaS) | Supabase (PostgreSQL, Auth, Edge Functions, Realtime) |
+| Edge Functions runtime | Deno |
+| AI Engine | Gemini 2.5 Flash via LOVABLE_API_KEY (proxy Lovable) |
+| Email | Resend |
+| Build tool | Vite con SWC |
+| Package manager | npm |
+
+---
+
+## 2. STRUTTURA CARTELLE
+
+```
+/
+├── public/               # Solo immagini e robots.txt (NO manifest.json, NO SW)
+├── scripts/
+│   └── staging-setup.sql # Schema DB completo + seed data
+├── src/
+│   ├── App.tsx           # Router root, 13 route definite
+│   ├── components/       # UI components, AppSidebar, ProtectedRoute
+│   ├── config/
+│   │   └── navigation.ts # navItems array (manca /invitations e /manage-stores)
+│   ├── contexts/
+│   │   └── AuthContext.tsx
+│   ├── hooks/            # useGenerationRuns, useOptimizationSuggestions, ecc.
+│   ├── integrations/
+│   │   └── supabase/
+│   │       ├── client.ts  # Credenziali hardcoded (non da .env)
+│   │       └── types.ts   # Schema DB auto-generato (27 tabelle)
+│   └── pages/            # Dashboard, TeamCalendar, PersonalCalendar, ecc.
+├── supabase/
+│   └── functions/        # Edge Functions Deno
+│       ├── bootstrap-admin/
+│       ├── generate-optimized-schedule/
+│       ├── publish-shifts/
+│       └── ...
+├── .env                  # COMMESSO IN GIT (contiene anon key)
+└── index.html            # Titolo ancora "Lovable App", meta Lovable
+```
+
+---
+
+## 3. FUNZIONALITÀ PRESENTI E FUNZIONANTI
+
+- **Autenticazione** completa: login, invite flow, reset password, set password
+- **RBAC parziale**: ruoli `super_admin`, `admin`, `employee` con RLS attive
+- **Multi-store**: `store_id` presente sulla maggior parte delle tabelle
+- **Generazione turni**: algoritmo evolutivo deterministico con fitness scoring (40 iterazioni, penalità configurate)
+- **AI layer**: integrazione Gemini 2.5 Flash tramite Lovable API proxy
+- **Pubblicazione turni**: Edge Function `publish-shifts` con verifica ruolo, validazioni minimo 3h, overbooking check
+- **Hour Bank (monte ore)**: calcolo e aggiornamento `employee_stats.current_balance` al publish
+- **Email notifications**: Resend al publish turni con template HTML
+- **In-app notifications**: tabella `notifications`, insert al publish
+- **Audit logs**: tabella `audit_logs`, scrittura su azioni chiave
+- **Export ICS**: `PersonalCalendar.tsx` con export calendario personale
+- **Richieste dipendenti**: tabella `time_off_requests` presente
+- **Messaggistica**: tabella `messages` con funzione DB `can_message`
+- **Bootstrap admin**: Edge Function per primo super_admin su DB vuoto
+- **Preview role switching**: `cyclePreviewRole()` in `AuthContext` (solo dev/preview)
+- **Sidebar navigazione**: icone + label, filtrata per ruolo
+- **Lending suggerimenti**: logica in `TeamCalendar.tsx` per prestito dipendenti inter-store
+
+---
+
+## 4. FUNZIONALITÀ INCOMPLETE O ROTTE
+
+### 4.1 Rilevamento patch fragile
+In `TeamCalendar.tsx`, la modalità patch viene rilevata con:
+```js
+r.notes?.includes("patch")
+```
+Stringa libera in un campo notes — nessun campo enum dedicato. Fragile e non tipizzato.
+
+### 4.2 Route senza voce di menu
+Le route `/invitations` e `/manage-stores` esistono in `App.tsx` ma sono assenti da `src/config/navigation.ts`. Non raggiungibili dall'interfaccia a meno di navigare direttamente all'URL.
+
+### 4.3 AuditLog senza paginazione
+`src/pages/AuditLog.tsx` carica massimo 200 record con `.limit(200)` hard-coded. Nessuna paginazione. Su store con attività intensa, i record più vecchi non sono accessibili.
+
+### 4.4 PersonalCalendar finestra temporale
+Mostra solo 2 settimane (corrente + prossima). Dipendenti non possono vedere turni passati né programmati oltre 2 settimane.
+
+### 4.5 Ottimizzazione suggestions parziale
+`useOptimizationSuggestions.ts` legge `generation_runs.suggestions` come blob JSON. Nessuna struttura garantita dal DB. Se il campo manca o il formato cambia, il componente fallisce silenziosamente.
+
+### 4.6 Rebalance mode
+Implementato in `TeamCalendar.tsx` ma il flusso di approvazione finale non è completamente chiaro — la funzione `approve-patch-shifts` esiste come Edge Function ma l'integrazione UI potrebbe essere incompleta.
+
+### 4.7 store_manager role
+Il ruolo `store_manager` è nei requisiti di progetto ma è **completamente assente**: non nell'enum `app_role`, non nell'`AuthContext`, non nelle guardie di navigazione.
+
+---
+
+## 5. FUNZIONALITÀ COMPLETAMENTE ASSENTI
+
+| Funzionalità | Stato |
+|---|---|
+| PWA (manifest, service worker, offline) | Assente al 100% |
+| Google Calendar integration | Assente |
+| ZConnect integration | Assente |
+| Ruolo `store_manager` | Non implementato |
+| Paginazione AuditLog | Assente |
+| Notifiche push browser/mobile | Assente |
+| Dark mode | Non rilevato |
+| Internazionalizzazione (i18n) | Assente (solo italiano hardcoded) |
+| Shift archiving workflow | `archived` esiste nell'enum ma nessun flusso UI |
+| Employee lending approval flow | Solo suggerimenti, nessun workflow di approvazione |
+
+---
+
+## 6. PROBLEMI DI SICUREZZA
+
+### [CRITICO] S1 — Credenziali hardcoded in `client.ts`
+**File:** `src/integrations/supabase/client.ts`
+La Supabase anon key e l'URL sono hardcoded come literal string nel sorgente. Chiunque acceda al bundle JS può estrarre le credenziali. La anon key da sola non è un segreto critico ma combinata con RLS mal configurate diventa un vettore d'attacco.
+
+### [CRITICO] S2 — `.env` committato in git
+**File:** `.env`
+Il file `.env` contiene `VITE_SUPABASE_PUBLISHABLE_KEY` (anon key) ed è committato nel repository. Chiunque abbia accesso al repo ha le credenziali.
+
+### [ALTO] S3 — Bootstrap admin accessibile su localhost
+**File:** `src/components/ProtectedRoute.tsx`
+Il pulsante "Crea primo admin" appare su `localhost` (condizione `isDev` include localhost). Su qualsiasi deploy locale o tunnel (ngrok, Cloudflare Tunnel) con DB vuoto, qualunque utente autenticato può promuoversi super_admin.
+
+### [ALTO] S4 — `isPreviewEnvironment()` include localhost
+**File:** `src/contexts/AuthContext.tsx`
+La funzione ritorna `true` su localhost. Questo abilita `cyclePreviewRole()` — un meccanismo per cambiare ruolo liberamente. In un ambiente di sviluppo condiviso o su un deploy accessibile da altri, questo bypassa completamente RBAC.
+
+### [ALTO] S5 — LOVABLE_API_KEY dipendenza critica
+**File:** `supabase/functions/generate-optimized-schedule/index.ts`
+L'engine di generazione turni richiede `LOVABLE_API_KEY` come env var obbligatoria. Senza questa chiave, la funzionalità core del prodotto non funziona. La chiave è proprietaria di Lovable — non è possibile deployare il progetto fuori dalla piattaforma Lovable senza sostituire integralmente l'integrazione AI. Il progetto non è autonomo.
+
+### [MEDIO] S6 — `time_off_requests.store_id` senza foreign key
+**File:** `scripts/staging-setup.sql`
+La colonna `store_id` è dichiarata `NOT NULL` ma senza `REFERENCES stores(id)`. Integrità referenziale non garantita a livello DB.
+
+### [MEDIO] S7 — `employee_details` senza `store_id`
+La tabella `employee_details` non ha `store_id`. In un contesto multi-store, i dettagli contrattuali (ore settimanali, tipo contratto) potrebbero essere condivisi tra store diversi — incoerenza potenziale.
+
+### [MEDIO] S8 — `index.html` con meta Lovable
+**File:** `index.html`
+Titolo `<title>Lovable App</title>`, og:image punta al CDN Lovable. In produzione rivela che il prodotto è stato generato con Lovable — possibile information disclosure.
+
+### [BASSO] S9 — Nessun rate limiting sulle Edge Functions
+Le Edge Functions non implementano rate limiting. Soggette ad abusi/DDoS a livello applicativo.
+
+### [BASSO] S10 — Audit log copre solo 6 action types
+Il sistema di audit è parziale. Molte operazioni (modifica turni singoli, cambio ruolo, ecc.) non generano record di audit.
+
+---
+
+## 7. SCHEMA DB ATTUALE
+
+**27 tabelle rilevate** da `src/integrations/supabase/types.ts`:
+
+| Categoria | Tabelle |
+|---|---|
+| Auth/Utenti | `profiles`, `user_roles`, `user_store_assignments`, `employee_details` |
+| Store | `stores`, `store_rules`, `opening_hours`, `store_coverage_requirements`, `allowed_times` |
+| Turni | `shifts`, `generation_runs`, `shift_swap_requests` |
+| Richieste | `time_off_requests`, `employee_availability` |
+| Finanziario | `employee_stats` (hour bank) |
+| Comunicazione | `messages`, `notifications` |
+| Audit | `audit_logs` |
+| Altro | `invitations`, `lending_requests`, `store_constraints`, `store_performance_metrics`, `ai_conversation_history`, `optimization_runs`, `employee_preferences` |
+
+**Enums:**
+- `app_role`: `"super_admin" | "admin" | "employee"` (manca `store_manager`)
+- `shift_status`: `"draft" | "published" | "archived"` (manca `"generated"` e `"validated"` nonostante siano nei requisiti)
+- `department`: `"sala" | "cucina"`
+
+**Funzioni DB:**
+- `get_user_role(_user_id)` — ritorna ruolo dell'utente
+- `has_role(_user_id, _role)` — booleano ruolo check
+- `is_store_member(_user_id, _store_id)` — booleano membership
+- `can_message(_sender_id, _recipient_id)` — booleano autorizzazione messaggi
+
+---
+
+## 8. STATO AUTH E RUOLI
+
+### Flusso autenticazione
+1. Login via Supabase Auth (email/password)
+2. `AuthContext` carica ruolo tramite RPC `get_user_role`
+3. Carica store assignments
+4. `isAuthorized = realRole !== null && stores.length > 0`
+
+### Matrice ruoli implementata
+
+| Ruolo | Esiste in enum | AuthContext | Navigazione | Edge Functions |
+|---|---|---|---|---|
+| `super_admin` | ✓ | ✓ | ✓ | ✓ |
+| `admin` | ✓ | ✓ | ✓ | ✓ |
+| `employee` | ✓ | ✓ | ✓ (read-only) | Parziale |
+| `store_manager` | ✗ | ✗ | ✗ | ✗ |
+
+### RLS
+Le policy RLS sono presenti nello schema. La correttezza specifica di ogni policy non è stata verificata nel dettaglio — richiede audit separato.
+
+---
+
+## 9. STATO RESPONSIVE E PWA
+
+### Responsive
+- Tailwind CSS con breakpoints standard (`sm:`, `md:`, `lg:`)
+- Sidebar icon-only (72px) — compatta su mobile
+- Griglia `sm:grid-cols-2` in vari componenti
+- Nessun test mobile documentato
+
+### PWA — COMPLETAMENTE ASSENTE
+| Requisito PWA | Stato |
+|---|---|
+| `manifest.json` | Assente |
+| Service Worker | Assente |
+| Offline support | Assente |
+| Install prompt | Assente |
+| Push notifications | Assente |
+| App icons (192/512px) | Assente |
+| `<meta name="theme-color">` | Assente |
+
+La cartella `public/` contiene solo immagini e `robots.txt`. Nessun file PWA presente.
+
+---
+
+## 10. DEBITO TECNICO
+
+1. **Credenziali hardcoded** in `client.ts` (Lovable-generated, non modificato)
+2. **`.env` in git** — necessita immediate `.gitignore` + secret rotation
+3. **Titolo/meta Lovable** in `index.html`
+4. **LOVABLE_API_KEY** — dipendenza piattaforma non autonoma
+5. **Ruolo `store_manager`** completamente mancante
+6. **Enum `shift_status`** non allineato ai requisiti (mancano `generated`, `validated`)
+7. **Patch detection via string** (`r.notes?.includes("patch")`) invece di campo dedicato
+8. **Route senza nav** (`/invitations`, `/manage-stores`)
+9. **AuditLog senza paginazione** (hard limit 200)
+10. **PersonalCalendar 2 settimane** — finestra temporale arbitraria
+11. **employee_details senza store_id** — blocca multi-store employee management
+12. **time_off_requests.store_id** senza FK constraint
+13. **PWA completamente assente**
+14. **Nessun rate limiting** sulle Edge Functions
+15. **AI conversation history** presente in DB ma flusso UI non chiaro
+16. **optimization_runs** tabella distinta da `generation_runs` — duplicazione potenziale o funzioni diverse non documentate
+
+---
+
+## 11. PIANO IMPLEMENTAZIONE SUGGERITO
+
+### FASE 1 — Sicurezza e fondamenta (priorità assoluta)
+- Rimuovere `.env` dal tracking git, aggiungere a `.gitignore`, ruotare le chiavi
+- Spostare credenziali Supabase in variabili d'ambiente Vite (`import.meta.env`)
+- Correggere `isPreviewEnvironment()` per escludere qualsiasi ambiente non localhost-dev
+- Aggiungere `store_manager` all'enum e al sistema RBAC
+- Correggere `index.html` (titolo, meta, og:image)
+
+### FASE 2 — Completamento schema DB
+- Aggiungere `store_id` a `employee_details`
+- Aggiungere FK constraint su `time_off_requests.store_id`
+- Allineare `shift_status` enum (`generated`, `validated`)
+- Campo dedicato per modalità patch in `generation_runs`
+
+### FASE 3 — Ruolo store_manager
+- Implementare `store_manager` in AuthContext, navigazione, RLS policies, Edge Functions
+- Definire matrice permessi completa
+
+### FASE 4 — PWA
+- `manifest.json` con icone e configurazione
+- Service Worker (Workbox) con strategia cache
+- Offline fallback
+- Push notifications (Supabase Realtime + browser Push API)
+
+### FASE 5 — AI portabilità
+- Sostituire LOVABLE_API_KEY con `GOOGLE_GEMINI_API_KEY` diretto
+- Eliminare dipendenza da proxy Lovable per portabilità produzione
+
+### FASE 6 — UX completamento
+- Paginazione AuditLog
+- Estendere PersonalCalendar (storico + futuro > 2 settimane)
+- Aggiungere `/invitations` e `/manage-stores` alla navigazione
+- Shift archiving workflow completo
+
+### FASE 7 — Integrazioni esterne
+- Google Calendar (OAuth + sync bidirezionale)
+- ZConnect integration
+- Rate limiting su Edge Functions
+
+### FASE 8 — Quality & Monitoring
+- Test suite (Vitest + Playwright E2E)
+- Error tracking (Sentry)
+- Performance monitoring
+- Audit log coverage completa su tutte le azioni critiche
+
+---
+
+**Fine audit FASE 0.**
+*Audit read-only — nessun file modificato durante questa sessione.*
