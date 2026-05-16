@@ -110,10 +110,10 @@ function SectionCard({ title, icon, iconColor, iconBg, children, action }: {
   return (
     <Card className="p-5">
       <CardHeader className="p-0 pb-4">
-        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-[#0f1117]">
+        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
           <div className="flex items-center gap-2.5">
-            <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${iconBg ?? "bg-[#f5f3ff]"}`}>
-              <div className={`[&>svg]:h-4 [&>svg]:w-4 ${iconColor ?? "text-[#635bff]"}`}>{icon}</div>
+            <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${iconBg ?? "bg-sky-50"}`}>
+              <div className={`[&>svg]:h-4 [&>svg]:w-4 ${iconColor ?? "text-sky-600"}`}>{icon}</div>
             </div>
             {title}
           </div>
@@ -131,18 +131,18 @@ function MiniCalendar({ calYear, calMonth, calendarCells, today, selectedDate, s
   return (
     <Card className="p-5">
       <CardHeader className="p-0 pb-4">
-        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-[#0f1117]">
+        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
           <span>{MONTHS_IT[calMonth]} {calYear}</span>
           <div className="flex gap-1">
-            <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronLeft className="h-4 w-4" /></button>
-            <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronRight className="h-4 w-4" /></button>
+            <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
+            <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-0">
         <div className="grid grid-cols-7 mb-2">
           {DAYS_IT.map((d, i) => (
-            <span key={d} className={`text-center text-[10px] font-bold text-[#6b7280] uppercase tracking-wide ${i >= 5 ? "opacity-40" : ""}`}>{d}</span>
+            <span key={d} className={`text-center text-[10px] font-bold text-slate-500 uppercase tracking-wide ${i >= 5 ? "opacity-40" : ""}`}>{d}</span>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-y-1">
@@ -155,14 +155,14 @@ function MiniCalendar({ calYear, calMonth, calendarCells, today, selectedDate, s
               <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
                 className={`relative flex items-center justify-center w-full aspect-square rounded-lg text-[13px] font-medium transition-all duration-150
                   ${day === null ? "invisible" : ""}
-                  ${isSelected ? "bg-gradient-to-br from-[#635bff] to-[#4f46e5] text-white font-bold shadow-button-violet" : ""}
-                  ${isToday && !isSelected ? "bg-[#f5f3ff] text-[#635bff] font-bold ring-1 ring-[#635bff]/40" : ""}
-                  ${!isToday && !isSelected && day !== null ? "hover:bg-[#f3f4f8] text-[#0f1117]" : ""}
-                  ${isWeekend && !isSelected && !isToday ? "text-[#9ca3af]" : ""}
+                  ${isSelected ? "bg-gradient-to-br from-sky-600 to-sky-700 text-white font-bold" : ""}
+                  ${isToday && !isSelected ? "bg-sky-50 text-sky-600 font-bold ring-1 ring-sky-500/40" : ""}
+                  ${!isToday && !isSelected && day !== null ? "hover:bg-slate-100 text-slate-900" : ""}
+                  ${isWeekend && !isSelected && !isToday ? "text-slate-400" : ""}
                 `}>
                 {day}
                 {hasAppointment && (
-                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-[#635bff]"}`} />
+                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-sky-600"}`} />
                 )}
               </button>
             );
@@ -182,7 +182,7 @@ function WeekTimeline({ weekDates, today, weekShifts }: { weekDates: Date[]; tod
         <div className="w-20 shrink-0" />
         <div className="flex-1 flex">
           {TIMELINE_HOURS.map((h) => (
-            <div key={h} className="text-[9px] text-[#9ca3af] font-mono text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
+            <div key={h} className="text-[9px] text-slate-400 font-mono text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
               {String(h).padStart(2, "0")}
             </div>
           ))}
@@ -197,14 +197,14 @@ function WeekTimeline({ weekDates, today, weekShifts }: { weekDates: Date[]; tod
           const isWeekend = i >= 5;
           return (
             <div key={i} className="flex items-center min-h-[30px]">
-              <div className={`w-20 shrink-0 pr-2 text-right text-[11px] font-semibold ${isDayToday ? "text-[#635bff]" : isWeekend ? "text-[#9ca3af]" : "text-[#6b7280]"}`}>
-                <span className={isDayToday ? "bg-gradient-to-r from-[#635bff] to-[#4f46e5] text-white rounded-md px-2 py-0.5 text-[10px]" : ""}>
+              <div className={`w-20 shrink-0 pr-2 text-right text-[11px] font-semibold ${isDayToday ? "text-sky-600" : isWeekend ? "text-slate-400" : "text-slate-500"}`}>
+                <span className={isDayToday ? "bg-gradient-to-r from-sky-600 to-sky-700 text-white rounded-md px-2 py-0.5 text-[10px]" : ""}>
                   {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
                 </span>
               </div>
-              <div className={`flex-1 relative h-7 rounded-lg overflow-hidden border transition-colors ${isDayToday ? "bg-[#f5f3ff] border-[#635bff]/20" : "bg-[#f8f9fc] border-[#e4e7ec]"}`}>
+              <div className={`flex-1 relative h-7 rounded-lg overflow-hidden border transition-colors ${isDayToday ? "bg-sky-50 border-sky-400/20" : "bg-[#f8f9fc] border-slate-200"}`}>
                 {TIMELINE_HOURS.map((h, hi) => (
-                  <div key={h} className="absolute top-0 bottom-0 border-l border-[#e4e7ec]/60" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
+                  <div key={h} className="absolute top-0 bottom-0 border-l border-slate-200/60" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
                 ))}
                 {isDayOff ? (
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -347,7 +347,7 @@ const Dashboard = () => {
       trend: 0,
       period: "store attuale",
       icon: <Users />,
-      gradient: "bg-gradient-to-br from-[#635bff] to-[#4f46e5]",
+      gradient: "bg-gradient-to-br from-sky-600 to-sky-700",
       iconBg: "bg-white/20",
     },
     {
@@ -385,14 +385,14 @@ const Dashboard = () => {
 
   const DeclineDialog = () => (
     <AlertDialog open={!!declineTarget} onOpenChange={(open) => { if (!open) { setDeclineTarget(null); setDeclineReason(""); } }}>
-      <AlertDialogContent className="rounded-2xl border-[#e4e7ec]">
+      <AlertDialogContent className="rounded-2xl border-slate-200">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-[#ef4444]" />Rifiuta appuntamento
           </AlertDialogTitle>
           <AlertDialogDescription>Scrivi una motivazione per il rifiuto (opzionale).</AlertDialogDescription>
         </AlertDialogHeader>
-        <Textarea placeholder="Es. Ho un impegno in quel giorno..." value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} rows={3} maxLength={500} className="rounded-xl border-[#e4e7ec] focus-visible:ring-[#635bff]/20" />
+        <Textarea placeholder="Es. Ho un impegno in quel giorno..." value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} rows={3} maxLength={500} className="rounded-xl border-slate-200 focus-visible:ring-sky-500/20" />
         <AlertDialogFooter>
           <AlertDialogCancel className="rounded-[10px]" onClick={() => { setDeclineTarget(null); setDeclineReason(""); }}>Annulla</AlertDialogCancel>
           <AlertDialogAction
@@ -422,13 +422,13 @@ const Dashboard = () => {
           {activeStore?.id && (
             <button
               onClick={() => setShowOnboarding(true)}
-              className="flex flex-col gap-2 w-full rounded-2xl border-2 border-dashed border-[#e4e7ec] bg-white p-5 text-left hover:border-[#635bff]/40 hover:bg-[#f5f3ff] transition-all duration-200 group"
+              className="flex flex-col gap-2 w-full rounded-2xl border-2 border-dashed border-slate-200 bg-white p-5 text-left hover:border-sky-400/40 hover:bg-sky-50 transition-all duration-200 group"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f3ff] group-hover:bg-[#635bff]/20 transition-colors">
-                <CalendarIcon className="h-4 w-4 text-[#635bff]" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 group-hover:bg-sky-600/20 transition-colors">
+                <CalendarIcon className="h-4 w-4 text-sky-600" />
               </div>
-              <span className="text-sm font-bold text-[#0f1117]">Le mie preferenze turni</span>
-              <span className="text-xs text-[#6b7280]">Tipo turno, giorni liberi, weekend →</span>
+              <span className="text-sm font-bold text-slate-900">Le mie preferenze turni</span>
+              <span className="text-xs text-slate-500">Tipo turno, giorni liberi, weekend →</span>
             </button>
           )}
         </div>
@@ -439,17 +439,17 @@ const Dashboard = () => {
         <SectionCard
           title="Il mio orario settimanale"
           icon={<CalendarIcon />}
-          iconBg="bg-[#f5f3ff]"
-          iconColor="text-[#635bff]"
+          iconBg="bg-sky-50"
+          iconColor="text-sky-600"
           action={
             <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="text-xs font-semibold text-[#6b7280] min-w-[110px] text-center font-mono">
+              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="text-xs font-semibold text-slate-500 min-w-[110px] text-center font-mono">
                 {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
               </span>
-              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronRight className="h-4 w-4" /></button>
+              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
               {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-[#635bff] bg-[#f5f3ff] rounded-lg px-2 py-1 hover:bg-[#ede9fe] transition-colors">Oggi</button>
+                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-sky-600 bg-sky-50 rounded-lg px-2 py-1 hover:bg-sky-100 transition-colors">Oggi</button>
               )}
             </div>
           }
@@ -462,7 +462,7 @@ const Dashboard = () => {
             {activeStore?.id ? (
               <RequestForm department={department} storeId={activeStore.id} onClose={() => {}} />
             ) : (
-              <p className="text-sm text-[#6b7280] text-center py-4">Nessuno store assegnato.</p>
+              <p className="text-sm text-slate-500 text-center py-4">Nessuno store assegnato.</p>
             )}
           </SectionCard>
           <MiniCalendar calYear={calYear} calMonth={calMonth} calendarCells={calendarCells} today={today} selectedDate={selectedDate} setSelectedDate={setSelectedDate} prevMonth={prevMonth} nextMonth={nextMonth} />
@@ -486,11 +486,11 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f5f3ff] mb-3">
-                <CalendarIcon className="h-6 w-6 text-[#635bff]" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 mb-3">
+                <CalendarIcon className="h-6 w-6 text-sky-600" />
               </div>
-              <p className="text-sm font-semibold text-[#0f1117]">Nessun appuntamento</p>
-              <p className="text-xs text-[#6b7280] mt-1">Seleziona un giorno nel calendario</p>
+              <p className="text-sm font-semibold text-slate-900">Nessun appuntamento</p>
+              <p className="text-xs text-slate-500 mt-1">Seleziona un giorno nel calendario</p>
             </div>
           )}
         </SectionCard>
@@ -509,19 +509,19 @@ const Dashboard = () => {
 
       {/* Super admin store toggle */}
       {isSuperAdmin && (
-        <div className="flex items-center gap-3 rounded-2xl border border-[#e4e7ec] bg-white p-4 shadow-card">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f5f3ff]">
-              <Store className="h-4 w-4 text-[#635bff]" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50">
+              <Store className="h-4 w-4 text-sky-600" />
             </div>
-            <span className="text-sm font-semibold text-[#0f1117]">
+            <span className="text-sm font-semibold text-slate-900">
               {viewAllStores ? "Tutti i locali" : (activeStore?.name ?? "Store selezionato")}
             </span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <Label htmlFor="view-toggle" className="text-xs font-medium text-[#6b7280]">Tutti i locali</Label>
+            <Label htmlFor="view-toggle" className="text-xs font-medium text-slate-500">Tutti i locali</Label>
             <Switch id="view-toggle" checked={viewAllStores} onCheckedChange={setViewAllStores} />
-            <Globe className={`h-4 w-4 transition-colors ${viewAllStores ? "text-[#635bff]" : "text-[#c4c9d4]"}`} />
+            <Globe className={`h-4 w-4 transition-colors ${viewAllStores ? "text-sky-600" : "text-[#c4c9d4]"}`} />
           </div>
         </div>
       )}
@@ -549,10 +549,10 @@ const Dashboard = () => {
 
         <Card className="lg:col-span-2 p-5">
           <CardHeader className="p-0 pb-4">
-            <CardTitle className="flex items-center justify-between text-[14px] font-bold text-[#0f1117]">
+            <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f5f3ff]">
-                  <CalendarIcon className="h-4 w-4 text-[#635bff]" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50">
+                  <CalendarIcon className="h-4 w-4 text-sky-600" />
                 </div>
                 {selectedDate.getDate()} {MONTHS_IT[selectedDate.getMonth()]} {selectedDate.getFullYear()}
               </div>
@@ -574,11 +574,11 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f5f3ff] mb-3">
-                  <CalendarIcon className="h-7 w-7 text-[#635bff]" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-50 mb-3">
+                  <CalendarIcon className="h-7 w-7 text-sky-600" />
                 </div>
-                <p className="text-sm font-semibold text-[#0f1117]">Nessun appuntamento</p>
-                <Button variant="ghost" size="sm" className="mt-2 text-xs text-[#635bff]" onClick={() => setShowAppointmentForm(true)}>
+                <p className="text-sm font-semibold text-slate-900">Nessun appuntamento</p>
+                <Button variant="ghost" size="sm" className="mt-2 text-xs text-sky-600" onClick={() => setShowAppointmentForm(true)}>
                   + Aggiungi appuntamento
                 </Button>
               </div>
@@ -592,17 +592,17 @@ const Dashboard = () => {
         <SectionCard
           title="Il mio orario settimanale"
           icon={<CalendarIcon />}
-          iconBg="bg-[#f5f3ff]"
-          iconColor="text-[#635bff]"
+          iconBg="bg-sky-50"
+          iconColor="text-sky-600"
           action={
             <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="text-xs font-semibold text-[#6b7280] min-w-[110px] text-center font-mono">
+              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="text-xs font-semibold text-slate-500 min-w-[110px] text-center font-mono">
                 {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
               </span>
-              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#f3f4f8] transition-colors text-[#6b7280]"><ChevronRight className="h-4 w-4" /></button>
+              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
               {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-[#635bff] bg-[#f5f3ff] rounded-lg px-2 py-1 hover:bg-[#ede9fe] transition-colors">Oggi</button>
+                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-sky-600 bg-sky-50 rounded-lg px-2 py-1 hover:bg-sky-100 transition-colors">Oggi</button>
               )}
             </div>
           }

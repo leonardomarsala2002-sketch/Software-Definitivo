@@ -1,173 +1,109 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* ── Base backgrounds ── */
-    --background: 220 33% 98%;          /* #f8f9fc */
-    --foreground: 225 21% 7%;           /* #0f1117 */
-
-    --card: 0 0% 100%;                  /* #ffffff */
-    --card-foreground: 225 21% 7%;
-
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 225 21% 7%;
-
-    /* ── Primary: Violet Stripe ── */
-    --primary: 243 100% 67%;            /* #635bff */
+    --popover-foreground: 222 47% 11%;
+    --primary: 201 98% 39%;
     --primary-foreground: 0 0% 100%;
-
-    /* ── Secondary ── */
-    --secondary: 225 20% 96%;           /* #f3f4f8 */
-    --secondary-foreground: 225 21% 7%;
-
-    --muted: 220 18% 94%;
-    --muted-foreground: 220 9% 46%;     /* #6b7280 */
-
-    --accent: 225 20% 96%;              /* #f3f4f8 */
-    --accent-foreground: 225 21% 7%;
-
-    --destructive: 0 84% 60%;           /* #ef4444 */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 27%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 215 25% 27%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 214 20% 90%;              /* #e4e7ec */
-    --input: 214 20% 90%;
-    --ring: 243 100% 67%;               /* #635bff */
-
-    --radius: 1rem;
-
-    /* ── Sidebar ── */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 201 98% 39%;
+    --radius: 0.75rem;
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 225 21% 7%;
-    --sidebar-primary: 243 100% 67%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 201 98% 39%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 20% 96%;
-    --sidebar-accent-foreground: 225 21% 7%;
-    --sidebar-border: 214 20% 90%;
-    --sidebar-ring: 243 100% 67%;
-
-    /* ── Status ── */
-    --success: 160 84% 39%;             /* #10b981 */
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 201 98% 39%;
+    --success: 160 84% 39%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 91% 50%;              /* #f59e0b */
+    --warning: 38 91% 50%;
     --warning-foreground: 0 0% 100%;
-
-    /* ── Chart ── */
-    --chart-1: 243 100% 67%;
-    --chart-2: 170 100% 41%;
+    --chart-1: 201 98% 39%;
+    --chart-2: 160 84% 39%;
     --chart-3: 38 91% 50%;
-    --chart-4: 210 100% 60%;
-    --chart-5: 350 84% 60%;
-
-    /* ── Shift colors ── */
+    --chart-4: 280 87% 65%;
+    --chart-5: 0 84% 60%;
     --shift-blue: 217 91% 60%;
     --shift-yellow: 45 93% 47%;
     --shift-green: 160 84% 39%;
     --shift-violet: 243 100% 67%;
-
-    /* ── Shadows ── */
-    --shadow-2xs: 0 1px 3px 0px hsl(243 100% 67% / 0.04);
-    --shadow-xs:  0 1px 3px 0px hsl(243 100% 67% / 0.06);
-    --shadow-sm:  0 1px 3px 0px hsl(243 100% 67% / 0.06), 0 1px 2px -1px hsl(243 100% 67% / 0.04);
-    --shadow-md:  0 4px 24px hsl(243 100% 67% / 0.08);
-    --shadow-lg:  0 8px 32px hsl(243 100% 67% / 0.15);
-    --shadow-xl:  0 16px 48px hsl(243 100% 67% / 0.20);
-    --shadow-2xl: 0 24px 64px hsl(243 100% 67% / 0.25);
-
-    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-    --font-mono: 'Inconsolata', ui-monospace, monospace;
   }
 
   .dark {
-    --background: 225 25% 9%;
-    --foreground: 220 20% 96%;
-
-    --card: 225 22% 13%;
-    --card-foreground: 220 20% 96%;
-
-    --popover: 225 22% 15%;
-    --popover-foreground: 220 20% 96%;
-
-    --primary: 243 100% 72%;
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 225 20% 18%;
-    --secondary-foreground: 220 15% 85%;
-
-    --muted: 225 18% 18%;
-    --muted-foreground: 220 10% 55%;
-
-    --accent: 225 20% 18%;
-    --accent-foreground: 220 15% 85%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 225 15% 22%;
-    --input: 225 15% 18%;
-    --ring: 243 100% 72%;
-
-    --sidebar-background: 225 25% 7%;
-    --sidebar-foreground: 220 20% 96%;
-    --sidebar-primary: 243 100% 72%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 90%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 60%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 90%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 199 89% 48%;
+    --sidebar-background: 222 47% 7%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 199 89% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 20% 15%;
-    --sidebar-accent-foreground: 220 15% 85%;
-    --sidebar-border: 225 15% 18%;
-    --sidebar-ring: 243 100% 72%;
-
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 90%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 199 89% 48%;
     --success: 160 84% 42%;
     --success-foreground: 0 0% 100%;
     --warning: 38 91% 50%;
     --warning-foreground: 0 0% 100%;
-
-    --chart-1: 243 100% 72%;
-    --chart-2: 170 100% 41%;
+    --chart-1: 199 89% 48%;
+    --chart-2: 160 84% 42%;
     --chart-3: 38 91% 50%;
-    --chart-4: 210 100% 60%;
-    --chart-5: 350 84% 60%;
-
+    --chart-4: 280 87% 65%;
+    --chart-5: 0 84% 60%;
     --shift-blue: 217 91% 65%;
     --shift-yellow: 45 93% 52%;
     --shift-green: 160 84% 42%;
-    --shift-violet: 243 100% 72%;
-
-    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.20);
-    --shadow-xs:  0 1px 3px 0px hsl(0 0% 0% / 0.25);
-    --shadow-sm:  0 1px 3px 0px hsl(0 0% 0% / 0.30), 0 1px 2px -1px hsl(0 0% 0% / 0.20);
-    --shadow-md:  0 4px 24px hsl(0 0% 0% / 0.30);
-    --shadow-lg:  0 8px 32px hsl(0 0% 0% / 0.35);
-    --shadow-xl:  0 16px 48px hsl(0 0% 0% / 0.40);
-    --shadow-2xl: 0 24px 64px hsl(0 0% 0% / 0.45);
+    --shift-violet: 243 100% 67%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
-  html,
-  body,
-  #root {
+  * { @apply border-border; }
+  html, body, #root {
     @apply h-full overflow-hidden;
-    -webkit-user-drag: none;
     -webkit-overflow-scrolling: auto;
     overscroll-behavior: none;
   }
-
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-
-  #root {
-    position: relative;
-    z-index: 2;
-  }
+  #root { position: relative; z-index: 2; }
 }
 
 @layer utilities {
@@ -175,36 +111,6 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-
-  /* Gradient text utility */
-  .gradient-text {
-    background: linear-gradient(135deg, #635bff 0%, #00d4aa 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  /* Violet shadow utility */
-  .shadow-violet {
-    box-shadow: 0 4px 24px rgba(99, 91, 255, 0.12);
-  }
-  .shadow-violet-lg {
-    box-shadow: 0 8px 32px rgba(99, 91, 255, 0.20);
-  }
-
-  /* Card hover lift */
-  .card-hover {
-    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .card-hover:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 32px rgba(99, 91, 255, 0.15);
-  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }

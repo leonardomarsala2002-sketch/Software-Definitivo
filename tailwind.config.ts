@@ -61,7 +61,12 @@ export default {
           green: "hsl(var(--shift-green))",
           violet: "hsl(var(--shift-violet))",
         },
-        /* Explicit palette for Tailwind purge detection */
+        sky: {
+          50: "#f0f9ff",
+          100: "#e0f2fe",
+          600: "#0284c7",
+          700: "#0369a1",
+        },
         violet: {
           50:  "#f5f3ff",
           100: "#ede9fe",
@@ -136,10 +141,9 @@ export default {
         lg: "var(--shadow-lg)",
         xl: "var(--shadow-xl)",
         "2xl": "var(--shadow-2xl)",
-        card: "0 4px 24px rgba(99,91,255,0.08)",
-        "card-hover": "0 8px 32px rgba(99,91,255,0.15)",
-        "button-violet": "0 4px 14px rgba(99,91,255,0.35)",
-        "button-violet-lg": "0 6px 20px rgba(99,91,255,0.45)",
+        card: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px -1px rgba(0,0,0,0.06)",
+        "card-hover": "0 4px 16px rgba(0,0,0,0.12)",
+        "button-primary": "0 1px 3px rgba(2,132,199,0.3)",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],

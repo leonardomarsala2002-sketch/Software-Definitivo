@@ -4,44 +4,30 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Eye } from "lucide-react";
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "SA",
-  admin: "A",
-  store_manager: "SM",
-  employee: "E",
-};
-
 export function MobileBottomNav() {
   const location = useLocation();
   const { role, cyclePreviewRole, previewRole, isPreviewMode } = useAuth();
   const visibleItems = filterNavByRole(bottomNavItems, role);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 bg-white border-t border-[#e4e7ec] md:hidden safe-area-bottom shadow-[0_-4px_24px_rgba(99,91,255,0.08)]">
+    <nav className="fixed inset-x-0 bottom-0 z-50 bg-white border-t border-slate-200 md:hidden safe-area-bottom shadow-[0_-1px_0_0_rgba(0,0,0,0.06)]">
       {isPreviewMode && (
-        <div className="flex items-center justify-center bg-[#f5f3ff] border-b border-[#e4e7ec] py-1.5">
+        <div className="flex items-center justify-center bg-sky-50 border-b border-slate-200 py-1.5">
           <button
             onClick={cyclePreviewRole}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all active:scale-95",
-              previewRole
-                ? "bg-[#635bff] text-white"
-                : "text-[#635bff] hover:text-[#4f46e5]"
+              previewRole ? "bg-sky-600 text-white" : "text-sky-600 hover:text-sky-700"
             )}
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-3 w-3" />
             {previewRole
-              ? `Preview: ${previewRole === "super_admin" ? "Super Admin" : previewRole === "admin" ? "Admin" : previewRole === "store_manager" ? "SM" : "Emp"}`
+              ? `Preview: ${previewRole === "super_admin" ? "SA" : previewRole === "admin" ? "Admin" : previewRole === "store_manager" ? "SM" : "Emp"}`
               : "Preview ruolo"}
-            {previewRole && (
-              <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[8px] font-bold text-[#635bff] leading-none">
-                {ROLE_LABELS[previewRole]}
-              </span>
-            )}
           </button>
         </div>
       )}
-      <div className="flex h-[4.5rem] items-center justify-around px-1 pb-1">
+      <div className="flex h-16 items-center justify-around px-1 pb-1">
         {visibleItems.map((item) => {
           const isActive =
             item.url === "/"
@@ -53,25 +39,23 @@ export function MobileBottomNav() {
               to={item.url}
               data-tutorial={item.tutorialId}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-2xl px-3 py-2 min-w-[3.5rem] transition-all active:scale-95",
-                isActive ? "text-[#635bff]" : "text-[#9ca3af]"
+                "flex flex-col items-center gap-1 rounded-xl px-3 py-2 min-w-[3.5rem] transition-all active:scale-95",
+                isActive ? "text-sky-700" : "text-slate-400"
               )}
             >
               <div
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
-                  isActive
-                    ? "bg-gradient-to-br from-[#f5f3ff] to-[#ede9fe] shadow-[0_2px_8px_rgba(99,91,255,0.2)]"
-                    : "hover:bg-[#f3f4f8]"
+                  "flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150",
+                  isActive ? "bg-sky-50" : "hover:bg-slate-100"
                 )}
               >
-                <item.icon className={cn("h-5 w-5", isActive ? "text-[#635bff]" : "text-[#9ca3af]")} />
+                <item.icon className={cn("h-4.5 w-4.5", isActive ? "text-sky-600" : "text-slate-400")} />
               </div>
               <span className={cn(
-                "text-[10px] leading-none font-medium",
-                isActive ? "font-bold text-[#635bff]" : ""
+                "text-[10px] leading-none",
+                isActive ? "font-bold text-sky-700" : "font-medium"
               )}>
-                {item.title.length > 10 ? item.title.split(" ")[0] : item.title}
+                {item.title.length > 8 ? item.title.split(" ")[0] : item.title}
               </span>
             </Link>
           );
