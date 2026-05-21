@@ -12,20 +12,14 @@ const json = (data: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-// 0=Mon … 6=Sun
-function getWeekMonday(dateStr: string): Date {
-  const d = new Date(dateStr + "T00:00:00Z");
-  const dow = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - dow);
-  return d;
-}
-
-// Ritorna il deadline per inviare una richiesta: lunedì della settimana target - deadlineDays
-function getDeadline(requestDate: string, deadlineDays: number): Date {
-  const monday = getWeekMonday(requestDate);
-  monday.setUTCDate(monday.getUTCDate() - deadlineDays);
-  monday.setUTCHours(23, 59, 59, 999);
-  return monday;
+// Deadline mensile: 7 giorni prima del primo del mese a cui appartiene la data richiesta.
+// Esempio: richiesta per giugno → deadline = 25 maggio (= 1 giugno - 7 giorni) a fine giornata.
+function getMonthlyDeadline(requestDate: string): Date {
+  const d = new Date(requestDate + "T00:00:00Z");
+  const firstOfMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  firstOfMonth.setUTCDate(firstOfMonth.getUTCDate() - 7);
+  firstOfMonth.setUTCHours(23, 59, 59, 999);
+  return firstOfMonth;
 }
 
 Deno.serve(async (req) => {
@@ -126,20 +120,16 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!assignment) return json({ error: "Utente non appartiene a questo store" }, 403);
 
-    // Controllo deadline (non per malattia)
+    // Controllo deadline mensile (non per malattia: sempre accettata)
     if (request_type !== "malattia") {
-      const { data: rules } = await adminClient
-        .from("store_rules")
-        .select("leave_request_deadline_days")
-        .eq("store_id", store_id)
-        .maybeSingle();
-
-      const deadlineDays = rules?.leave_request_deadline_days ?? 4;
-      const deadline = getDeadline(request_date, deadlineDays);
+      const deadline = getMonthlyDeadline(request_date);
       if (new Date() > deadline) {
+        const deadlineIso = deadline.toISOString().split("T")[0];
+        const [dy, dm, dd] = deadlineIso.split("-");
+        const deadlineIt = `${dd}/${dm}/${dy}`;
         return json({
-          error: `Termine di invio superato. Le richieste devono essere inviate entro ${deadline.toISOString().split("T")[0]}.`,
-          deadline: deadline.toISOString().split("T")[0],
+          error: `Termine di invio superato. Le richieste per questo mese devono essere inviate entro il ${deadlineIt}.`,
+          deadline: deadlineIso,
         }, 422);
       }
     }

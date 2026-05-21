@@ -47,10 +47,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start } = body;
+    // Accept period_start/period_end (monthly) or week_start (backward compat)
+    const store_id: string = body.store_id;
+    const period_start: string = body.period_start ?? body.week_start;
+    const period_end: string | undefined = body.period_end;
 
-    if (!store_id || !week_start) {
-      return new Response(JSON.stringify({ error: "store_id and week_start required" }), {
+    if (!store_id || !period_start) {
+      return new Response(JSON.stringify({ error: "store_id and period_start (or week_start) required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -59,18 +62,24 @@ Deno.serve(async (req) => {
     const rlResp = await checkRateLimit(adminClient, `publish-shifts:${userData.user.id}:${store_id}`, 5, 300);
     if (rlResp) return rlResp;
 
-    // Calculate week_end
-    const startD = new Date(week_start + "T00:00:00Z");
-    const endD = new Date(startD);
-    endD.setUTCDate(endD.getUTCDate() + 6);
-    const weekEnd = endD.toISOString().split("T")[0];
+    // Compute period end if not provided (backward compat: 7 days)
+    let weekEnd: string;
+    if (period_end) {
+      weekEnd = period_end;
+    } else {
+      const startD = new Date(period_start + "T00:00:00Z");
+      const endD = new Date(startD);
+      endD.setUTCDate(endD.getUTCDate() + 6);
+      weekEnd = endD.toISOString().split("T")[0];
+    }
+    const week_start = period_start; // alias for legacy variable references below
 
-    // Get ALL completed generation runs for this week
+    // Get ALL completed generation runs for this period
     const { data: runs } = await adminClient
       .from("generation_runs")
       .select("id, department, hour_adjustments")
       .eq("store_id", store_id)
-      .eq("week_start", week_start)
+      .eq("week_start", period_start)
       .in("status", ["completed"]);
 
     if (!runs || runs.length === 0) {

@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.seed-test-accounts]
 verify_jwt = false
 
+[functions.setup-scheduling-test]
+verify_jwt = false
+
 [functions.get-invitation-by-token]
 verify_jwt = false
 

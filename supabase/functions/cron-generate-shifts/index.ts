@@ -6,6 +6,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Calcola primo e ultimo giorno del mese prossimo (UTC)
+function getNextMonthPeriod(): { periodStart: string; periodEnd: string } {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth(); // 0-based: 0=Jan … 11=Dec
+  const nextMonth = m === 11 ? 0 : m + 1;
+  const nextYear  = m === 11 ? y + 1 : y;
+
+  const first = new Date(Date.UTC(nextYear, nextMonth, 1));
+  const last  = new Date(Date.UTC(nextYear, nextMonth + 1, 0)); // day 0 = last day of nextMonth
+
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  return { periodStart: fmt(first), periodEnd: fmt(last) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -19,13 +34,9 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Calculate next Monday
-    const now = new Date();
-    const dayOfWeek = now.getUTCDay(); // 0=Sun
-    const daysUntilMon = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
-    const nextMon = new Date(now);
-    nextMon.setUTCDate(nextMon.getUTCDate() + daysUntilMon);
-    const weekStart = nextMon.toISOString().split("T")[0];
+    const { periodStart, periodEnd } = getNextMonthPeriod();
+    const monthLabel = new Date(periodStart + "T00:00:00Z")
+      .toLocaleDateString("it-IT", { month: "long", year: "numeric", timeZone: "UTC" });
 
     // Get all active stores with generation enabled
     const { data: stores } = await adminClient
@@ -61,14 +72,20 @@ Deno.serve(async (req) => {
     const results: { store: string; department: string; status: string; error?: string }[] = [];
 
     // ═══════════════════════════════════════════════════════════════════
-    // PHASE 1: Generate shifts for ALL stores (skip lending detection)
-    // This ensures all stores have draft shifts before cross-store
-    // lending analysis runs.
+    // PHASE 1: Generate monthly shifts for ALL stores (skip lending)
     // ═══════════════════════════════════════════════════════════════════
-    console.log(`[PHASE 1] Generating shifts for ${enabledStores.length} stores (skip_lending=true)`);
+    console.log(`[PHASE 1] Generating monthly shifts for ${enabledStores.length} stores — ${periodStart}..${periodEnd}`);
 
     const phase1Promises = enabledStores.map(async (store) => {
       try {
+        // Upsert schedule_period record
+        await adminClient.rpc("upsert_schedule_period", {
+          p_store_id:    store.id,
+          p_period_start: periodStart,
+          p_period_end:   periodEnd,
+          p_status:       "generating",
+        });
+
         const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-optimized-schedule`, {
           method: "POST",
           headers: {
@@ -77,7 +94,8 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             store_id: store.id,
-            week_start_date: weekStart,
+            period_start_date: periodStart,
+            period_end_date:   periodEnd,
             skip_lending: true, // Phase 1: no lending
           }),
         });
@@ -106,28 +124,24 @@ Deno.serve(async (req) => {
         .from("generation_runs")
         .update({ lifecycle_status: "generated" } as any)
         .eq("store_id", p1.store.id)
-        .eq("week_start", weekStart)
+        .eq("week_start", periodStart)
         .eq("status", "completed");
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 2: Cross-store lending detection
-    // Now that ALL stores have draft shifts, we can accurately detect
-    // surplus in one store and uncovered slots in another.
     // ═══════════════════════════════════════════════════════════════════
     console.log(`[PHASE 2] Running cross-store lending detection`);
 
     let totalLendingSuggestions = 0;
-    const weekEnd = new Date(nextMon);
-    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
-    const weekEndStr = weekEnd.toISOString().split("T")[0];
 
-    // Get weekDates
-    const weekDates: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(nextMon);
-      d.setUTCDate(d.getUTCDate() + i);
-      weekDates.push(d.toISOString().split("T")[0]);
+    // Build list of all dates in the period
+    const periodDates: string[] = [];
+    const d = new Date(periodStart + "T00:00:00Z");
+    const endD = new Date(periodEnd + "T00:00:00Z");
+    while (d <= endD) {
+      periodDates.push(d.toISOString().split("T")[0]);
+      d.setUTCDate(d.getUTCDate() + 1);
     }
 
     // Group stores by city for lending
@@ -143,10 +157,9 @@ Deno.serve(async (req) => {
     }
 
     // Only process cities with 2+ stores
-    for (const [city, cityStores] of storeMap) {
+    for (const [, cityStores] of storeMap) {
       if (cityStores.length < 2) continue;
 
-      // For each store, find uncovered slots and surplus
       const storeAnalysis = new Map<string, {
         uncovered: { date: string; hour: number; dept: string }[];
         surplus: { date: string; hour: number; dept: string; userId: string; startTime: string; endTime: string }[];
@@ -162,15 +175,15 @@ Deno.serve(async (req) => {
               .eq("store_id", store.id).eq("department", dept),
             adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, date, department")
               .eq("store_id", store.id).eq("department", dept)
-              .eq("status", "draft").gte("date", weekStart).lte("date", weekEndStr),
+              .eq("status", "draft").gte("date", periodStart).lte("date", periodEnd),
           ]);
 
           const covData = covRes.data ?? [];
-          const shiftData = (shiftsRes.data ?? []).filter(s => !s.is_day_off && s.start_time && s.end_time);
+          const shiftData = (shiftsRes.data ?? []).filter((s: any) => !s.is_day_off && s.start_time && s.end_time);
 
-          for (const dateStr of weekDates) {
+          for (const dateStr of periodDates) {
             const dow = (new Date(dateStr + "T00:00:00Z").getUTCDay() + 6) % 7;
-            const dayCov = covData.filter(c => c.day_of_week === dow);
+            const dayCov = covData.filter((c: any) => c.day_of_week === dow);
 
             for (const cov of dayCov) {
               const h = parseInt(cov.hour_slot.split(":")[0], 10);
@@ -188,7 +201,6 @@ Deno.serve(async (req) => {
               if (diff < 0) {
                 uncovered.push({ date: dateStr, hour: h, dept });
               } else if (diff > 0) {
-                // Mark surplus employees (take last ones = least priority)
                 for (const s of covering.slice(-diff)) {
                   surplus.push({
                     date: dateStr, hour: h, dept,
@@ -205,35 +217,31 @@ Deno.serve(async (req) => {
         storeAnalysis.set(store.id, { uncovered, surplus });
       }
 
-      // Match: store with uncovered ↔ other store with surplus in same dept/date/hour
       for (const targetStore of cityStores) {
         const targetData = storeAnalysis.get(targetStore.id);
         if (!targetData || targetData.uncovered.length === 0) continue;
 
         for (const slot of targetData.uncovered) {
-          // Find a source store with surplus for this slot
           for (const sourceStore of cityStores) {
             if (sourceStore.id === targetStore.id) continue;
             const sourceData = storeAnalysis.get(sourceStore.id);
             if (!sourceData) continue;
 
             const match = sourceData.surplus.find(
-              s => s.date === slot.date && s.hour === slot.hour && s.dept === slot.dept
+              (s: any) => s.date === slot.date && s.hour === slot.hour && s.dept === slot.dept
             );
             if (!match) continue;
 
-            // Find the generation run for target store + dept
             const { data: targetRun } = await adminClient
               .from("generation_runs").select("id, suggestions")
               .eq("store_id", targetStore.id).eq("department", slot.dept)
-              .eq("week_start", weekStart).eq("status", "completed")
+              .eq("week_start", periodStart).eq("status", "completed")
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();
 
             if (!targetRun) continue;
 
-            // Check if lending suggestion already exists
             const { data: existing } = await adminClient
               .from("lending_suggestions").select("id")
               .eq("generation_run_id", targetRun.id)
@@ -243,12 +251,10 @@ Deno.serve(async (req) => {
 
             if (existing) continue;
 
-            // Get candidate name
             const { data: profile } = await adminClient
               .from("profiles").select("full_name").eq("id", match.userId).single();
             const candidateName = profile?.full_name ?? "Dipendente";
 
-            // Insert lending suggestion
             await adminClient.from("lending_suggestions").insert({
               generation_run_id: targetRun.id,
               user_id: match.userId,
@@ -263,29 +269,7 @@ Deno.serve(async (req) => {
             } as any);
 
             totalLendingSuggestions++;
-
-            // Add lending alternative to the grouped uncovered suggestion in generation_runs.suggestions
-            const suggs = (targetRun.suggestions as any[]) ?? [];
-            const uncovSugg = suggs.find((s: any) => s.id === `uncov-${slot.dept}-${slot.date}`);
-            if (uncovSugg?.alternatives) {
-              uncovSugg.alternatives.push({
-                id: `lending-${match.userId}-${slot.date}-${slot.hour}`,
-                label: `Prestito: ${candidateName} da ${sourceStore.name}`,
-                description: `${candidateName} viene prestato da ${sourceStore.name}. Turno: ${match.startTime.slice(0,5)}-${match.endTime.slice(0,5)}. Richiede approvazione bilaterale.`,
-                actionType: "lending",
-                userId: match.userId,
-                userName: candidateName,
-                sourceStoreId: sourceStore.id,
-                sourceStoreName: sourceStore.name,
-                targetStoreId: targetStore.id,
-                targetStoreName: targetStore.name,
-              });
-              await adminClient.from("generation_runs").update({
-                suggestions: suggs,
-              } as any).eq("id", targetRun.id);
-            }
-
-            break; // One lending per uncovered slot
+            break;
           }
         }
       }
@@ -328,8 +312,8 @@ Deno.serve(async (req) => {
               .in("id", adminIds);
 
             const emailSubject = totalUncovered > 0
-              ? `⚠️ Turni generati con problemi – ${store.name}`
-              : `Turni generati – da validare – ${store.name}`;
+              ? `⚠️ Turni ${monthLabel} generati con problemi – ${store.name}`
+              : `Turni ${monthLabel} generati – da validare – ${store.name}`;
 
             const warningBanner = totalUncovered > 0
               ? `<tr><td style="padding:12px 36px;background:#fef2f2;border-left:4px solid #ef4444;">
@@ -365,13 +349,13 @@ Deno.serve(async (req) => {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
 <tr><td style="padding:40px 36px 16px;text-align:center;">
-<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Turni generati</h1>
+<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Turni mensili generati</h1>
 <p style="margin:0;font-size:14px;color:#71717a;">${store.name}</p>
-<p style="margin:8px 0 0;font-size:13px;color:#a1a1aa;">Settimana dal ${weekStart}</p>
+<p style="margin:8px 0 0;font-size:13px;color:#a1a1aa;">${monthLabel} &mdash; ${periodStart} → ${periodEnd}</p>
 </td></tr>
 ${warningBanner}
 <tr><td style="padding:24px 36px;">
-<p style="font-size:14px;color:#52525b;margin:0 0 12px;">La generazione automatica dei turni è stata completata. Rivedi il draft, poi usa &ldquo;Valida&rdquo; per verificare le regole e infine pubblica.</p>
+<p style="font-size:14px;color:#52525b;margin:0 0 12px;">La generazione automatica dei turni mensili è stata completata. Rivedi il draft, poi usa "Valida" per verificare le regole e infine pubblica.</p>
 ${deptTable}
 </td></tr>
 <tr><td style="padding:16px 36px 32px;text-align:center;">
@@ -383,16 +367,15 @@ ${deptTable}
                 console.error(`Email to ${p.email} failed:`, emailErr);
               }
 
-              // In-app notification
               try {
                 await adminClient.from("notifications").insert({
                   user_id: p.id,
                   store_id: store.id,
                   type: "draft_ready",
-                  title: hasCritical ? "⚠️ Turni generati con problemi" : "Turni generati – da validare",
+                  title: hasCritical ? "⚠️ Turni mensili generati con problemi" : "Turni mensili generati – da validare",
                   message: hasCritical
-                    ? `I turni per la settimana del ${weekStart} sono stati generati per ${store.name} con ${totalUncovered} slot non coperti. Risolvi i problemi, valida e poi pubblica.`
-                    : `I turni per la settimana del ${weekStart} sono stati generati per ${store.name}. Rivedi il draft, valida le regole e pubblica quando sei pronto.`,
+                    ? `I turni per ${monthLabel} sono stati generati per ${store.name} con ${totalUncovered} slot non coperti. Risolvi i problemi, valida e poi pubblica.`
+                    : `I turni per ${monthLabel} sono stati generati per ${store.name}. Rivedi il draft, valida le regole e pubblica quando sei pronto.`,
                   link: "/team-calendar",
                 });
               } catch (notifErr) {
@@ -404,7 +387,7 @@ ${deptTable}
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, results, lending_suggestions: totalLendingSuggestions }), {
+    return new Response(JSON.stringify({ ok: true, results, lending_suggestions: totalLendingSuggestions, period: { start: periodStart, end: periodEnd } }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

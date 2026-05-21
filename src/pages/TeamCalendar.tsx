@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CalendarDays, Wand2, CheckCircle2, Loader2, AlertTriangle, Send, Stethoscope, Sparkles } from "lucide-react";
 import { GenerationLogPanel } from "@/components/team-calendar/GenerationLogPanel";
-import { format, startOfWeek, addDays } from "date-fns";
+import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMonthShifts, useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useOpeningHours, useAllowedTimes, useCoverageRequirements } from "@/hooks/useStoreSettings";
-import { useGenerateShifts, usePublishWeek, useApprovePatchShifts, useWeekGenerationRuns } from "@/hooks/useGenerationRuns";
+import { useGenerateShifts, usePublishMonth, useApprovePatchShifts, useMonthGenerationRuns, usePatchMonthlySchedule } from "@/hooks/useGenerationRuns";
 import { useOptimizationSuggestions, useLendingSuggestions, type OptimizationSuggestion, type CorrectionAction } from "@/hooks/useOptimizationSuggestions";
 import { useStoreLendings } from "@/hooks/useLendingData";
 import { MonthGrid } from "@/components/team-calendar/MonthGrid";
@@ -29,14 +29,13 @@ import { SuggestionWizardDialog } from "@/components/team-calendar/SuggestionWiz
 import EmptyState from "@/components/EmptyState";
 import { toast } from "sonner";
 
-function getWeekStartForWeek(year: number, month: number, weekIdx: number): string {
-  const firstDay = new Date(year, month - 1, 1);
-  let startDow = firstDay.getDay() - 1;
-  if (startDow < 0) startDow = 6;
-  const dayOfMonth = weekIdx * 7 - startDow + 1;
-  const d = new Date(year, month - 1, dayOfMonth);
-  const mon = startOfWeek(d, { weekStartsOn: 1 });
-  return format(mon, "yyyy-MM-dd");
+function getPeriodStart(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-01`;
+}
+
+function getPeriodEnd(year: number, month: number): string {
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 }
 
 const TeamCalendar = () => {
@@ -49,12 +48,11 @@ const TeamCalendar = () => {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [department, setDepartment] = useState<"sala" | "cucina">("sala");
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
-  const [isRebalancing, setIsRebalancing] = useState(false);
+  const [showPatchConfirm, setShowPatchConfirm] = useState(false);
 
   const [showOptimizationErrors, setShowOptimizationErrors] = useState(false);
 
@@ -65,22 +63,23 @@ const TeamCalendar = () => {
   const { data: allowedTimes = [] } = useAllowedTimes(storeId);
   const { data: coverageReqs = [] } = useCoverageRequirements(storeId);
 
-  const currentWeekStart = useMemo(() => {
-    if (selectedWeek !== null) {
-      return getWeekStartForWeek(year, month, selectedWeek);
-    }
-    const nextMon = startOfWeek(addDays(now, 7), { weekStartsOn: 1 });
-    return format(nextMon, "yyyy-MM-dd");
-  }, [selectedWeek, year, month]);
+  const periodStart = useMemo(() => getPeriodStart(year, month), [year, month]);
+  const periodEnd   = useMemo(() => getPeriodEnd(year, month), [year, month]);
+  // Deadline richieste: 7 giorni prima del primo del mese
+  const requestDeadline = useMemo(() => {
+    const d = new Date(year, month - 1, 1);
+    d.setDate(d.getDate() - 7);
+    return format(d, "dd/MM");
+  }, [year, month]);
 
-  const { data: generationRuns = [] } = useWeekGenerationRuns(storeId, currentWeekStart);
+  const { data: generationRuns = [] } = useMonthGenerationRuns(storeId, year, month);
 
-  // Fetch suggestions only from the LATEST completed run for the SELECTED department
+  // Latest completed run id per department
   const latestRunIds = useMemo(() => {
-    const latest = new Map<string, string>(); // dept -> run id
+    const latest = new Map<string, string>();
     for (const r of generationRuns) {
       if (r.status === "completed" && !latest.has(r.department)) {
-        latest.set(r.department, r.id); // already sorted desc by created_at
+        latest.set(r.department, r.id);
       }
     }
     return Array.from(latest.values());
@@ -114,16 +113,15 @@ const TeamCalendar = () => {
   }, [rawSuggestions, acceptedGapIds]);
 
   const generateShifts = useGenerateShifts();
-  const publishWeek = usePublishWeek();
+  const publishMonth = usePublishMonth();
+  const patchMonthly = usePatchMonthlySchedule();
   const approvePatch = useApprovePatchShifts();
   const createShift = useCreateShift();
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
 
   const activeDraftRun = useMemo(() => {
-    return generationRuns.find(
-      r => r.department === department && (r.status === "completed" || r.status === "running")
-    );
+    return generationRuns.find(r => r.department === department && r.status === "completed");
   }, [generationRuns, department]);
 
   // AI is mandatory — badge shows whenever there are completed generation runs for this dept
@@ -232,12 +230,10 @@ const TeamCalendar = () => {
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(year - 1); }
     else setMonth(month - 1);
-    setSelectedWeek(null);
   };
   const nextMonth = () => {
     if (month === 12) { setMonth(1); setYear(year + 1); }
     else setMonth(month + 1);
-    setSelectedWeek(null);
   };
 
   const monthLabel = format(new Date(year, month - 1), "MMMM yyyy", { locale: it });
@@ -253,35 +249,32 @@ const TeamCalendar = () => {
   const handleGenerate = () => {
     if (!storeId) return;
     generateShifts.mutate({
-      store_id: storeId,
+      store_id:     storeId,
       department,
-      week_start: currentWeekStart,
-    }, {
-      onSuccess: () => {
-        // Auto-navigate to the month containing the generated week
-        const genDate = new Date(currentWeekStart + "T00:00:00");
-        const targetMonth = genDate.getMonth() + 1;
-        const targetYear = genDate.getFullYear();
-        if (targetMonth !== month || targetYear !== year) {
-          setMonth(targetMonth);
-          setYear(targetYear);
-        }
-      }
+      period_start: periodStart,
+      period_end:   periodEnd,
     });
     setShowGenerateConfirm(false);
   };
 
-  const handlePublishWeek = () => {
+  const handlePublishMonth = () => {
     if (!storeId) return;
-    publishWeek.mutate({ store_id: storeId, week_start: currentWeekStart });
+    publishMonth.mutate({ store_id: storeId, period_start: periodStart, period_end: periodEnd });
     setShowPublishConfirm(false);
+  };
+
+  const handlePatchMonth = () => {
+    if (!storeId) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    patchMonthly.mutate({ store_id: storeId, from_date: today, department });
+    setShowPatchConfirm(false);
   };
 
   const handleApprovePatch = () => {
     if (!storeId) return;
     approvePatch.mutate({
       store_id: storeId,
-      week_start: currentWeekStart,
+      week_start: periodStart,
       generation_run_ids: patchRunIds,
     });
     setShowApproveConfirm(false);
@@ -309,7 +302,7 @@ const TeamCalendar = () => {
         hour_slot: hourSlot,
         outcome,
         action_type: actionType ?? null,
-        week_start: currentWeekStart,
+        week_start: periodStart,
         suggestion_id: suggestion.id ?? null,
       });
     } catch (e) {
@@ -326,7 +319,7 @@ const TeamCalendar = () => {
         await supabase.from("generation_adjustments").insert({
           store_id: storeId,
           user_id: userId,
-          week_start: currentWeekStart,
+          week_start: periodStart,
           adjustment_type: adjustmentType,
           extra_hours: extraHours,
           notes: notes ?? null,
@@ -582,6 +575,11 @@ const TeamCalendar = () => {
         {/* Action buttons */}
         {canEdit && (
           <div className="flex items-center gap-2">
+            {/* Badge deadline richieste mensile */}
+            <Badge variant="outline" className="text-muted-foreground border-border rounded-[32px] text-[10px]">
+              Richieste entro {requestDeadline}
+            </Badge>
+
             {aiActive && (
               <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 rounded-[32px] gap-1">
                 <Sparkles className="h-3 w-3" />
@@ -623,16 +621,34 @@ const TeamCalendar = () => {
                     setShowPublishConfirm(true);
                   }
                 }}
-                disabled={publishWeek.isPending}
+                disabled={publishMonth.isPending}
                 className="gap-1.5 rounded-[32px]"
                 title={hasCriticalConflicts ? "Risolvi i conflitti critici prima di pubblicare" : undefined}
               >
-                {publishWeek.isPending ? (
+                {publishMonth.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Send className="h-3.5 w-3.5" />
                 )}
-                Pubblica Settimana
+                Pubblica Mese
+              </Button>
+            )}
+
+            {/* Rigenera da oggi — visibile quando ci sono turni pubblicati nel mese corrente */}
+            {!hasDraftShifts && shifts.some(s => s.status === "published") && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowPatchConfirm(true)}
+                disabled={patchMonthly.isPending}
+                className="gap-1.5 rounded-[32px]"
+              >
+                {patchMonthly.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                Rigenera da oggi
               </Button>
             )}
 
@@ -648,7 +664,7 @@ const TeamCalendar = () => {
               ) : (
                 <Wand2 className="h-3.5 w-3.5" />
               )}
-              Genera Turni
+              Genera Mese
             </Button>
           </div>
         )}
@@ -673,7 +689,6 @@ const TeamCalendar = () => {
         </div>
       )}
 
-      {/* Generation Log Panel (temporary debug) */}
       {canEdit && generationRuns.length > 0 && (
         <GenerationLogPanel generationRuns={generationRuns} department={department} />
       )}
@@ -689,7 +704,7 @@ const TeamCalendar = () => {
             shifts={shifts}
             employees={employees}
             department={department}
-            selectedWeek={selectedWeek}
+            selectedWeek={null}
             onDayClick={(date) => setSelectedDate(date)}
             uncoveredDates={uncoveredSlotsMap}
             balances={[]}
@@ -719,21 +734,18 @@ const TeamCalendar = () => {
           }
           onUpdateShift={(id, updates) => updateShift.mutate({ id, updates, storeId })}
           onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
-          isRebalancing={isRebalancing}
+          isRebalancing={generateShifts.isPending}
           onRebalanceAfterEdit={() => {
             if (!storeId) return;
-            setIsRebalancing(true);
-            // Collect IDs of manually-edited draft shifts to lock
             const draftShiftIds = shifts
               .filter(s => s.status === "draft" && s.department === department)
               .map(s => s.id);
             generateShifts.mutate({
-              store_id: storeId,
-              week_start: currentWeekStart,
-              mode: "rebalance",
+              store_id:     storeId,
+              period_start: periodStart,
+              period_end:   periodEnd,
+              mode:         "rebalance",
               locked_shift_ids: draftShiftIds,
-            }, {
-              onSettled: () => setIsRebalancing(false),
             });
           }}
         />
@@ -765,18 +777,16 @@ const TeamCalendar = () => {
       <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
         <AlertDialogContent className="rounded-[32px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Genera turni settimanali</AlertDialogTitle>
+            <AlertDialogTitle>Genera turni mensili</AlertDialogTitle>
             <AlertDialogDescription>
-              ⚠️ <strong>Rigenerazione pulita:</strong> tutti i dati precedenti per la settimana
-              del <strong>{currentWeekStart}</strong> ({department === "sala" ? "Sala" : "Cucina"}) verranno cancellati
-              (turni draft, suggerimenti, richieste di prestito e messaggi correlati) e sostituiti
-              con una nuova generazione ottimale di <strong>40 iterazioni</strong>.
-              Il sistema terrà conto del monte ore (Hour Bank) per bilanciare le ore tra le settimane.
+              <strong>Rigenerazione pulita</strong> per <strong>{monthLabel}</strong> ({department === "sala" ? "Sala" : "Cucina"}).
+              Tutti i turni draft esistenti per questo mese verranno sostituiti con una nuova generazione ottimale
+              (AI Gemini 2.5 · 12 iterazioni). Le ore contrattuali vengono scalate proporzionalmente ai giorni del mese.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={handleGenerate}>Genera</AlertDialogAction>
+            <AlertDialogAction onClick={handleGenerate}>Genera mese</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -785,11 +795,10 @@ const TeamCalendar = () => {
       <AlertDialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
         <AlertDialogContent className="rounded-[32px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Pubblica Settimana</AlertDialogTitle>
+            <AlertDialogTitle>Pubblica mese</AlertDialogTitle>
             <AlertDialogDescription>
-              Tutti i turni draft della settimana <strong>{currentWeekStart}</strong> verranno pubblicati
-              e ogni dipendente coinvolto riceverà una notifica email con i propri turni.
-              Il monte ore (Hour Bank) verrà aggiornato permanentemente.
+              Tutti i turni draft di <strong>{monthLabel}</strong> verranno pubblicati
+              e ogni dipendente coinvolto riceverà una notifica con i propri turni.
               {hasCriticalConflicts && (
                 <span className="block mt-2 text-destructive font-medium">
                   ⚠️ Non puoi pubblicare: ci sono ancora conflitti critici da risolvere nel Pannello Ottimizzazione.
@@ -804,9 +813,27 @@ const TeamCalendar = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePublishWeek} disabled={hasCriticalConflicts}>
-              Pubblica
+            <AlertDialogAction onClick={handlePublishMonth} disabled={hasCriticalConflicts}>
+              Pubblica mese
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Patch (rigenera da oggi) confirmation dialog */}
+      <AlertDialog open={showPatchConfirm} onOpenChange={setShowPatchConfirm}>
+        <AlertDialogContent className="rounded-[32px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rigenera da oggi</AlertDialogTitle>
+            <AlertDialogDescription>
+              I turni da <strong>oggi</strong> fino a fine <strong>{monthLabel}</strong> ({department === "sala" ? "Sala" : "Cucina"})
+              verranno rigenerati dall'AI, coprendo eventuali buchi lasciati da malattie o modifiche.
+              I turni già pubblicati <em>prima</em> di oggi restano invariati.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePatchMonth}>Rigenera</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

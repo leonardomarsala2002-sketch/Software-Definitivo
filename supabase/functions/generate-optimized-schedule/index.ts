@@ -835,7 +835,7 @@ function autoCorrectViolations(
           const removed = corrected.filter(s => s.user_id === emp.user_id && s.department === department && s.date === date && !s.is_day_off);
           corrected = corrected.filter(s => !removed.includes(s));
           corrected.push({
-            store_id: removed[0]?.store_id ?? "",
+            store_id: (removed[0] ?? shifts[0])?.store_id ?? "",
             user_id: emp.user_id,
             date,
             start_time: null,
@@ -843,7 +843,7 @@ function autoCorrectViolations(
             department,
             is_day_off: true,
             status: "draft",
-            generation_run_id: removed[0]?.generation_run_id ?? "",
+            generation_run_id: (removed[0] ?? shifts[0])?.generation_run_id ?? "",
           });
           passCorrections.push(`FIX giorni liberi [pass ${pass+1}]: ${emp.user_id.slice(0,8)} giorno libero forzato ${date}`);
         }
@@ -1008,8 +1008,8 @@ function autoCorrectViolations(
               if (validEntryHours.length > 0 && !validEntryHours.includes(h)) continue;
               if (validExitHours.length > 0 && !validExitHours.includes(shiftEnd)) continue;
 
-              const storeId = corrected[0]?.store_id ?? "";
-              const runId = corrected[0]?.generation_run_id ?? "";
+              const storeId = (corrected[0] ?? shifts[0])?.store_id ?? "";
+              const runId = (corrected[0] ?? shifts[0])?.generation_run_id ?? "";
               corrected.push({
                 store_id: storeId,
                 user_id: emp.user_id,
@@ -1168,12 +1168,12 @@ function equalizeEquity(
             const removedShifts = result.filter(s => s.user_id === receiver.user_id && s.department === department && s.date === offDay && !s.is_day_off);
             result = result.filter(s => !removedShifts.includes(s));
             result.push({
-              store_id: removedShifts[0]?.store_id ?? "",
+              store_id: (removedShifts[0] ?? shifts[0])?.store_id ?? "",
               user_id: receiver.user_id,
               date: offDay,
               start_time: null, end_time: null,
               department, is_day_off: true, status: "draft",
-              generation_run_id: removedShifts[0]?.generation_run_id ?? "",
+              generation_run_id: (removedShifts[0] ?? shifts[0])?.generation_run_id ?? "",
             });
 
             // Add donor shift on swapDay (use a reasonable template from existing shifts)
@@ -1420,8 +1420,8 @@ function equalizeEquity(
           for (const candidate of splitCandidates) {
             result.push({
               user_id: candidate.emp.user_id,
-              store_id: result[0]?.store_id ?? "",
-              generation_run_id: result[0]?.generation_run_id ?? "",
+              store_id: (result[0] ?? shifts[0])?.store_id ?? "",
+              generation_run_id: (result[0] ?? shifts[0])?.generation_run_id ?? "",
               date: candidate.date,
               department: department,
               start_time: `${String(candidate.startH).padStart(2, "0")}:00`,
@@ -1461,12 +1461,12 @@ function equalizeEquity(
     for (let i = 0; i < toMark; i++) {
       const existingShift = result.find(s => s.user_id === emp.user_id && s.department === department && s.start_time);
       result.push({
-        store_id: existingShift?.store_id ?? "",
+        store_id: existingShift?.store_id ?? (result[0] ?? shifts[0])?.store_id ?? "",
         user_id: emp.user_id,
         date: freeDays[i],
         start_time: null, end_time: null,
         department, is_day_off: true, status: "draft",
-        generation_run_id: existingShift?.generation_run_id ?? "",
+        generation_run_id: existingShift?.generation_run_id ?? (result[0] ?? shifts[0])?.generation_run_id ?? "",
       });
     }
   }
