@@ -1,11 +1,12 @@
-import { useMemo, useCallback } from "react";
-import { Calendar, Sun, Scissors, Download, Smartphone } from "lucide-react";
+import { useMemo, useCallback, useState } from "react";
+import { Calendar, Sun, Scissors, Download, Smartphone, ClipboardList } from "lucide-react";
 import { format, parseISO, startOfWeek, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import { SchedulePreferencesQuiz } from "@/components/employees/SchedulePreferencesQuiz";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,7 +60,24 @@ function isSplitShift(shifts: PersonalShift[]): boolean {
 
 const PersonalCalendar = () => {
   const { user } = useAuth();
+  const [quizOpen, setQuizOpen] = useState(false);
   const { data: shifts = [], isLoading } = usePersonalShifts(user?.id);
+
+  // Check if preferences quiz has been completed
+  const { data: prefs, refetch: refetchPrefs } = useQuery({
+    queryKey: ["employee-prefs-quiz", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("employee_preferences")
+        .select("quiz_completed, store_id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+  const quizCompleted = prefs?.quiz_completed ?? false;
+  const storeId = prefs?.store_id ?? "";
 
   // Fetch employee contract hours
   const { data: employeeDetails } = useQuery({
@@ -179,6 +197,41 @@ const PersonalCalendar = () => {
         )}
       </div>
       </div>
+
+      {/* Preferences quiz banner */}
+      {!quizCompleted && !isLoading && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <ClipboardList className="h-5 w-5 shrink-0 text-primary" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Compila le tue preferenze orario</p>
+            <p className="text-xs text-muted-foreground">
+              Aiuta il sistema a generare turni su misura per te. Richiede 1 minuto.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setQuizOpen(true)}>
+            Compila
+          </Button>
+        </div>
+      )}
+      {quizCompleted && !isLoading && (
+        <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <ClipboardList className="h-3.5 w-3.5" />
+          Preferenze impostate ·{" "}
+          <button
+            className="underline underline-offset-2 cursor-pointer hover:text-foreground"
+            onClick={() => setQuizOpen(true)}
+          >
+            modifica
+          </button>
+        </div>
+      )}
+
+      <SchedulePreferencesQuiz
+        open={quizOpen}
+        onOpenChange={setQuizOpen}
+        storeId={storeId}
+        onSaved={() => refetchPrefs()}
+      />
 
       {isLoading ? (
         <div className="space-y-3">

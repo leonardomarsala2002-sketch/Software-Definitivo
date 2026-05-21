@@ -4343,11 +4343,105 @@ I turni proposti sono in stato <strong>Draft</strong> e richiedono la tua approv
       }
     }
 
+    // ─── Phase 5: HR Suggestions ─────────────────────────────────────────────
+    // Analisi deterministica post-generazione: staffing, copertura, bilanciamento contratti.
+    const hrPeriodDays = Math.round(
+      (new Date(weekEnd + "T00:00:00Z").getTime() - new Date(period_start_date + "T00:00:00Z").getTime())
+      / 86400000
+    ) + 1;
+    const weeksInPeriod = Math.max(1, Math.ceil(hrPeriodDays / 7));
+    const hrSuggestions: Array<{
+      type: string; severity: string; department: string; title: string; message: string; action?: string;
+    }> = [];
+
+    for (const r of results) {
+      const deptLabel = r.department === "sala" ? "Sala" : "Cucina";
+      const deptEmp = employees.filter(e => e.department === r.department && e.is_active);
+      const empCount = deptEmp.length;
+      if (empCount === 0) continue;
+
+      const totalContractH = deptEmp.reduce((s, e) => s + (e.weekly_contract_hours ?? 40), 0) * weeksInPeriod;
+      const avgContractH = totalContractH / empCount / weeksInPeriod;
+      // Rough hours estimate: uncovered=0 means all slots covered
+      const estimatedH = r.shifts * 7; // ~7h avg shift
+
+      // 1. Understaffed: molti slot scoperti
+      if (r.uncovered > 5 * weeksInPeriod) {
+        const addNeeded = Math.max(1, Math.ceil(r.uncovered / (10 * weeksInPeriod)));
+        hrSuggestions.push({
+          type: "understaffed",
+          severity: r.uncovered > 20 * weeksInPeriod ? "critical" : "warning",
+          department: r.department,
+          title: `${deptLabel}: organico insufficiente`,
+          message: `${r.uncovered} slot scoperti nel periodo (${Math.round(r.uncovered / weeksInPeriod)}/sett). Aggiungi ${addNeeded} dipendente${addNeeded > 1 ? "i" : ""} da ~20-25h/sett per coprire i picchi.`,
+          action: `Assumi ${addNeeded} part-time per ${r.department}`,
+        });
+      }
+
+      // 2. Contract gap: ore generate << ore contrattate (team sovra-dimensionato)
+      if (estimatedH > 0 && estimatedH < totalContractH * 0.55 && empCount > 2) {
+        const gapH = Math.round(totalContractH - estimatedH);
+        const excessFt = Math.max(1, Math.floor(empCount / 3));
+        hrSuggestions.push({
+          type: "contract_gap",
+          severity: "warning",
+          department: r.department,
+          title: `${deptLabel}: eccesso contrattuale`,
+          message: `Copertura richiesta ~${estimatedH}h vs ${Math.round(totalContractH)}h contrattate (${empCount} × ${Math.round(avgContractH)}h). Gap: ${gapH}h. Valuta: sostituire ${excessFt} full-time con ${excessFt * 2} part-time 20h, oppure assegnare attività extra nei giorni liberi.`,
+          action: "Rivedi composizione contratti",
+        });
+      }
+
+      // 3. Fitness molto negativa: squilibrio orario tra dipendenti
+      if (r.fitness < -3000) {
+        hrSuggestions.push({
+          type: "balance",
+          severity: "info",
+          department: r.department,
+          title: `${deptLabel}: distribuzione oraria da bilanciare`,
+          message: `Score bilanciamento: ${r.fitness.toFixed(0)}. Alcuni dipendenti hanno molte più ore di altri. Controlla la colonna "Ore sett." nella tab Dipendenti dopo la pubblicazione.`,
+          action: "Rivaluta disponibilità e preferenze singoli dipendenti",
+        });
+      }
+    }
+
+    // Cross-department: cucina piena, sala scoperta
+    const salaRes = results.find(r => r.department === "sala");
+    const cucinaRes = results.find(r => r.department === "cucina");
+    if (salaRes && cucinaRes && salaRes.uncovered > 3 && cucinaRes.uncovered === 0) {
+      const cucinaEmp = employees.filter(e => e.department === "cucina" && e.is_active);
+      if (cucinaEmp.length > 3) {
+        hrSuggestions.push({
+          type: "cross_training",
+          severity: "info",
+          department: "all",
+          title: "Cross-training sala/cucina consigliato",
+          message: `Cucina coperta al 100%, sala con ${salaRes.uncovered} slot scoperti. ${cucinaEmp.length} dipendenti cucina potrebbero supportare la sala nei picchi con formazione minima.`,
+          action: "Valuta cross-training 2-3 risorse cucina → sala",
+        });
+      }
+    }
+    // Cross-department: sala piena, cucina scoperta
+    if (salaRes && cucinaRes && cucinaRes.uncovered > 3 && salaRes.uncovered === 0) {
+      const salaEmp = employees.filter(e => e.department === "sala" && e.is_active);
+      if (salaEmp.length > 3) {
+        hrSuggestions.push({
+          type: "cross_training",
+          severity: "info",
+          department: "all",
+          title: "Cross-training cucina/sala consigliato",
+          message: `Sala coperta al 100%, cucina con ${cucinaRes.uncovered} slot scoperti. Valuta se alcune risorse sala possono supportare la cucina.`,
+          action: "Valuta cross-training 2-3 risorse sala → cucina",
+        });
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       store_id,
       week: { start: period_start_date, end: weekEnd },
       departments: results,
+      hr_suggestions: hrSuggestions,
       lending_suggestions_created: lendingSuggestionsCreated,
       is_patch: isPatchMode,
       is_rebalance: isRebalanceMode,

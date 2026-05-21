@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       // Manager: lista richieste del proprio store
       let q = adminClient
         .from("time_off_requests")
-        .select("*, profiles:user_id(full_name, email)")
+        .select("*")
         .eq("store_id", storeId)
         .order("created_at", { ascending: false });
 
@@ -75,7 +75,23 @@ Deno.serve(async (req) => {
 
       const { data, error } = await q;
       if (error) return json({ error: error.message }, 500);
-      return json({ requests: data });
+
+      // Arricchisci con nome/email dal profiles (query separata — nessuna FK diretta)
+      const userIds = [...new Set((data ?? []).map((r: any) => r.user_id as string))];
+      let profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await adminClient
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+        for (const p of (profiles ?? [])) profileMap[p.id] = { full_name: p.full_name, email: p.email };
+      }
+
+      const enriched = (data ?? []).map((r: any) => ({
+        ...r,
+        profiles: profileMap[r.user_id] ?? null,
+      }));
+      return json({ requests: enriched });
     }
 
     // Dipendente: lista proprie richieste
