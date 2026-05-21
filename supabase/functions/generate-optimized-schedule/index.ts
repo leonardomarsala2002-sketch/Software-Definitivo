@@ -65,6 +65,19 @@ interface StoreRules {
   max_team_hours_cucina_per_week: number;
 }
 
+interface EmpPreferences {
+  preferred_shift_type: string | null;
+  preferred_days_off: string[] | null;
+  weekend_availability: string | null;
+  prefers_opening: boolean;
+  prefers_closing: boolean;
+  hour_distribution: string | null;
+}
+
+const PREF_DAY_MAP: Record<string, number> = {
+  monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
+};
+
 interface GeneratedShift {
   store_id: string;
   user_id: string;
@@ -108,6 +121,17 @@ function getWeekDates(weekStart: string): string[] {
     const d = new Date(start);
     d.setUTCDate(d.getUTCDate() + i);
     dates.push(getDateStr(d));
+  }
+  return dates;
+}
+
+function getPeriodDates(periodStart: string, periodEnd: string): string[] {
+  const dates: string[] = [];
+  const end = new Date(periodEnd + "T00:00:00Z");
+  const d = new Date(periodStart + "T00:00:00Z");
+  while (d <= end) {
+    dates.push(getDateStr(d));
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -1036,7 +1060,7 @@ function equalizeEquity(
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
   if (deptEmployees.length < 2) return { rebalancedShifts: result, equityReport };
 
-  const empNameMap = new Map(employees.map(e => [e.user_id, `${(e as any).first_name ?? ""} ${(e as any).last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
+  const empNameMap = new Map(employees.map(e => [e.user_id, `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
   const getEmpName = (uid: string) => empNameMap.get(uid) ?? uid.slice(0, 8);
 
   // Helper: count days off and splits for current state
@@ -1510,6 +1534,7 @@ function runIteration(
   openingHours: { day_of_week: number; opening_time: string; closing_time: string }[],
   hourBalances: Map<string, number>,
   empConstraints: Map<string, EmployeeConstraints>,
+  empPrefs: Map<string, EmpPreferences>,
   maxSplitsAllowed: number,
   randomize: boolean,
   partialDayBlocks: Map<string, Map<string, { blockedStart: number; blockedEnd: number }[]>>,
@@ -1531,7 +1556,7 @@ function runIteration(
   const shifts: GeneratedShift[] = [];
   const uncoveredSlots: { date: string; hour: string }[] = [];
   const dayLogs: string[] = [];
-  const empNameMap = new Map(employees.map(e => [e.user_id, `${(e as any).first_name ?? ""} ${(e as any).last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
+  const empNameMap = new Map(employees.map(e => [e.user_id, `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.user_id.slice(0, 8)]));
   const getEmpName = (uid: string) => empNameMap.get(uid) ?? uid.slice(0, 8);
 
   const weeklyHours = new Map<string, number>();
@@ -1617,7 +1642,7 @@ function runIteration(
 
     // Rules summary
     dayLogs.push(`\n📏 REGOLE DI QUESTO STORE:`);
-    dayLogs.push(`  Min ore giornaliere/dipendente: ${(rules as any).min_daily_hours_per_employee ?? 4}h`);
+    dayLogs.push(`  Min ore giornaliere/dipendente: ${rules.min_daily_hours_per_employee ?? 4}h`);
     dayLogs.push(`  Max ore giornaliere/dipendente: ${rules.max_daily_hours_per_employee}h`);
     dayLogs.push(`  Ore settimanali: da contratto individuale di ogni dipendente`);
     dayLogs.push(`  Tolleranza: ±5h/sett automatica se necessaria per copertura`);
@@ -2750,7 +2775,7 @@ Deno.serve(async (req) => {
 
     if (callerUserId) {
       const { data: callerRole } = await adminClient.rpc("get_user_role", { _user_id: callerUserId });
-      if (callerRole !== "super_admin" && callerRole !== "admin") {
+      if (callerRole !== "super_admin" && callerRole !== "admin" && callerRole !== "store_manager") {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -2758,7 +2783,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { store_id, week_start_date, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending, locked_shift_ids, department: requestedDepartment } = body;
+    const { store_id, mode, affected_user_id, exception_start_date, exception_end_date, skip_lending, locked_shift_ids, department: requestedDepartment } = body;
+    // Accept period_start_date/period_end_date (monthly) or week_start_date (backward compat)
+    const period_start_date: string = body.period_start_date ?? body.week_start_date;
+    const period_end_date: string | undefined = body.period_end_date;
+
     const isPatchMode = mode === "patch";
     const isRebalanceMode = mode === "rebalance";
     const MAX_ITERATIONS = 12;
@@ -2766,29 +2795,34 @@ Deno.serve(async (req) => {
     const MAX_EXECUTION_MS = 120_000; // 120s hard limit (edge fn ~150s timeout)
     const isTimeBudgetOk = () => (Date.now() - START_TIME) < MAX_EXECUTION_MS;
 
-    if (!store_id || !week_start_date) {
-      return new Response(JSON.stringify({ error: "store_id and week_start_date required" }), {
+    if (!store_id || !period_start_date) {
+      return new Response(JSON.stringify({ error: "store_id and period_start_date (or week_start_date) required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const startD = new Date(week_start_date + "T00:00:00Z");
-    const endD = new Date(startD);
-    endD.setUTCDate(endD.getUTCDate() + 6);
-    const weekEnd = getDateStr(endD);
-    const weekDates = getWeekDates(week_start_date);
+    const startD = new Date(period_start_date + "T00:00:00Z");
+    let weekEnd: string;
+    if (period_end_date) {
+      weekEnd = period_end_date;
+    } else {
+      const endD = new Date(startD);
+      endD.setUTCDate(endD.getUTCDate() + 6);
+      weekEnd = getDateStr(endD);
+    }
+    const weekDates = getPeriodDates(period_start_date, weekEnd);
 
     // Fetch all data in parallel
     const [empRes, availRes, excRes, covRes, allowedRes, rulesRes, ohRes, requestsRes, statsRes, constraintsRes, prefsRes] = await Promise.all([
       adminClient.from("employee_details").select("user_id, department, weekly_contract_hours, is_active, first_name, last_name"),
       adminClient.from("employee_availability").select("user_id, day_of_week, start_time, end_time").eq("store_id", store_id),
-      adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", week_start_date),
+      adminClient.from("employee_exceptions").select("user_id, start_date, end_date").eq("store_id", store_id).lte("start_date", weekEnd).gte("end_date", period_start_date),
       adminClient.from("store_coverage_requirements").select("*").eq("store_id", store_id),
       adminClient.from("store_shift_allowed_times").select("*").eq("store_id", store_id),
       adminClient.from("store_rules").select("*").eq("store_id", store_id).single(),
       adminClient.from("store_opening_hours").select("*").eq("store_id", store_id),
       adminClient.from("time_off_requests").select("user_id, request_date, request_type, selected_hour, status")
-        .eq("store_id", store_id).eq("status", "approved").gte("request_date", week_start_date).lte("request_date", weekEnd),
+        .eq("store_id", store_id).eq("status", "approved").gte("request_date", period_start_date).lte("request_date", weekEnd),
       adminClient.from("employee_stats").select("user_id, current_balance").eq("store_id", store_id),
       adminClient.from("employee_constraints").select("*").eq("store_id", store_id),
       adminClient.from("employee_preferences").select("user_id, preferred_shift_type, preferred_days_off, weekend_availability, prefers_opening, prefers_closing, hour_distribution"),
@@ -2845,15 +2879,15 @@ Deno.serve(async (req) => {
       hourBalances.set(s.user_id, Number(s.current_balance));
     }
 
-    // Apply previous week's manual adjustments to hourBalances
-    const prevWeekStart = new Date(startD);
-    prevWeekStart.setUTCDate(prevWeekStart.getUTCDate() - 7);
-    const prevWeekStartStr = getDateStr(prevWeekStart);
+    // Apply previous period's manual adjustments to hourBalances
+    const prevPeriodStart = new Date(startD);
+    prevPeriodStart.setUTCDate(prevPeriodStart.getUTCDate() - weekDates.length);
+    const prevPeriodStartStr = getDateStr(prevPeriodStart);
     const { data: prevAdjustments } = await adminClient
       .from("generation_adjustments")
       .select("user_id, extra_hours")
       .eq("store_id", store_id)
-      .eq("week_start", prevWeekStartStr);
+      .eq("week_start", prevPeriodStartStr);
 
     for (const adj of (prevAdjustments ?? [])) {
       const current = hourBalances.get(adj.user_id) ?? 0;
@@ -2866,27 +2900,37 @@ Deno.serve(async (req) => {
     }
 
     // Employee preferences (FASE 3) — soft hints for schedule generation
-    interface EmpPreferences {
-      preferred_shift_type: string | null;
-      preferred_days_off: string[] | null;
-      weekend_availability: string | null;
-      prefers_opening: boolean;
-      prefers_closing: boolean;
-      hour_distribution: string | null;
-    }
-    const PREF_DAY_MAP: Record<string, number> = {
-      monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
-    };
     const empPrefs = new Map<string, EmpPreferences>();
     for (const p of (prefsRes.data ?? [])) {
       empPrefs.set(p.user_id, p as EmpPreferences);
     }
     console.log(`[Preferences] Loaded preferences for ${empPrefs.size} employees`);
 
-    // ─── Smart Memory: fetch historical outcomes (last 8 weeks) ──────
-    const SMART_MEMORY_WEEKS = 8;
+    // ─── Period scaling ───────────────────────────────────────────────
+    // Per periodi diversi da 7 giorni (es. mese), scala le ore contrattuali
+    // e i limiti periodo-livello proporzionalmente. I limiti giornalieri
+    // restano invariati (max h/giorno, riposo 11h, ecc.).
+    const periodDays = weekDates.length;
+    if (periodDays !== 7) {
+      const f = periodDays / 7;
+      for (const emp of employees) {
+        emp.weekly_contract_hours = Math.round(emp.weekly_contract_hours * f * 10) / 10;
+      }
+      rules.max_weekly_hours_per_employee = Math.round(rules.max_weekly_hours_per_employee * f * 10) / 10;
+      rules.max_team_hours_sala_per_week = Math.round(rules.max_team_hours_sala_per_week * f * 10) / 10;
+      rules.max_team_hours_cucina_per_week = Math.round(rules.max_team_hours_cucina_per_week * f * 10) / 10;
+      for (const [, ec] of empConstraints.entries()) {
+        if (ec.custom_max_weekly_hours !== null) {
+          ec.custom_max_weekly_hours = Math.round(ec.custom_max_weekly_hours * f * 10) / 10;
+        }
+      }
+      console.log(`[Period] ${periodDays} days (factor ${f.toFixed(3)}x) — scaled contract hours and period limits`);
+    }
+
+    // ─── Smart Memory: fetch historical outcomes (last 90 days) ─────
+    const SMART_MEMORY_DAYS = 90;
     const memoryStartDate = new Date(startD);
-    memoryStartDate.setUTCDate(memoryStartDate.getUTCDate() - SMART_MEMORY_WEEKS * 7);
+    memoryStartDate.setUTCDate(memoryStartDate.getUTCDate() - SMART_MEMORY_DAYS);
     const memoryStartStr = getDateStr(memoryStartDate);
 
     const { data: outcomeRows } = await adminClient
@@ -2924,13 +2968,13 @@ Deno.serve(async (req) => {
     const lockedShiftIds = new Set<string>(Array.isArray(locked_shift_ids) ? locked_shift_ids : []);
     
     if (isRebalanceMode && lockedShiftIds.size > 0) {
-      console.log(`[REBALANCE] Keeping ${lockedShiftIds.size} locked shifts, regenerating others for store=${store_id}, week=${week_start_date}..${weekEnd}`);
+      console.log(`[REBALANCE] Keeping ${lockedShiftIds.size} locked shifts, regenerating others for store=${store_id}, period=${period_start_date}..${weekEnd}`);
 
       // Delete NON-locked draft shifts for this store+week
       const { data: existingDrafts } = await adminClient.from("shifts").select("id")
         .eq("store_id", store_id).eq("status", "draft")
-        .gte("date", week_start_date).lte("date", weekEnd);
-      
+        .gte("date", period_start_date).lte("date", weekEnd);
+
       const toDelete = (existingDrafts ?? []).filter(s => !lockedShiftIds.has(s.id)).map(s => s.id);
       if (toDelete.length > 0) {
         // Delete in batches
@@ -2942,17 +2986,17 @@ Deno.serve(async (req) => {
 
       // Delete old generation_runs (but keep the locked shifts in place)
       const { data: oldRuns } = await adminClient.from("generation_runs").select("id")
-        .eq("store_id", store_id).eq("week_start", week_start_date);
+        .eq("store_id", store_id).eq("week_start", period_start_date);
       const oldRunIds = (oldRuns ?? []).map(r => r.id);
       if (oldRunIds.length > 0) {
         await adminClient.from("lending_suggestions").delete().in("generation_run_id", oldRunIds);
         await adminClient.from("generation_runs").delete().in("id", oldRunIds);
       }
     } else if (!isPatchMode) {
-      // CLEAN REGENERATION: delete previous data for this store+week
+      // CLEAN REGENERATION: delete previous data for this store+period
       // When a single department is requested, only clean that department's data
       const singleDept = departments.length === 1 ? departments[0] : null;
-      console.log(`[CLEANUP] Deleting previous data for store=${store_id}, week=${week_start_date}..${weekEnd}${singleDept ? `, dept=${singleDept}` : " (all depts)"}`);
+      console.log(`[CLEANUP] Deleting previous data for store=${store_id}, period=${period_start_date}..${weekEnd}${singleDept ? `, dept=${singleDept}` : " (all depts)"}`);
 
       // 1) Delete lending_request_messages for lending_requests involving this store+week
       if (!singleDept) {
@@ -2960,7 +3004,7 @@ Deno.serve(async (req) => {
           .from("lending_requests")
           .select("id")
           .or(`proposer_store_id.eq.${store_id},receiver_store_id.eq.${store_id}`)
-          .gte("date", week_start_date)
+          .gte("date", period_start_date)
           .lte("date", weekEnd);
 
         const oldLrIds = (oldLendingReqs ?? []).map(r => r.id);
@@ -2976,7 +3020,7 @@ Deno.serve(async (req) => {
         .from("generation_runs")
         .select("id")
         .eq("store_id", store_id)
-        .eq("week_start", week_start_date);
+        .eq("week_start", period_start_date);
       if (singleDept) {
         oldRunQuery = oldRunQuery.eq("department", singleDept);
       }
@@ -2988,10 +3032,10 @@ Deno.serve(async (req) => {
         console.log(`[CLEANUP] Deleted lending_suggestions for ${oldRunIds.length} old runs`);
       }
 
-      // Delete generation_adjustments for this store+week (only if cleaning all depts)
+      // Delete generation_adjustments for this store+period (only if cleaning all depts)
       if (!singleDept) {
         await adminClient.from("generation_adjustments").delete()
-          .eq("store_id", store_id).eq("week_start", week_start_date);
+          .eq("store_id", store_id).eq("week_start", period_start_date);
       }
 
       // Delete old generation_runs themselves
@@ -3003,13 +3047,13 @@ Deno.serve(async (req) => {
       // Delete draft shifts for the target department(s)
       let shiftDeleteQuery = adminClient.from("shifts").delete()
         .eq("store_id", store_id).eq("status", "draft")
-        .gte("date", week_start_date).lte("date", weekEnd);
+        .gte("date", period_start_date).lte("date", weekEnd);
       if (singleDept) {
         shiftDeleteQuery = shiftDeleteQuery.eq("department", singleDept);
       }
       await shiftDeleteQuery;
 
-      console.log(`[CLEANUP] Complete for store=${store_id}, week=${week_start_date}${singleDept ? `, dept=${singleDept}` : ""}`);
+      console.log(`[CLEANUP] Complete for store=${store_id}, period=${period_start_date}..${weekEnd}${singleDept ? `, dept=${singleDept}` : ""}`);
     }
 
     for (const dept of departments) {
@@ -3020,7 +3064,7 @@ Deno.serve(async (req) => {
       const { data: run, error: runErr } = await adminClient
         .from("generation_runs")
         .insert({
-          store_id, department: dept, week_start: week_start_date, week_end: weekEnd,
+          store_id, department: dept, week_start: period_start_date, week_end: weekEnd, period_end: weekEnd,
           status: "running", created_by: callerUserId,
         })
         .select("id")
@@ -3033,7 +3077,7 @@ Deno.serve(async (req) => {
         const today = getDateStr(new Date());
         const patchStartDate = isPatchMode && exception_start_date 
           ? (exception_start_date > today ? exception_start_date : today) 
-          : week_start_date;
+          : period_start_date;
         const patchEndDate = isPatchMode && exception_end_date
           ? (exception_end_date < weekEnd ? exception_end_date : weekEnd)
           : weekEnd;
@@ -3114,8 +3158,8 @@ Deno.serve(async (req) => {
             user_id: e.user_id,
             department: e.department,
             weekly_contract_hours: e.weekly_contract_hours,
-            first_name: (e as any).first_name ?? undefined,
-            last_name: (e as any).last_name ?? undefined,
+            first_name: e.first_name ?? undefined,
+            last_name: e.last_name ?? undefined,
           })),
           coverageSummary: `COPERTURA (${dept}):\n${covSummary}`,
           department: dept,
@@ -3225,7 +3269,7 @@ Deno.serve(async (req) => {
             const result = runIteration(
               store_id, dept, iterDates, employees, availability,
               allExceptions, coverageData, allowedData, adaptedRules, run.id,
-              openingHoursData, hourBalances, empConstraints, strat.maxSplits,
+              openingHoursData, hourBalances, empConstraints, empPrefs, strat.maxSplits,
               strat.randomize, partialDayBlocks, smartMemory, strat.preferShort,
               strat.reserveForSplit, memoryWeightBoost,
             );
@@ -3913,7 +3957,7 @@ Deno.serve(async (req) => {
           adminClient.from("shifts").select("id, user_id, start_time, end_time, is_day_off, department, date, store_id")
             .in("store_id", otherStoreIds)
             .in("status", ["draft", "published"])
-            .gte("date", week_start_date).lte("date", weekEnd)
+            .gte("date", period_start_date).lte("date", weekEnd)
             .eq("is_day_off", false),
         ]);
 
@@ -3956,7 +4000,7 @@ Deno.serve(async (req) => {
           const { data: draftShifts } = await adminClient
             .from("shifts").select("*")
             .eq("store_id", store_id).eq("department", dept)
-            .eq("status", "draft").gte("date", week_start_date).lte("date", weekEnd);
+            .eq("status", "draft").gte("date", period_start_date).lte("date", weekEnd);
 
           const deptCoverage = coverageData.filter(c => c.department === dept);
           for (const dateStr of weekDates) {
@@ -4302,7 +4346,7 @@ I turni proposti sono in stato <strong>Draft</strong> e richiedono la tua approv
     return new Response(JSON.stringify({
       ok: true,
       store_id,
-      week: { start: week_start_date, end: weekEnd },
+      week: { start: period_start_date, end: weekEnd },
       departments: results,
       lending_suggestions_created: lendingSuggestionsCreated,
       is_patch: isPatchMode,
