@@ -31,3 +31,11 @@ dist-ssr
 # Supabase CLI temp files
 supabase/.temp/
 .vercel
+
+# File di accesso con credenziali — non committare mai
+ACCESSI_SOCIO.md
+
+# Playwright
+playwright-report/
+test-results/
+tests/e2e/.auth/
