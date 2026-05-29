@@ -304,13 +304,10 @@ function EmployeeDashboard() {
   );
 }
 
-/* ─── Main component ───────────────────────────────────────────────── */
+/* ─── Admin dashboard ──────────────────────────────────────────────── */
 
-export default function Dashboard() {
+function AdminDashboard() {
   const { role, activeStore, stores: authStores } = useAuth();
-
-  if (role === "employee") return <EmployeeDashboard />;
-
   const storeId = activeStore?.id;
 
   const storeIds = useMemo(() => {
@@ -664,4 +661,11 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+/* ─── Root export ──────────────────────────────────────────────────── */
+
+export default function Dashboard() {
+  const { role } = useAuth();
+  return role === "employee" ? <EmployeeDashboard /> : <AdminDashboard />;
 }

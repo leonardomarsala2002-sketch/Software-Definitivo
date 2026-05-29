@@ -116,8 +116,8 @@ export default function SettingsView() {
   const storeId = activeStore?.id;
 
   const { data: rules, isLoading: rulesLoading } = useStoreRules(storeId);
-  const { mutate: updateRules, isPending: saving } = useUpdateStoreRules(storeId);
-  const { mutate: initConfig } = useInitStoreConfig(storeId);
+  const { mutate: updateRules, isPending: saving } = useUpdateStoreRules();
+  const { mutate: initConfig } = useInitStoreConfig();
 
   const [tab, setTab] = useState<Tab>("rules");
 
@@ -150,7 +150,7 @@ export default function SettingsView() {
 
   const handleSaveRules = () => {
     if (!Object.keys(draft).length) { toast.info("Nessuna modifica da salvare"); return; }
-    updateRules(draft, {
+    updateRules({ storeId: storeId!, updates: draft }, {
       onSuccess: () => { setDraft({}); toast.success("Regole salvate"); },
       onError: () => toast.error("Errore nel salvataggio"),
     });
@@ -177,7 +177,7 @@ export default function SettingsView() {
         </div>
         {!rules && !rulesLoading && (
           <button
-            onClick={() => initConfig()}
+            onClick={() => initConfig(storeId!)}
             className="flex items-center gap-2 rounded-xl border border-indigo-200 px-3 py-2 text-[12px] font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5" />

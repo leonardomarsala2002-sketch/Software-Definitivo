@@ -286,7 +286,7 @@ const Employees = () => {
         <EmployeeDetailDrawer
           employee={selected}
           open={drawerOpen}
-          onClose={() => { setDrawerOpen(false); setSelected(null); }}
+          onOpenChange={(open) => { if (!open) { setDrawerOpen(false); setSelected(null); } }}
           canEdit={role === "super_admin"}
         />
       )}
