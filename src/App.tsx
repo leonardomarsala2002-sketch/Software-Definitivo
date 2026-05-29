@@ -24,6 +24,8 @@ import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import Messages from "@/pages/Messages";
 import AIAssistant from "@/pages/AIAssistant";
+import SchedulerView from "@/pages/SchedulerView";
+import SettingsView from "@/pages/SettingsView";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +61,8 @@ const App = () => (
                 <Route path="/info" element={<Info />} />
                 <Route path="/manage-stores" element={<ManageStores />} />
                 <Route path="/ai-assistant" element={<AIAssistant />} />
+                <Route path="/scheduler" element={<SchedulerView />} />
+                <Route path="/settings" element={<SettingsView />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

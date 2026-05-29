@@ -45,13 +45,13 @@ async function checkAuth(supabase: ReturnType<typeof createClient>): Promise<Che
 }
 
 async function checkAiGateway(): Promise<CheckResult> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) {
-    return { name: "ai_gateway", ok: false, error: "LOVABLE_API_KEY non configurata — fallback deterministico attivo" };
+    return { name: "ai_gateway", ok: false, error: "GEMINI_API_KEY non configurata — fallback deterministico attivo" };
   }
   const start = Date.now();
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/models", {
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/models", {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(5_000),
     });

@@ -417,9 +417,9 @@ async function generateAIStrategies(context: {
   stratSplitsLow: boolean;
   employeePreferences?: Record<string, unknown>;
 }): Promise<{ strategies: AIStrategy[]; aiUsed: boolean }> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.warn("[AI] LOVABLE_API_KEY non configurata — fallback al rule engine deterministico");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("LOVABLE_API_KEY");
+  if (!GEMINI_API_KEY) {
+    console.warn("[AI] GEMINI_API_KEY non configurata — fallback al rule engine deterministico");
     return { strategies: getDefaultStrategies(), aiUsed: false };
   }
 
@@ -562,15 +562,15 @@ Genera ESATTAMENTE 40 strategie diverse ottimizzate per questo specifico store.`
 
     let response: Response;
     try {
-      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
           "Content-Type": "application/json",
         },
         signal: controller.signal,
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -638,9 +638,10 @@ Genera ESATTAMENTE 40 strategie diverse ottimizzate per questo specifico store.`
 
     console.log(`[AI] Gemini 2.5 generated ${strategies.length} strategies with full store context`);
 
-    // Pad to 40 with variations of existing AI strategies if needed
+    // Pad to 40 by cycling through all AI strategies (not just index 0)
+    const aiCount = strategies.length;
     while (strategies.length < 40) {
-      const base = strategies[strategies.length % strategies.length];
+      const base = strategies[strategies.length % aiCount];
       strategies.push({
         ...base,
         randomize: !base.randomize,

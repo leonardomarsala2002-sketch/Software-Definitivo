@@ -1,16 +1,25 @@
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
-import { AppHeader } from "@/components/AppHeader";
-import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { Sidebar } from "@/components/Sidebar";
+import { InnerHeader } from "@/components/InnerHeader";
 import { TutorialProvider } from "@/components/tutorial/TutorialProvider";
 
 export function AppShell() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden">
-      <AppHeader />
-      <main className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-5 pb-20 md:px-8 md:py-6 md:pb-6">
-        <Outlet />
-      </main>
-      <MobileBottomNav />
+    <div className="flex h-screen w-full overflow-hidden bg-[#F8FAFC]">
+      {/* Sidebar */}
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Main area */}
+      <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
+        <InnerHeader onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6">
+          <Outlet />
+        </main>
+      </div>
+
       <TutorialProvider />
     </div>
   );

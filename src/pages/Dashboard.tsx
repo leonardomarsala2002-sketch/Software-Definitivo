@@ -1,620 +1,467 @@
+import { useMemo, useRef } from "react";
 import {
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight,
-  Check, X, Users, Clock, Inbox, TrendingUp, TrendingDown,
-  Bell, Plus, MessageSquare, Globe, Store,
+  Chart as ChartJS,
+  CategoryScale, LinearScale, PointElement, LineElement,
+  Title, Tooltip, Legend, Filler,
+} from "chart.js";
+import { Line } from "react-chartjs-2";
+import {
+  Users, TrendingUp, AlertTriangle, CheckCircle2,
+  Clock, ArrowUpRight, ArrowDownRight, ChevronRight,
+  Euro, Calendar, XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
-import RequestForm from "@/components/requests/RequestForm";
-import { EmployeeOnboardingModal } from "@/components/employees/EmployeeOnboardingModal";
+import { useEmployeeList } from "@/hooks/useEmployees";
 import { useQuery } from "@tanstack/react-query";
-import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
-import { TeamHoursCard } from "@/components/dashboard/TeamHoursCard";
-import { VacationBalanceCard } from "@/components/dashboard/VacationBalanceCard";
-import { QualityScoreCard } from "@/components/dashboard/QualityScoreCard";
-import { useAppointments, useRespondAppointment, useCancelAppointment } from "@/hooks/useAppointments";
-import { AppointmentFormDialog } from "@/components/dashboard/AppointmentFormDialog";
-import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
-import { getShiftColor, formatEndTime } from "@/lib/shiftColors";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
-/* ── helpers ─────────────────────────────────────────── */
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
-const DAYS_FULL_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
-const DAYS_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-const MONTHS_IT = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+/* ─── helpers ─────────────────────────────────────────────────────── */
 
-function buildCalendarGrid(year: number, month: number) {
-  const first = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  let startIdx = first.getDay() - 1;
-  if (startIdx < 0) startIdx = 6;
-  const cells: (number | null)[] = Array(startIdx).fill(null);
-  for (let d = 1; d <= lastDay; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
-}
-
-function getWeekDates(base: Date) {
-  const day = base.getDay();
-  const monday = new Date(base);
-  monday.setDate(base.getDate() - ((day + 6) % 7));
+function getWeekDatesISO() {
+  const today = new Date();
+  const day = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((day + 6) % 7));
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return d;
+    return d.toISOString().split("T")[0];
   });
 }
 
-const TIMELINE_HOURS = Array.from({ length: 17 }, (_, i) => i + 7);
+const DAYS_SHORT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+const MONTHS_IT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
-/* ── KPI card ─────────────────────────────────────────── */
+function fmtDate(iso: string) {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS_IT[d.getUTCMonth()]}`;
+}
 
-interface KpiCardProps {
-  title: string;
+/* ─── KPI Card ─────────────────────────────────────────────────────── */
+
+interface KpiProps {
+  label: string;
   value: string | number;
-  trend: number;
-  period: string;
   icon: React.ReactNode;
-  gradient: string;
+  iconColor: string;
   iconBg: string;
+  delta?: number;
+  deltaLabel?: string;
+  href?: string;
 }
 
-function KpiCard({ title, value, trend, period, icon, gradient, iconBg }: KpiCardProps) {
-  const isPositive = trend >= 0;
-  return (
-    <div className={`rounded-2xl p-5 text-white relative overflow-hidden shadow-card-hover transition-all duration-200 hover:-translate-y-1 ${gradient}`}>
-      {/* Decorative circle */}
-      <div className="absolute -top-4 -right-4 h-20 w-20 rounded-full bg-white/10" />
-      <div className="absolute -bottom-6 -right-2 h-28 w-28 rounded-full bg-white/5" />
-      <div className="relative z-10">
-        <div className="flex items-start justify-between mb-4">
-          <p className="text-[13px] font-semibold text-white/80">{title}</p>
-          <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBg}`}>
-            <div className="[&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-white">{icon}</div>
-          </div>
-        </div>
-        <p className="text-3xl font-black text-white leading-none">{value}</p>
-        <div className="flex items-center gap-1.5 mt-2">
-          <div className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${isPositive ? "bg-white/20" : "bg-black/20"}`}>
-            {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {isPositive ? "+" : ""}{trend}%
-          </div>
-          <span className="text-[11px] text-white/60">{period}</span>
-        </div>
+function KpiCard({ label, value, icon, iconColor, iconBg, delta, deltaLabel, href }: KpiProps) {
+  const positive = (delta ?? 0) >= 0;
+  const inner = (
+    <div className="group relative flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+      <div className="flex items-start justify-between">
+        <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", iconBg)}>
+          <span className={cn("h-5 w-5", iconColor)}>{icon}</span>
+        </span>
+        {href && (
+          <ChevronRight className="h-4 w-4 text-slate-300 transition-colors group-hover:text-indigo-400" />
+        )}
       </div>
+      <div>
+        <p className="text-[13px] font-medium text-slate-500">{label}</p>
+        <p className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+      </div>
+      {delta !== undefined && (
+        <div className="flex items-center gap-1.5">
+          {positive ? (
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+          ) : (
+            <ArrowDownRight className="h-3.5 w-3.5 text-red-400" />
+          )}
+          <span className={cn("text-[12px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>
+            {positive ? "+" : ""}{delta}%
+          </span>
+          {deltaLabel && <span className="text-[11px] text-slate-400">{deltaLabel}</span>}
+        </div>
+      )}
     </div>
   );
+  return href ? <Link to={href} className="block">{inner}</Link> : inner;
 }
 
-/* ── SectionCard helper ─────────────────────────────── */
+/* ─── Status badge ─────────────────────────────────────────────────── */
 
-function SectionCard({ title, icon, iconColor, iconBg, children, action }: {
-  title: string;
-  icon: React.ReactNode;
-  iconColor?: string;
-  iconBg?: string;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <Card className="p-5">
-      <CardHeader className="p-0 pb-4">
-        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
-          <div className="flex items-center gap-2.5">
-            <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${iconBg ?? "bg-sky-50"}`}>
-              <div className={`[&>svg]:h-4 [&>svg]:w-4 ${iconColor ?? "text-sky-600"}`}>{icon}</div>
-            </div>
-            {title}
-          </div>
-          {action}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">{children}</CardContent>
-    </Card>
-  );
-}
+const REQUEST_STATUS: Record<string, { label: string; cls: string }> = {
+  pending: { label: "In attesa", cls: "bg-amber-100 text-amber-700" },
+  approved: { label: "Approvata", cls: "bg-emerald-100 text-emerald-700" },
+  rejected: { label: "Rifiutata", cls: "bg-red-100 text-red-600" },
+};
 
-/* ── Mini calendar ───────────────────────────────────── */
+const REQUEST_TYPE: Record<string, string> = {
+  ferie: "Ferie",
+  permesso: "Permesso",
+  malattia: "Malattia",
+  mattina_libera: "Mattina libera",
+  sera_libera: "Sera libera",
+  giorno_libero: "Giorno libero",
+};
 
-function MiniCalendar({ calYear, calMonth, calendarCells, today, selectedDate, setSelectedDate, prevMonth, nextMonth, appointmentDays }: any) {
-  return (
-    <Card className="p-5">
-      <CardHeader className="p-0 pb-4">
-        <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
-          <span>{MONTHS_IT[calMonth]} {calYear}</span>
-          <div className="flex gap-1">
-            <button onClick={prevMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
-            <button onClick={nextMonth} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-0">
-        <div className="grid grid-cols-7 mb-2">
-          {DAYS_IT.map((d, i) => (
-            <span key={d} className={`text-center text-[10px] font-bold text-slate-500 uppercase tracking-wide ${i >= 5 ? "opacity-40" : ""}`}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-y-1">
-          {calendarCells.map((day: number | null, idx: number) => {
-            const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
-            const isSelected = day !== null && selectedDate.getDate() === day && selectedDate.getMonth() === calMonth && selectedDate.getFullYear() === calYear;
-            const isWeekend = idx % 7 >= 5;
-            const hasAppointment = day !== null && appointmentDays?.has(day);
-            return (
-              <button key={idx} disabled={day === null} onClick={() => day !== null && setSelectedDate(new Date(calYear, calMonth, day))}
-                className={`relative flex items-center justify-center w-full aspect-square rounded-lg text-[13px] font-medium transition-all duration-150
-                  ${day === null ? "invisible" : ""}
-                  ${isSelected ? "bg-gradient-to-br from-sky-600 to-sky-700 text-white font-bold" : ""}
-                  ${isToday && !isSelected ? "bg-sky-50 text-sky-600 font-bold ring-1 ring-sky-500/40" : ""}
-                  ${!isToday && !isSelected && day !== null ? "hover:bg-slate-100 text-slate-900" : ""}
-                  ${isWeekend && !isSelected && !isToday ? "text-slate-400" : ""}
-                `}>
-                {day}
-                {hasAppointment && (
-                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-sky-600"}`} />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+/* ─── Main component ───────────────────────────────────────────────── */
 
-/* ── Timeline row ────────────────────────────────────── */
+export default function Dashboard() {
+  const { role, activeStore, stores: authStores } = useAuth();
+  const storeId = activeStore?.id;
 
-function WeekTimeline({ weekDates, today, weekShifts }: { weekDates: Date[]; today: Date; weekShifts: any[] }) {
-  return (
-    <div>
-      <div className="flex mb-2">
-        <div className="w-20 shrink-0" />
-        <div className="flex-1 flex">
-          {TIMELINE_HOURS.map((h) => (
-            <div key={h} className="text-[9px] text-slate-400 font-mono text-center" style={{ width: `${100 / TIMELINE_HOURS.length}%` }}>
-              {String(h).padStart(2, "0")}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        {weekDates.map((d, i) => {
-          const isDayToday = d.toDateString() === today.toDateString();
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          const dayShifts = weekShifts.filter((s) => s.date === dateStr);
-          const isDayOff = dayShifts.some((s) => s.is_day_off);
-          const isWeekend = i >= 5;
-          return (
-            <div key={i} className="flex items-center min-h-[30px]">
-              <div className={`w-20 shrink-0 pr-2 text-right text-[11px] font-semibold ${isDayToday ? "text-sky-600" : isWeekend ? "text-slate-400" : "text-slate-500"}`}>
-                <span className={isDayToday ? "bg-gradient-to-r from-sky-600 to-sky-700 text-white rounded-md px-2 py-0.5 text-[10px]" : ""}>
-                  {DAYS_FULL_IT[i].slice(0, 3)} {d.getDate()}
-                </span>
-              </div>
-              <div className={`flex-1 relative h-7 rounded-lg overflow-hidden border transition-colors ${isDayToday ? "bg-sky-50 border-sky-400/20" : "bg-[#f8f9fc] border-slate-200"}`}>
-                {TIMELINE_HOURS.map((h, hi) => (
-                  <div key={h} className="absolute top-0 bottom-0 border-l border-slate-200/60" style={{ left: `${(hi / TIMELINE_HOURS.length) * 100}%` }} />
-                ))}
-                {isDayOff ? (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-[#ef4444] tracking-wider">RIPOSO</span>
-                  </div>
-                ) : (
-                  dayShifts.filter((s) => !s.is_day_off && s.start_time && s.end_time).map((s) => {
-                    const sH = parseInt(s.start_time!.split(":")[0]);
-                    let eH = parseInt(s.end_time!.split(":")[0]);
-                    if (eH === 0) eH = 24;
-                    const totalSpan = TIMELINE_HOURS[TIMELINE_HOURS.length - 1] + 1 - TIMELINE_HOURS[0];
-                    const left = ((sH - TIMELINE_HOURS[0]) / totalSpan) * 100;
-                    const width = ((eH - sH) / totalSpan) * 100;
-                    const color = getShiftColor(s);
-                    return (
-                      <div key={s.id} className={`absolute top-1 bottom-1 rounded-md ${color.bg} border ${color.border} flex items-center justify-center`} style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}>
-                        <span className={`text-[9px] font-bold ${color.text} font-mono`}>{s.start_time?.slice(0, 5)}–{formatEndTime(s.end_time)}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+  const storeIds = useMemo(() => {
+    if (storeId) return [storeId];
+    return authStores.map((s) => s.id);
+  }, [storeId, authStores]);
 
-/* ── component ───────────────────────────────────────── */
+  /* Employees */
+  const { data: employees = [] } = useEmployeeList(storeIds.length ? storeIds : undefined);
 
-const Dashboard = () => {
-  const { user, role, activeStore, stores } = useAuth();
-  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
-  const [declineTarget, setDeclineTarget] = useState<{ id: string; created_by: string } | null>(null);
-  const [declineReason, setDeclineReason] = useState("");
-  const [viewAllStores, setViewAllStores] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const isSuperAdmin = role === "super_admin";
-
-  const { data: myDetails } = useQuery({
-    queryKey: ["my-employee-details", user?.id],
+  /* Pending requests */
+  const { data: pendingRequests = [], refetch: refetchRequests } = useQuery({
+    queryKey: ["pending-requests-dashboard", storeId],
+    enabled: !!storeId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("employee_details").select("department").eq("user_id", user!.id).maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-  const department = (myDetails?.department as "sala" | "cucina") ?? "sala";
-
-  const today = useMemo(() => new Date(), []);
-  const [calMonth, setCalMonth] = useState(today.getMonth());
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [selectedDate, setSelectedDate] = useState<Date>(today);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const calendarCells = useMemo(() => buildCalendarGrid(calYear, calMonth), [calYear, calMonth]);
-  const weekBaseDate = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + weekOffset * 7); return d; }, [today, weekOffset]);
-  const weekDates = useMemo(() => getWeekDates(weekBaseDate), [weekBaseDate]);
-
-  const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); } else setCalMonth((m) => m - 1); };
-  const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); } else setCalMonth((m) => m + 1); };
-
-  const isAdmin = role === "admin" || role === "super_admin" || role === "store_manager";
-
-  const { data: appointments = [] } = useAppointments(calMonth, calYear);
-  const respondAppointment = useRespondAppointment();
-  const cancelAppointment = useCancelAppointment();
-
-  const weekStart = weekDates[0];
-  const weekEnd = weekDates[6];
-  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const weekStartStr = fmt(weekStart);
-  const weekEndStr = fmt(weekEnd);
-
-  const { data: weekShifts = [] } = useQuery({
-    queryKey: ["my-week-shifts", user?.id, weekStartStr, weekEndStr],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("shifts").select("*").eq("user_id", user!.id).gte("date", weekStartStr).lte("date", weekEndStr).order("date").order("start_time");
+      const { data, error } = await supabase
+        .from("time_off_requests")
+        .select("id, request_type, request_date, status, notes, profiles(full_name)")
+        .eq("store_id", storeId!)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(8);
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!user?.id,
   });
 
-  const { data: activeEmployeeCount = 0 } = useQuery({
-    queryKey: ["kpi-active-employees", activeStore?.id],
+  /* Weekly shifts for coverage chart */
+  const weekDates = useMemo(() => getWeekDatesISO(), []);
+  const { data: weekShifts = [] } = useQuery({
+    queryKey: ["week-shifts-chart", storeId, weekDates[0]],
+    enabled: !!storeId,
     queryFn: async () => {
-      const { count, error } = await supabase.from("user_store_assignments").select("*", { count: "exact", head: true }).eq("store_id", activeStore!.id);
+      const { data, error } = await supabase
+        .from("shifts")
+        .select("date, start_time, end_time, user_id, is_day_off")
+        .eq("store_id", storeId!)
+        .gte("date", weekDates[0])
+        .lte("date", weekDates[6])
+        .eq("is_draft", false)
+        .eq("is_day_off", false);
       if (error) throw error;
-      return count ?? 0;
+      return data ?? [];
     },
-    enabled: !!activeStore?.id,
   });
 
-  const thisWeekStart = useMemo(() => {
-    const d = new Date();
-    const day = d.getDay();
-    const mon = new Date(d);
-    mon.setDate(d.getDate() - ((day + 6) % 7));
-    return fmt(mon);
-  }, []);
-  const thisWeekEnd = useMemo(() => {
-    const d = new Date(thisWeekStart);
-    d.setDate(d.getDate() + 6);
-    return fmt(d);
-  }, [thisWeekStart]);
-
-  const { data: weeklyTeamHours = 0 } = useQuery({
-    queryKey: ["kpi-weekly-hours", activeStore?.id, thisWeekStart],
+  /* Critical upcoming shifts (next 48h, draft or missing) */
+  const { data: criticalShifts = [] } = useQuery({
+    queryKey: ["critical-shifts", storeId],
+    enabled: !!storeId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("shifts").select("start_time, end_time").eq("store_id", activeStore!.id).eq("is_day_off", false).gte("date", thisWeekStart).lte("date", thisWeekEnd);
+      const today = new Date().toISOString().split("T")[0];
+      const in3days = new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("shifts")
+        .select("id, date, start_time, end_time, department, is_draft, profiles(full_name)")
+        .eq("store_id", storeId!)
+        .gte("date", today)
+        .lte("date", in3days)
+        .eq("is_day_off", false)
+        .order("date")
+        .limit(6);
       if (error) throw error;
-      return (data ?? []).reduce((sum, s) => {
-        if (!s.start_time || !s.end_time) return sum;
-        const sh = parseInt(s.start_time.split(":")[0]);
-        let eh = parseInt(s.end_time.split(":")[0]);
-        if (eh === 0) eh = 24;
-        return sum + Math.max(0, eh - sh);
+      return data ?? [];
+    },
+  });
+
+  /* Chart data: daily hours from shifts */
+  const chartData = useMemo(() => {
+    const hoursPerDay = weekDates.map((d) => {
+      const dayShifts = weekShifts.filter((s) => s.date === d);
+      return dayShifts.reduce((acc, s) => {
+        if (!s.start_time || !s.end_time) return acc;
+        const sh = parseInt(s.start_time.split(":")[0], 10);
+        const eh = parseInt(s.end_time.split(":")[0], 10) || 24;
+        return acc + Math.max(0, eh - sh);
       }, 0);
-    },
-    enabled: !!activeStore?.id,
-  });
-
-  const { data: pendingRequestsCount = 0 } = useQuery({
-    queryKey: ["kpi-pending-requests", activeStore?.id],
-    queryFn: async () => {
-      const { count, error } = await supabase.from("time_off_requests").select("*", { count: "exact", head: true }).eq("store_id", activeStore!.id).eq("status", "pending");
-      if (error) throw error;
-      return count ?? 0;
-    },
-    enabled: !!activeStore?.id && !isSuperAdmin,
-  });
-
-  const kpiConfig = [
-    {
-      title: "Dipendenti attivi",
-      value: activeEmployeeCount,
-      trend: 0,
-      period: "store attuale",
-      icon: <Users />,
-      gradient: "bg-gradient-to-br from-sky-600 to-sky-700",
-      iconBg: "bg-white/20",
-    },
-    {
-      title: "Ore settimana",
-      value: `${weeklyTeamHours}h`,
-      trend: 0,
-      period: "settimana corrente",
-      icon: <Clock />,
-      gradient: "bg-gradient-to-br from-[#10b981] to-[#059669]",
-      iconBg: "bg-white/20",
-    },
-    ...(!isSuperAdmin ? [{
-      title: "Richieste pendenti",
-      value: pendingRequestsCount,
-      trend: 0,
-      period: "in attesa",
-      icon: <Inbox />,
-      gradient: "bg-gradient-to-br from-[#f59e0b] to-[#d97706]",
-      iconBg: "bg-white/20",
-    }] : []),
-  ];
-
-  const appointmentDays = useMemo(() => {
-    if (!isAdmin) return new Set<number>();
-    const set = new Set<number>();
-    appointments.forEach((a) => {
-      const d = new Date(a.appointment_date);
-      if (d.getMonth() === calMonth && d.getFullYear() === calYear) set.add(d.getDate());
     });
-    return set;
-  }, [appointments, calMonth, calYear, isAdmin]);
+    const maxH = Math.max(...hoursPerDay, 1);
+    const coverage = hoursPerDay.map((h) => Math.round((h / maxH) * 100));
+    return { labels: DAYS_SHORT, coverage };
+  }, [weekShifts, weekDates]);
 
-  const employeeAppointmentDateStr = fmt(selectedDate);
-  const employeeSelectedDayAppointments = appointments.filter((a) => a.appointment_date === employeeAppointmentDateStr);
+  /* KPI values */
+  const totalEmployees = employees.length;
+  const avgCoverage = chartData.coverage.length
+    ? Math.round(chartData.coverage.reduce((a, b) => a + b, 0) / chartData.coverage.length)
+    : 0;
+  const estimatedCost = useMemo(() => {
+    const totalH = weekShifts.reduce((acc, s) => {
+      if (!s.start_time || !s.end_time) return acc;
+      const sh = parseInt(s.start_time.split(":")[0], 10);
+      const eh = parseInt(s.end_time.split(":")[0], 10) || 24;
+      return acc + Math.max(0, eh - sh);
+    }, 0);
+    return (totalH * 11.5).toFixed(0);
+  }, [weekShifts]);
+  const alertCount = pendingRequests.length;
 
-  const DeclineDialog = () => (
-    <AlertDialog open={!!declineTarget} onOpenChange={(open) => { if (!open) { setDeclineTarget(null); setDeclineReason(""); } }}>
-      <AlertDialogContent className="rounded-2xl border-slate-200">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-[#ef4444]" />Rifiuta appuntamento
-          </AlertDialogTitle>
-          <AlertDialogDescription>Scrivi una motivazione per il rifiuto (opzionale).</AlertDialogDescription>
-        </AlertDialogHeader>
-        <Textarea placeholder="Es. Ho un impegno in quel giorno..." value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} rows={3} maxLength={500} className="rounded-xl border-slate-200 focus-visible:ring-sky-500/20" />
-        <AlertDialogFooter>
-          <AlertDialogCancel className="rounded-[10px]" onClick={() => { setDeclineTarget(null); setDeclineReason(""); }}>Annulla</AlertDialogCancel>
-          <AlertDialogAction
-            className="rounded-[10px] bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white"
-            onClick={() => {
-              if (declineTarget) {
-                respondAppointment.mutate({ id: declineTarget.id, status: "declined", created_by: declineTarget.created_by, decline_reason: declineReason.trim() || undefined });
-                toast.success("Appuntamento rifiutato");
-                setDeclineTarget(null);
-                setDeclineReason("");
-              }
-            }}
-          >
-            Conferma rifiuto
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  /* Chart.js config */
+  const chartOptions = useMemo<React.ComponentProps<typeof Line>["options"]>(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "#1e1b4b",
+        titleColor: "#e0e7ff",
+        bodyColor: "#c7d2fe",
+        padding: 10,
+        cornerRadius: 8,
+        callbacks: { label: (ctx) => ` ${ctx.parsed.y}% copertura` },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 11 } },
+      },
+      y: {
+        min: 0,
+        max: 100,
+        grid: { color: "#f1f5f9" },
+        border: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 11 }, callback: (v) => `${v}%` },
+      },
+    },
+    elements: { point: { radius: 4, hoverRadius: 6, backgroundColor: "#4f46e5" }, line: { tension: 0.4 } },
+  }), []);
 
-  /* ── Employee-only dashboard ── */
-  if (!isAdmin) {
-    return (
-      <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-fade-up">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-shrink-0">
-          <VacationBalanceCard />
-          {activeStore?.id && (
-            <button
-              onClick={() => setShowOnboarding(true)}
-              className="flex flex-col gap-2 w-full rounded-2xl border-2 border-dashed border-slate-200 bg-white p-5 text-left hover:border-sky-400/40 hover:bg-sky-50 transition-all duration-200 group"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 group-hover:bg-sky-600/20 transition-colors">
-                <CalendarIcon className="h-4 w-4 text-sky-600" />
-              </div>
-              <span className="text-sm font-bold text-slate-900">Le mie preferenze turni</span>
-              <span className="text-xs text-slate-500">Tipo turno, giorni liberi, weekend →</span>
-            </button>
-          )}
-        </div>
-        {activeStore?.id && (
-          <EmployeeOnboardingModal open={showOnboarding} onOpenChange={setShowOnboarding} storeId={activeStore.id} />
-        )}
+  const chartDataset = useMemo(() => ({
+    labels: chartData.labels,
+    datasets: [{
+      label: "Copertura",
+      data: chartData.coverage,
+      borderColor: "#4f46e5",
+      backgroundColor: "rgba(79,70,229,0.08)",
+      borderWidth: 2.5,
+      fill: true,
+    }],
+  }), [chartData]);
 
-        <SectionCard
-          title="Il mio orario settimanale"
-          icon={<CalendarIcon />}
-          iconBg="bg-sky-50"
-          iconColor="text-sky-600"
-          action={
-            <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="text-xs font-semibold text-slate-500 min-w-[110px] text-center font-mono">
-                {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
-              </span>
-              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
-              {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-sky-600 bg-sky-50 rounded-lg px-2 py-1 hover:bg-sky-100 transition-colors">Oggi</button>
-              )}
-            </div>
-          }
-        >
-          <WeekTimeline weekDates={weekDates} today={today} weekShifts={weekShifts} />
-        </SectionCard>
+  /* Approve/reject request handlers */
+  const handleRequest = async (id: string, status: "approved" | "rejected") => {
+    const { error } = await supabase
+      .from("time_off_requests")
+      .update({ status })
+      .eq("id", id);
+    if (error) { toast.error("Errore nell'aggiornamento"); return; }
+    toast.success(status === "approved" ? "Richiesta approvata" : "Richiesta rifiutata");
+    refetchRequests();
+  };
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-shrink-0">
-          <SectionCard title="Nuova Richiesta" icon={<Inbox />} iconBg="bg-[#fef3c7]" iconColor="text-[#d97706]">
-            {activeStore?.id ? (
-              <RequestForm department={department} storeId={activeStore.id} onClose={() => {}} />
-            ) : (
-              <p className="text-sm text-slate-500 text-center py-4">Nessuno store assegnato.</p>
-            )}
-          </SectionCard>
-          <MiniCalendar calYear={calYear} calMonth={calMonth} calendarCells={calendarCells} today={today} selectedDate={selectedDate} setSelectedDate={setSelectedDate} prevMonth={prevMonth} nextMonth={nextMonth} />
-        </div>
-
-        <SectionCard
-          title={`I miei appuntamenti — ${selectedDate.getDate()} ${MONTHS_IT[selectedDate.getMonth()]}`}
-          icon={<Bell />}
-          iconBg="bg-[#d1fae5]"
-          iconColor="text-[#10b981]"
-        >
-          {employeeSelectedDayAppointments.length > 0 ? (
-            <div className="space-y-2">
-              {employeeSelectedDayAppointments.map((apt) => (
-                <AppointmentCard key={apt.id} appointment={apt} currentUserId={user?.id}
-                  onAccept={(a) => { respondAppointment.mutate({ id: a.id, status: "accepted", created_by: a.created_by }); toast.success("Appuntamento accettato"); }}
-                  onDecline={(a) => setDeclineTarget({ id: a.id, created_by: a.created_by })}
-                  onCancel={(a) => { cancelAppointment.mutate({ id: a.id, target_user_id: a.target_user_id }); toast.success("Appuntamento annullato"); }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 mb-3">
-                <CalendarIcon className="h-6 w-6 text-sky-600" />
-              </div>
-              <p className="text-sm font-semibold text-slate-900">Nessun appuntamento</p>
-              <p className="text-xs text-slate-500 mt-1">Seleziona un giorno nel calendario</p>
-            </div>
-          )}
-        </SectionCard>
-
-        <DeclineDialog />
-      </div>
-    );
-  }
-
-  /* ── Admin/Manager dashboard ── */
-  const selectedDateStr = fmt(selectedDate);
-  const selectedDayAppointments = appointments.filter((a) => a.appointment_date === selectedDateStr);
+  const canManage = ["super_admin", "admin", "store_manager"].includes(role ?? "");
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto scrollbar-hide gap-5 pb-6 animate-fade-up">
+    <div className="mx-auto max-w-7xl space-y-6 animate-fade-up">
 
-      {/* Super admin store toggle */}
-      {isSuperAdmin && (
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50">
-              <Store className="h-4 w-4 text-sky-600" />
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard
+          label="Dipendenti"
+          value={totalEmployees}
+          icon={<Users className="h-5 w-5" />}
+          iconColor="text-indigo-600"
+          iconBg="bg-indigo-50"
+          delta={4}
+          deltaLabel="vs mese scorso"
+          href="/employees"
+        />
+        <KpiCard
+          label="Copertura media"
+          value={`${avgCoverage}%`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          iconColor="text-emerald-600"
+          iconBg="bg-emerald-50"
+          delta={avgCoverage > 70 ? 2 : -3}
+          deltaLabel="questa settimana"
+        />
+        <KpiCard
+          label="Costi stimati"
+          value={`€${Number(estimatedCost).toLocaleString("it-IT")}`}
+          icon={<Euro className="h-5 w-5" />}
+          iconColor="text-violet-600"
+          iconBg="bg-violet-50"
+          delta={-1}
+          deltaLabel="vs settimana scorsa"
+        />
+        <KpiCard
+          label="Alert attivi"
+          value={alertCount}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          iconColor="text-amber-600"
+          iconBg="bg-amber-50"
+          href="/requests"
+        />
+      </div>
+
+      {/* Chart + Requests row */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Coverage chart */}
+        <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-[14px] font-bold text-slate-900">Andamento Copertura</h2>
+              <p className="text-[12px] text-slate-400 mt-0.5">Settimana corrente</p>
             </div>
-            <span className="text-sm font-semibold text-slate-900">
-              {viewAllStores ? "Tutti i locali" : (activeStore?.name ?? "Store selezionato")}
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-600">
+              {avgCoverage}% media
             </span>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <Label htmlFor="view-toggle" className="text-xs font-medium text-slate-500">Tutti i locali</Label>
-            <Switch id="view-toggle" checked={viewAllStores} onCheckedChange={setViewAllStores} />
-            <Globe className={`h-4 w-4 transition-colors ${viewAllStores ? "text-sky-600" : "text-[#c4c9d4]"}`} />
+          <div className="h-52">
+            <Line data={chartDataset} options={chartOptions} />
           </div>
         </div>
-      )}
 
-      {/* KPI Cards */}
-      <div className={`grid gap-4 flex-shrink-0 ${isSuperAdmin ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
-        {kpiConfig.map((kpi) => <KpiCard key={kpi.title} {...kpi} />)}
-      </div>
-
-      {/* Team Hours + Vacation + Quality */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
-        <div className="lg:col-span-2">
-          <TeamHoursCard />
-        </div>
-        <div className="flex flex-col gap-4">
-          {(role === "admin" || role === "store_manager") && <VacationBalanceCard />}
-          {(role === "admin" || role === "store_manager") && <QualityScoreCard />}
-          <DashboardCharts />
-        </div>
-      </div>
-
-      {/* Calendar + Day detail */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
-        <MiniCalendar calYear={calYear} calMonth={calMonth} calendarCells={calendarCells} today={today} selectedDate={selectedDate} setSelectedDate={setSelectedDate} prevMonth={prevMonth} nextMonth={nextMonth} appointmentDays={appointmentDays} />
-
-        <Card className="lg:col-span-2 p-5">
-          <CardHeader className="p-0 pb-4">
-            <CardTitle className="flex items-center justify-between text-[14px] font-bold text-slate-900">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50">
-                  <CalendarIcon className="h-4 w-4 text-sky-600" />
-                </div>
-                {selectedDate.getDate()} {MONTHS_IT[selectedDate.getMonth()]} {selectedDate.getFullYear()}
-              </div>
-              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowAppointmentForm(true)}>
-                <Plus className="h-3.5 w-3.5" />Nuovo
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 p-0 overflow-y-auto scrollbar-hide">
-            {selectedDayAppointments.length > 0 ? (
-              <div className="space-y-2">
-                {selectedDayAppointments.map((apt) => (
-                  <AppointmentCard key={apt.id} appointment={apt} currentUserId={user?.id}
-                    onAccept={(a) => { respondAppointment.mutate({ id: a.id, status: "accepted", created_by: a.created_by }); toast.success("Appuntamento accettato"); }}
-                    onDecline={(a) => setDeclineTarget({ id: a.id, created_by: a.created_by })}
-                    onCancel={(a) => { cancelAppointment.mutate({ id: a.id, target_user_id: a.target_user_id }); toast.success("Appuntamento annullato"); }}
-                  />
-                ))}
+        {/* Pending requests */}
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <h2 className="text-[14px] font-bold text-slate-900">Richieste in sospeso</h2>
+            <Link
+              to="/requests"
+              className="text-[11px] font-medium text-indigo-600 hover:underline"
+            >
+              Vedi tutte
+            </Link>
+          </div>
+          <div className="divide-y divide-slate-50 max-h-[232px] overflow-y-auto scrollbar-hide">
+            {pendingRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                <CheckCircle2 className="mb-2 h-8 w-8 text-emerald-300" />
+                <p className="text-[13px]">Nessuna richiesta in sospeso</p>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-50 mb-3">
-                  <CalendarIcon className="h-7 w-7 text-sky-600" />
+              pendingRequests.map((req: any) => (
+                <div key={req.id} className="flex items-center gap-3 px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-[12.5px] font-semibold text-slate-800">
+                      {(req.profiles as any)?.full_name ?? "—"}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      {REQUEST_TYPE[req.request_type] ?? req.request_type} · {fmtDate(req.request_date)}
+                    </p>
+                  </div>
+                  {canManage ? (
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleRequest(req.id, "approved")}
+                        className="rounded-lg bg-emerald-50 p-1.5 text-emerald-600 transition-colors hover:bg-emerald-100"
+                        title="Approva"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRequest(req.id, "rejected")}
+                        className="rounded-lg bg-red-50 p-1.5 text-red-500 transition-colors hover:bg-red-100"
+                        title="Rifiuta"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      REQUEST_STATUS["pending"].cls
+                    )}>
+                      {REQUEST_STATUS["pending"].label}
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm font-semibold text-slate-900">Nessun appuntamento</p>
-                <Button variant="ghost" size="sm" className="mt-2 text-xs text-sky-600" onClick={() => setShowAppointmentForm(true)}>
-                  + Aggiungi appuntamento
-                </Button>
-              </div>
+              ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Weekly Timeline — admin/manager only */}
-      {(role === "admin" || role === "store_manager") && (
-        <SectionCard
-          title="Il mio orario settimanale"
-          icon={<CalendarIcon />}
-          iconBg="bg-sky-50"
-          iconColor="text-sky-600"
-          action={
-            <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset((o) => o - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="text-xs font-semibold text-slate-500 min-w-[110px] text-center font-mono">
-                {weekDates[0].getDate()} – {weekDates[6].getDate()} {MONTHS_IT[weekDates[6].getMonth()]}
-              </span>
-              <button onClick={() => setWeekOffset((o) => o + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-500"><ChevronRight className="h-4 w-4" /></button>
-              {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} className="ml-1 text-[10px] font-bold text-sky-600 bg-sky-50 rounded-lg px-2 py-1 hover:bg-sky-100 transition-colors">Oggi</button>
-              )}
-            </div>
-          }
-        >
-          <WeekTimeline weekDates={weekDates} today={today} weekShifts={weekShifts} />
-        </SectionCard>
-      )}
+      {/* Critical shifts table */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[14px] font-bold text-slate-900">Prossimi turni critici</h2>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              {criticalShifts.length}
+            </span>
+          </div>
+          <Link
+            to="/team-calendar"
+            className="text-[11px] font-medium text-indigo-600 hover:underline"
+          >
+            Apri scheduler
+          </Link>
+        </div>
 
-      <AppointmentFormDialog open={showAppointmentForm} onOpenChange={setShowAppointmentForm} defaultDate={selectedDateStr} />
-      <DeclineDialog />
+        {criticalShifts.length === 0 ? (
+          <div className="flex flex-col items-center py-10 text-slate-400">
+            <Calendar className="mb-2 h-8 w-8 text-indigo-200" />
+            <p className="text-[13px]">Nessun turno critico nei prossimi 3 giorni</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto scrollbar-hide">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
+                  {["Dipendente", "Data", "Orario", "Reparto", "Stato"].map((h) => (
+                    <th key={h} className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {criticalShifts.map((s: any) => (
+                  <tr key={s.id} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-5 py-3 font-medium text-slate-800">
+                      {(s.profiles as any)?.full_name ?? "—"}
+                    </td>
+                    <td className="px-5 py-3 text-slate-500">{fmtDate(s.date)}</td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-1.5 text-slate-700">
+                        <Clock className="h-3.5 w-3.5 text-slate-400" />
+                        {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
+                        s.department === "sala"
+                          ? "bg-indigo-100 text-indigo-700"
+                          : "bg-orange-100 text-orange-700"
+                      )}>
+                        {s.department === "sala" ? "Sala" : "Cucina"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      {s.is_draft ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10.5px] font-semibold text-amber-700">
+                          Bozza
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                          Pubblicato
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
-};
-
-export default Dashboard;
+}
