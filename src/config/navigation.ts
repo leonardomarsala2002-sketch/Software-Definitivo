@@ -8,6 +8,7 @@ import {
   FileText,
   MessageSquare,
   Sparkles,
+  UserCircle,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -31,6 +32,7 @@ export const navItems: NavItem[] = [
   { title: "Orari Admin", url: "/admin-shifts", icon: CalendarDays, section: "main", roles: ["super_admin"], tutorialId: "nav-admin-shifts" },
   { title: "Richieste", url: "/requests", icon: Inbox, section: "main", roles: ["admin", "store_manager", "employee"], tutorialId: "nav-requests" },
   { title: "Messaggi", url: "/messages", icon: MessageSquare, section: "main", tutorialId: "nav-messages" },
+  { title: "Il mio profilo", url: "/profile", icon: UserCircle, section: "main", roles: ["employee"] },
   { title: "Dipendenti", url: "/employees", icon: Users, section: "main", roles: ["super_admin", "admin", "store_manager"], tutorialId: "nav-employees" },
   { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles, section: "secondary", roles: ["admin", "store_manager"] },
   { title: "Impostazioni", url: "/settings", icon: Settings, section: "secondary", roles: ["super_admin", "admin", "store_manager"] },

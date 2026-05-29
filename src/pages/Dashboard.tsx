@@ -8,10 +8,11 @@ import { Line } from "react-chartjs-2";
 import {
   Users, TrendingUp, AlertTriangle, CheckCircle2,
   Clock, ArrowUpRight, ArrowDownRight, ChevronRight,
-  Euro, Calendar, XCircle,
+  Euro, Calendar, XCircle, Inbox, User,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList } from "@/hooks/useEmployees";
+import { useMyRequests } from "@/hooks/useRequests";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -107,10 +108,209 @@ const REQUEST_TYPE: Record<string, string> = {
   giorno_libero: "Giorno libero",
 };
 
+/* ─── Employee Dashboard ────────────────────────────────────────────── */
+
+const MONTHS_IT_EMP = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+const DAYS_EMP = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
+
+function fmtDateEmp(iso: string) {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${DAYS_EMP[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS_IT_EMP[d.getUTCMonth()]}`;
+}
+
+const EMP_REQUEST_TYPE: Record<string, string> = {
+  ferie: "Ferie", permesso: "Permesso", malattia: "Malattia",
+  mattina_libera: "Mattina libera", sera_libera: "Sera libera",
+  giorno_libero: "Giorno libero", morning_off: "Mattina libera",
+  evening_off: "Sera libera", full_day_off: "Giorno libero",
+};
+
+const EMP_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:  { label: "In attesa",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  approved: { label: "Approvata",  cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  rejected: { label: "Rifiutata",  cls: "bg-red-50 text-red-600 border-red-200" },
+};
+
+function EmployeeDashboard() {
+  const { user, activeStore, stores: authStores } = useAuth();
+  const storeId = activeStore?.id ?? authStores[0]?.id;
+
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile-dash", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", user!.id).single();
+      return data;
+    },
+  });
+
+  const { data: upcomingShifts = [] } = useQuery({
+    queryKey: ["my-shifts-dash", user?.id, storeId],
+    enabled: !!user?.id && !!storeId,
+    queryFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const in7 = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+      const { data } = await supabase
+        .from("shifts")
+        .select("id, date, start_time, end_time, department, is_draft")
+        .eq("user_id", user!.id)
+        .eq("store_id", storeId!)
+        .eq("is_day_off", false)
+        .gte("date", today)
+        .lte("date", in7)
+        .order("date");
+      return data ?? [];
+    },
+  });
+
+  const { data: myRequests = [] } = useMyRequests(user?.id);
+
+  const stats = useMemo(() => ({
+    approved: myRequests.filter((r) => r.status === "approved").length,
+    pending:  myRequests.filter((r) => r.status === "pending").length,
+    ferieDays: myRequests.filter((r) => r.status === "approved" && r.request_type === "ferie").length,
+  }), [myRequests]);
+
+  const firstName = profile?.full_name?.split(" ")[0] ?? "Ciao";
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-5 animate-fade-up">
+      {/* Greeting */}
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Ciao, {firstName} 👋</h1>
+        <p className="mt-0.5 text-[13px] text-slate-400">Ecco la tua situazione di oggi</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {[
+          { label: "Turni questa settimana", value: upcomingShifts.length, icon: <Calendar className="h-4 w-4" />, color: "text-indigo-600", bg: "bg-indigo-50", href: "/team-calendar" },
+          { label: "Richieste approvate",    value: stats.approved,         icon: <CheckCircle2 className="h-4 w-4" />, color: "text-emerald-600", bg: "bg-emerald-50", href: "/requests" },
+          { label: "In attesa",              value: stats.pending,          icon: <AlertTriangle className="h-4 w-4" />, color: "text-amber-600", bg: "bg-amber-50", href: "/requests" },
+        ].map((s) => (
+          <Link
+            key={s.label}
+            to={s.href}
+            className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+          >
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", s.bg, s.color)}>
+              {s.icon}
+            </span>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-slate-900 leading-none">{s.value}</p>
+              <p className="mt-0.5 text-[10.5px] text-slate-400 leading-tight">{s.label}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-5">
+        {/* Upcoming shifts */}
+        <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <h2 className="text-[14px] font-bold text-slate-900">I tuoi prossimi turni</h2>
+            <Link to="/team-calendar" className="text-[11px] font-medium text-indigo-600 hover:underline">
+              Vedi calendario →
+            </Link>
+          </div>
+          {upcomingShifts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <Calendar className="mb-2 h-8 w-8 text-indigo-200" />
+              <p className="text-[13px]">Nessun turno nei prossimi 7 giorni</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {upcomingShifts.map((s) => {
+                const isSala = s.department === "sala";
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <div className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold",
+                      isSala ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700"
+                    )}>
+                      {isSala ? "S" : "C"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-slate-800">{fmtDateEmp(s.date)}</p>
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <Clock className="h-3 w-3" />
+                        {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)} · {isSala ? "Sala" : "Cucina"}
+                      </p>
+                    </div>
+                    {s.is_draft && (
+                      <span className="rounded-full border border-dashed border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        Bozza
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right column */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
+          {/* Recent requests */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h2 className="text-[14px] font-bold text-slate-900">Ultime richieste</h2>
+              <Link to="/requests" className="text-[11px] font-medium text-indigo-600 hover:underline">
+                Tutte →
+              </Link>
+            </div>
+            {myRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                <Inbox className="mb-2 h-6 w-6 text-indigo-200" />
+                <p className="text-[12px]">Nessuna richiesta</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {myRequests.slice(0, 4).map((req) => {
+                  const st = EMP_STATUS[req.status] ?? EMP_STATUS["pending"];
+                  return (
+                    <div key={req.id} className="flex items-center gap-3 px-5 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12.5px] font-semibold text-slate-800">
+                          {EMP_REQUEST_TYPE[req.request_type] ?? req.request_type}
+                        </p>
+                        <p className="text-[11px] text-slate-400">{req.request_date}</p>
+                      </div>
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", st.cls)}>
+                        {st.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Quick links */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-5">
+            <h2 className="mb-3 text-[14px] font-bold text-slate-900">Accessi rapidi</h2>
+            <div className="flex flex-col gap-2">
+              <Link to="/profile" className="flex items-center gap-2.5 rounded-xl border border-slate-200 px-4 py-2.5 text-[12.5px] font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 transition-all">
+                <User className="h-4 w-4 text-indigo-400" />Il mio profilo
+              </Link>
+              <Link to="/requests" className="flex items-center gap-2.5 rounded-xl border border-slate-200 px-4 py-2.5 text-[12.5px] font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 transition-all">
+                <Inbox className="h-4 w-4 text-indigo-400" />Invia richiesta
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main component ───────────────────────────────────────────────── */
 
 export default function Dashboard() {
   const { role, activeStore, stores: authStores } = useAuth();
+
+  if (role === "employee") return <EmployeeDashboard />;
+
   const storeId = activeStore?.id;
 
   const storeIds = useMemo(() => {

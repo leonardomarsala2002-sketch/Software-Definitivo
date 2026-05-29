@@ -26,6 +26,7 @@ import Messages from "@/pages/Messages";
 import AIAssistant from "@/pages/AIAssistant";
 import SchedulerView from "@/pages/SchedulerView";
 import SettingsView from "@/pages/SettingsView";
+import EmployeeProfile from "@/pages/EmployeeProfile";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="/ai-assistant" element={<AIAssistant />} />
                 <Route path="/scheduler" element={<SchedulerView />} />
                 <Route path="/settings" element={<SettingsView />} />
+                <Route path="/profile" element={<EmployeeProfile />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
