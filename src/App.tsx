@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { RoleRoute } from "@/components/RoleRoute";
 import { AppShell } from "@/components/AppShell";
 import Dashboard from "@/pages/Dashboard";
 import TeamCalendar from "@/pages/TeamCalendar";
@@ -49,20 +50,24 @@ const App = () => (
                 }
               >
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/team-calendar" element={<TeamCalendar />} />
-                <Route path="/admin-shifts" element={<AdminShiftsViewer />} />
-                <Route path="/personal-calendar" element={<PersonalCalendar />} />
+                {/* Tutti i ruoli autenticati */}
                 <Route path="/requests" element={<Requests />} />
-                <Route path="/employees" element={<Employees />} />
-                <Route path="/store-settings" element={<StoreSettings />} />
-                <Route path="/audit-log" element={<AuditLog />} />
-                <Route path="/invitations" element={<Invitations />} />
                 <Route path="/info" element={<Info />} />
-                <Route path="/manage-stores" element={<ManageStores />} />
-                <Route path="/ai-assistant" element={<AIAssistant />} />
-                <Route path="/scheduler" element={<SchedulerView />} />
-                <Route path="/settings" element={<SettingsView />} />
-                <Route path="/profile" element={<EmployeeProfile />} />
+                {/* Solo employee */}
+                <Route path="/personal-calendar" element={<RoleRoute roles={["employee"]}><PersonalCalendar /></RoleRoute>} />
+                <Route path="/profile" element={<RoleRoute roles={["employee"]}><EmployeeProfile /></RoleRoute>} />
+                {/* Admin, Manager, SuperAdmin */}
+                <Route path="/team-calendar" element={<RoleRoute roles={["admin", "store_manager", "super_admin", "employee"]}><TeamCalendar /></RoleRoute>} />
+                <Route path="/scheduler" element={<RoleRoute roles={["admin", "store_manager", "super_admin"]}><SchedulerView /></RoleRoute>} />
+                <Route path="/employees" element={<RoleRoute roles={["super_admin", "admin", "store_manager"]}><Employees /></RoleRoute>} />
+                <Route path="/store-settings" element={<RoleRoute roles={["super_admin", "admin", "store_manager"]}><StoreSettings /></RoleRoute>} />
+                <Route path="/audit-log" element={<RoleRoute roles={["super_admin", "admin", "store_manager"]}><AuditLog /></RoleRoute>} />
+                <Route path="/settings" element={<RoleRoute roles={["super_admin", "admin", "store_manager"]}><SettingsView /></RoleRoute>} />
+                <Route path="/ai-assistant" element={<RoleRoute roles={["admin", "store_manager"]}><AIAssistant /></RoleRoute>} />
+                {/* Solo SuperAdmin */}
+                <Route path="/admin-shifts" element={<RoleRoute roles={["super_admin"]}><AdminShiftsViewer /></RoleRoute>} />
+                <Route path="/invitations" element={<RoleRoute roles={["super_admin"]}><Invitations /></RoleRoute>} />
+                <Route path="/manage-stores" element={<RoleRoute roles={["super_admin"]}><ManageStores /></RoleRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
