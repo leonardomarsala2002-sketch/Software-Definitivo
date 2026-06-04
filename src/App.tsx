@@ -22,7 +22,6 @@ import AcceptInvite from "@/pages/AcceptInvite";
 import SetPassword from "@/pages/SetPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
-import Messages from "@/pages/Messages";
 import AIAssistant from "@/pages/AIAssistant";
 import SchedulerView from "@/pages/SchedulerView";
 import SettingsView from "@/pages/SettingsView";
@@ -54,7 +53,6 @@ const App = () => (
                 <Route path="/admin-shifts" element={<AdminShiftsViewer />} />
                 <Route path="/personal-calendar" element={<PersonalCalendar />} />
                 <Route path="/requests" element={<Requests />} />
-                <Route path="/messages" element={<Messages />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/store-settings" element={<StoreSettings />} />
                 <Route path="/audit-log" element={<AuditLog />} />

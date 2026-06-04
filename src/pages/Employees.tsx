@@ -18,9 +18,9 @@ function getInitials(name: string | null) {
 }
 
 const DEPT_CONFIG = {
-  sala: { label: "Sala", avatarBg: "bg-indigo-100 text-indigo-700", badge: "bg-indigo-100 text-indigo-700" },
-  cucina: { label: "Cucina", avatarBg: "bg-orange-100 text-orange-700", badge: "bg-orange-100 text-orange-700" },
-  default: { label: "—", avatarBg: "bg-slate-100 text-slate-500", badge: "bg-slate-100 text-slate-500" },
+  sala: { label: "Sala", avatarBg: "bg-accent text-primary", badge: "bg-accent text-primary" },
+  cucina: { label: "Cucina", avatarBg: "bg-warning/10 text-warning", badge: "bg-warning/10 text-warning" },
+  default: { label: "—", avatarBg: "bg-muted text-muted-foreground", badge: "bg-muted text-muted-foreground" },
 };
 
 const ROLE_LABEL: Record<string, string> = {
@@ -99,8 +99,8 @@ const Employees = () => {
       <div
         onClick={() => canClick && handleRowClick(emp)}
         className={cn(
-          "group flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-200",
-          canClick ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : "opacity-60"
+          "group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-card transition-all duration-200",
+          canClick ? "cursor-pointer hover:shadow-card-hover hover:-translate-y-0.5" : "opacity-60"
         )}
       >
         {/* Top row */}
@@ -117,7 +117,7 @@ const Employees = () => {
               title={ready ? "Pronto per generazione" : "Dati incompleti"}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full",
-                ready ? "bg-emerald-50 text-emerald-500" : "bg-amber-50 text-amber-500"
+                ready ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
               )}
             >
               {ready ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
@@ -126,7 +126,7 @@ const Employees = () => {
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                emp.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                emp.is_active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
               )}
             >
               {emp.is_active ? "Attivo" : "Inattivo"}
@@ -136,8 +136,8 @@ const Employees = () => {
 
         {/* Info */}
         <div>
-          <p className="font-bold text-slate-900 truncate">{emp.full_name ?? "—"}</p>
-          <p className="mt-0.5 text-[12px] text-slate-400 truncate">{emp.email ?? "—"}</p>
+          <p className="font-bold text-foreground truncate">{emp.full_name ?? "—"}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground truncate">{emp.email ?? "—"}</p>
         </div>
 
         {/* Footer badges */}
@@ -148,17 +148,17 @@ const Employees = () => {
             </span>
           )}
           {emp.weekly_contract_hours && (
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10.5px] font-medium text-slate-500">
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
               {emp.weekly_contract_hours}h/sett
             </span>
           )}
           {emp.app_role && role !== "employee" && (
-            <span className="rounded-full border border-indigo-200 px-2.5 py-0.5 text-[10.5px] font-medium text-indigo-600">
+            <span className="rounded-full border border-primary/30 px-2.5 py-0.5 text-[10.5px] font-medium text-primary">
               {ROLE_LABEL[emp.app_role] ?? emp.app_role}
             </span>
           )}
           {emp.primary_store_name && (
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10.5px] font-medium text-slate-500 truncate max-w-[120px]">
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10.5px] font-medium text-muted-foreground truncate max-w-[120px]">
               {emp.primary_store_name}
             </span>
           )}
@@ -172,15 +172,15 @@ const Employees = () => {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Dipendenti</h1>
-          <p className="mt-0.5 text-[13px] text-slate-400">
+          <h1 className="text-xl font-bold text-foreground">Dipendenti</h1>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             {totalCount} totali · {activeCount} attivi · {readyCount} pronti per generazione
           </p>
         </div>
         {role === "super_admin" && (
           <button
             onClick={() => navigate("/invitations")}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-95"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-95"
           >
             <Plus className="h-4 w-4" />
             Nuovo invito
@@ -191,26 +191,26 @@ const Employees = () => {
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cerca per nome o email…"
-            className="pl-9 h-9 rounded-xl border-slate-200 bg-white text-[13px] shadow-sm"
+            className="pl-9 h-9 text-[13px]"
           />
         </div>
 
         {/* Dept filter pills */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 bg-muted rounded-full p-0.5">
           {(["all", "sala", "cucina"] as DeptFilter[]).map((d) => (
             <button
               key={d}
               onClick={() => setDeptFilter(d)}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all",
+                "rounded-full px-3 py-1 text-[12px] font-medium transition-all",
                 deptFilter === d
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "bg-white text-slate-500 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               {d === "all" ? "Tutti" : d === "sala" ? "Sala" : "Cucina"}
@@ -233,17 +233,17 @@ const Employees = () => {
       {/* Stats strip */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { icon: <Users className="h-4 w-4" />, label: "Totali", value: totalCount, color: "text-indigo-600", bg: "bg-indigo-50" },
-          { icon: <UserCheck className="h-4 w-4" />, label: "Attivi", value: activeCount, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { icon: <Users className="h-4 w-4" />, label: "Totali", value: totalCount, color: "text-primary", bg: "bg-accent" },
+          { icon: <UserCheck className="h-4 w-4" />, label: "Attivi", value: activeCount, color: "text-success", bg: "bg-success/10" },
           { icon: <CheckCircle2 className="h-4 w-4" />, label: "Pronti", value: readyCount, color: "text-violet-600", bg: "bg-violet-50" },
         ].map((s) => (
-          <div key={s.label} className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
-            <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", s.bg, s.color)}>
+          <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-card">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", s.bg, s.color)}>
               {s.icon}
             </span>
-            <div>
-              <p className="text-lg font-bold text-slate-900 leading-none">{s.value}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">{s.label}</p>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-foreground leading-none">{s.value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.label}</p>
             </div>
           </div>
         ))}
@@ -257,12 +257,12 @@ const Employees = () => {
           ))}
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white py-16 text-slate-400">
+        <div className="flex flex-col items-center rounded-xl border border-border bg-card py-16 text-muted-foreground">
           <AlertTriangle className="mb-3 h-8 w-8 text-red-300" />
           <p className="text-[14px] font-medium">Errore nel caricamento</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white py-16 text-slate-400">
+        <div className="flex flex-col items-center rounded-xl border border-border bg-card py-16 text-muted-foreground">
           <Users className="mb-3 h-8 w-8 text-indigo-200" />
           <p className="text-[14px] font-medium text-slate-500">
             {search || deptFilter !== "all" ? "Nessun risultato" : "Nessun dipendente"}
