@@ -14,16 +14,9 @@ const THEME_KEY = "app-theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // Check localStorage first
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(THEME_KEY) as Theme | null;
-      if (stored === "light" || stored === "dark") {
-        return stored;
-      }
-      // Check system preference
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        return "dark";
-      }
+      if (stored === "light" || stored === "dark") return stored;
     }
     return "light";
   });
