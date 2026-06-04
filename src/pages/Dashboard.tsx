@@ -9,7 +9,7 @@ import { Line } from "react-chartjs-2";
 import {
   Users, TrendingUp, AlertTriangle, CheckCircle2,
   Clock, ArrowUpRight, ArrowDownRight, ChevronRight,
-  Euro, Calendar, XCircle, Inbox, User,
+  Euro, Calendar, XCircle, Inbox, User, CalendarCheck, Store,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList } from "@/hooks/useEmployees";
@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { DailyPerformanceCard } from "@/components/dashboard/DailyPerformanceCard";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -175,10 +176,30 @@ function EmployeeDashboard() {
 
   const { data: myRequests = [] } = useMyRequests(user?.id);
 
+  // Ferie approvate nell'anno corrente
+  const currentYear = new Date().getFullYear();
+  const { data: approvedVacations = [] } = useQuery({
+    queryKey: ["my-vacations", user?.id, currentYear],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("time_off_requests")
+        .select("request_date")
+        .eq("user_id", user!.id)
+        .eq("request_type", "ferie")
+        .eq("status", "approved")
+        .gte("request_date", `${currentYear}-01-01`)
+        .lte("request_date", `${currentYear}-12-31`);
+      return data ?? [];
+    },
+  });
+
   const stats = useMemo(() => ({
-    approved: myRequests.filter((r) => r.status === "approved").length,
-    pending:  myRequests.filter((r) => r.status === "pending").length,
-  }), [myRequests]);
+    approved:     myRequests.filter((r) => r.status === "approved").length,
+    pending:      myRequests.filter((r) => r.status === "pending").length,
+    ferieDaysUsed: approvedVacations.length,
+    ferieRemaining: Math.max(0, 20 - approvedVacations.length),
+  }), [myRequests, approvedVacations]);
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "ciao";
 
@@ -290,6 +311,39 @@ function EmployeeDashboard() {
         </div>
       </motion.div>
 
+      {/* Saldo ferie */}
+      <motion.div variants={fadeItem} className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-[13px] font-bold text-foreground flex items-center gap-2">
+            <CalendarCheck className="h-4 w-4 text-primary" />
+            Saldo Ferie {currentYear}
+          </h2>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-border">
+          {[
+            { label: "Giorni spettanti", value: 20, color: "text-foreground", bg: "bg-muted" },
+            { label: "Usati", value: stats.ferieDaysUsed, color: "text-warning", bg: "bg-warning/10" },
+            { label: "Rimasti", value: stats.ferieRemaining, color: stats.ferieRemaining <= 3 ? "text-destructive" : "text-success", bg: stats.ferieRemaining <= 3 ? "bg-destructive/10" : "bg-success/10" },
+          ].map(s => (
+            <div key={s.label} className="flex flex-col items-center justify-center gap-1 px-3 py-4">
+              <span className={cn("text-2xl font-bold", s.color)}>{s.value}</span>
+              <span className="text-[10px] text-muted-foreground text-center leading-tight">{s.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pb-3">
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${Math.min(100, (stats.ferieDaysUsed / 20) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            {stats.ferieDaysUsed} di 20 giorni utilizzati · standard contratto base
+          </p>
+        </div>
+      </motion.div>
+
       <motion.div variants={fadeItem} className="rounded-xl border border-border bg-card shadow-card p-4">
         <h2 className="mb-2.5 text-[13px] font-bold text-foreground">Accessi rapidi</h2>
         <div className="flex flex-col gap-2">
@@ -319,6 +373,24 @@ function AdminDashboard() {
   }, [storeId, authStores]);
 
   const { data: employees = [] } = useEmployeeList(storeIds.length ? storeIds : undefined);
+
+  // Super admin: panoramica cross-store
+  const { data: crossStore } = useQuery({
+    queryKey: ["cross-store-summary"],
+    enabled: role === "super_admin",
+    queryFn: async () => {
+      const [empRes, reqRes, storeRes] = await Promise.all([
+        supabase.from("employee_details").select("id", { count: "exact", head: true }).eq("is_active", true),
+        supabase.from("time_off_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        supabase.from("stores").select("id", { count: "exact", head: true }).eq("is_active", true),
+      ]);
+      return {
+        totalEmployees: empRes.count ?? 0,
+        totalPending:   reqRes.count ?? 0,
+        totalStores:    storeRes.count ?? 0,
+      };
+    },
+  });
 
   const { data: pendingRequests = [], refetch: refetchRequests } = useQuery({
     queryKey: ["pending-requests-dashboard", storeId],
@@ -463,6 +535,26 @@ function AdminDashboard() {
       initial="hidden"
       animate="show"
     >
+      {/* Super admin: banner cross-store */}
+      {role === "super_admin" && crossStore && (
+        <motion.div variants={fadeItem} className="flex items-center gap-3 rounded-xl border border-primary/20 bg-accent px-4 py-3">
+          <Store className="h-4 w-4 text-primary shrink-0" />
+          <p className="text-[12px] text-foreground">
+            <span className="font-bold text-primary">{crossStore.totalStores} store attivi</span>
+            {" · "}
+            <span className="font-bold">{crossStore.totalEmployees}</span>
+            <span className="text-muted-foreground"> dipendenti attivi in totale</span>
+            {crossStore.totalPending > 0 && (
+              <>
+                {" · "}
+                <span className="font-bold text-warning">{crossStore.totalPending} richieste</span>
+                <span className="text-muted-foreground"> in sospeso su tutti i store</span>
+              </>
+            )}
+          </p>
+        </motion.div>
+      )}
+
       {/* KPI grid */}
       <motion.div variants={fadeItem} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard label="Dipendenti" numericValue={totalEmployees}
@@ -644,6 +736,13 @@ function AdminDashboard() {
           </>
         )}
       </motion.div>
+
+      {/* Produttività & Budget — solo se c'è uno store attivo */}
+      {storeId && (
+        <motion.div variants={fadeItem}>
+          <DailyPerformanceCard />
+        </motion.div>
+      )}
     </motion.div>
   );
 }

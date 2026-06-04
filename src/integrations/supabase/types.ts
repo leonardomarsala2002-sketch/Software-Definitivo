@@ -186,6 +186,53 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_performance: {
+        Row: {
+          id: string
+          store_id: string
+          date: string
+          revenue_actual: number
+          covers_count: number
+          budget_daily: number
+          notes: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          date: string
+          revenue_actual?: number
+          covers_count?: number
+          budget_daily?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          store_id?: string
+          date?: string
+          revenue_actual?: number
+          covers_count?: number
+          budget_daily?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_performance_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_availability: {
         Row: {
           availability_type: Database["public"]["Enums"]["availability_type"]
