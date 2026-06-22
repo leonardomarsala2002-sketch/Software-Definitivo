@@ -104,8 +104,8 @@ export function DayDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] p-0 gap-0 rounded-2xl border-border bg-card">
-        <DialogHeader className="px-6 pt-5 pb-3 border-b border-border">
+      <DialogContent className="max-w-[96vw] sm:max-w-4xl max-h-[85vh] p-0 gap-0 rounded-2xl border-border bg-card">
+        <DialogHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-border">
           <DialogTitle className="capitalize text-base text-foreground">{dateLabel}</DialogTitle>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant="outline" className="w-fit text-xs capitalize">{department}</Badge>
@@ -118,7 +118,7 @@ export function DayDetailDialog({
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(85vh-80px)]">
-          <div className="px-6 py-4">
+          <div className="px-3 py-3 sm:px-6 sm:py-4">
             {/* Rebalance banner */}
             {pendingManualEdits.size > 0 && canEdit && onRebalanceAfterEdit && (
               <div className="mb-3 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5">
@@ -143,78 +143,83 @@ export function DayDetailDialog({
               </div>
             )}
 
-            {/* Timeline header */}
-            <div className="flex mb-1">
-              <div className="w-32 shrink-0" />
-              <div className="flex-1 flex">
-                {hours.map((h) => (
-                  <div
-                    key={h}
-                    className="text-[10px] text-muted-foreground font-medium text-center"
-                    style={{ width: `${100 / hours.length}%` }}
-                  >
-                    {String(h === 24 ? 0 : h).padStart(2, "0")}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Grid lines */}
-            <div className="space-y-1">
-              {employees.map((emp) => {
-                const empShifts = userShifts.get(emp.user_id) ?? [];
-                const isDayOff = empShifts.some((s) => s.is_day_off);
-                const name = emp.full_name ?? "—";
-
-                return (
-                  <div key={emp.user_id} className="flex items-center group min-h-[36px]">
-                    <div className="w-32 shrink-0 pr-2">
-                      <button
-                        type="button"
-                        className={cn(
-                          "text-xs font-medium text-foreground truncate block text-left w-full",
-                          canEdit && "hover:text-primary hover:underline cursor-pointer"
-                        )}
-                        onClick={() => canEdit && setSelectedEmployee(emp)}
-                        disabled={!canEdit}
+            {/* Timeline — horizontally scrollable on small screens */}
+            <div className="overflow-x-auto -mx-1">
+              <div className="min-w-[420px] px-1">
+                {/* Hour labels */}
+                <div className="flex mb-1">
+                  <div className="w-28 shrink-0 sm:w-36" />
+                  <div className="flex-1 flex">
+                    {hours.map((h) => (
+                      <div
+                        key={h}
+                        className="text-[10px] text-muted-foreground font-medium text-center"
+                        style={{ width: `${100 / hours.length}%` }}
                       >
-                        {name}
-                      </button>
-                    </div>
-
-                    <div className="flex-1 relative h-8 bg-secondary/60 rounded-lg overflow-hidden border border-border/40">
-                      {hours.map((h, idx) => (
-                        <div
-                          key={h}
-                          className="absolute top-0 bottom-0 border-l border-border/20"
-                          style={{ left: `${(idx / hours.length) * 100}%` }}
-                        />
-                      ))}
-
-                      {isDayOff ? (
-                        <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
-                          <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
-                        </div>
-                      ) : (
-                        empShifts
-                          .filter((s) => !s.is_day_off && s.start_time && s.end_time)
-                          .map((s) => (
-                            <DraggableShiftBar
-                              key={s.id}
-                              shift={s}
-                              openH={openH}
-                              totalSpan={totalSpan}
-                              canEdit={canEdit && !isArchived}
-                              onShiftUpdate={handleDragUpdate}
-                              allowedEntries={allowedEntries}
-                              allowedExits={allowedExits}
-                            />
-                          ))
-                      )}
-                    </div>
+                        {String(h === 24 ? 0 : h).padStart(2, "0")}
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+
+                {/* Employee rows */}
+                <div className="space-y-1.5">
+                  {employees.map((emp) => {
+                    const empShifts = userShifts.get(emp.user_id) ?? [];
+                    const isDayOff = empShifts.some((s) => s.is_day_off);
+                    const name = emp.full_name ?? "—";
+
+                    return (
+                      <div key={emp.user_id} className="flex items-center min-h-[34px] sm:min-h-[38px]">
+                        <div className="w-28 shrink-0 pr-2 sm:w-36">
+                          <button
+                            type="button"
+                            className={cn(
+                              "text-[11px] sm:text-xs font-medium text-foreground truncate block text-left w-full",
+                              canEdit && "hover:text-primary hover:underline cursor-pointer"
+                            )}
+                            onClick={() => canEdit && setSelectedEmployee(emp)}
+                            disabled={!canEdit}
+                          >
+                            {name}
+                          </button>
+                        </div>
+
+                        <div className="flex-1 relative h-8 bg-secondary/60 rounded-lg overflow-hidden border border-border/40">
+                          {hours.map((h, idx) => (
+                            <div
+                              key={h}
+                              className="absolute top-0 bottom-0 border-l border-border/20"
+                              style={{ left: `${(idx / hours.length) * 100}%` }}
+                            />
+                          ))}
+
+                          {isDayOff ? (
+                            <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                              <span className="text-[10px] font-semibold text-destructive">RIPOSO</span>
+                            </div>
+                          ) : (
+                            empShifts
+                              .filter((s) => !s.is_day_off && s.start_time && s.end_time)
+                              .map((s) => (
+                                <DraggableShiftBar
+                                  key={s.id}
+                                  shift={s}
+                                  openH={openH}
+                                  totalSpan={totalSpan}
+                                  canEdit={canEdit && !isArchived}
+                                  onShiftUpdate={handleDragUpdate}
+                                  allowedEntries={allowedEntries}
+                                  allowedExits={allowedExits}
+                                />
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {employees.length === 0 && (
