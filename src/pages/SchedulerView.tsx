@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Sparkles, RefreshCw, Clock, Users, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, RefreshCw, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList } from "@/hooks/useEmployees";
 import { useQuery } from "@tanstack/react-query";
@@ -9,8 +9,9 @@ import { Link } from "react-router-dom";
 
 /* ─── helpers ───────────────────────────────────────────────────────── */
 
-const DAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-const MONTHS_IT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+const DAYS_SHORT = ["L", "M", "M", "G", "V", "S", "D"];
+const DAYS_LONG  = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+const MONTHS_IT  = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
 function getMondayOfWeek(offset: number): Date {
   const today = new Date();
@@ -29,7 +30,7 @@ function getWeekDates(monday: Date): string[] {
   });
 }
 
-function fmtDate(iso: string): string {
+function fmtDateShort(iso: string): string {
   const d = new Date(iso + "T00:00:00Z");
   return `${d.getUTCDate()} ${MONTHS_IT[d.getUTCMonth()]}`;
 }
@@ -40,9 +41,23 @@ function shiftDuration(start: string, end: string): number {
   return Math.max(0, eh - sh);
 }
 
-/* ─── Shift cell ─────────────────────────────────────────────────────── */
+function fmtTime(t: string): string {
+  // "09:00:00" → "09:00" → keep as "09:00"
+  return t.slice(0, 5);
+}
 
-interface ShiftCellData {
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+/* ─── Shift pill ─────────────────────────────────────────────────────── */
+
+interface ShiftData {
   id: string;
   start_time: string;
   end_time: string;
@@ -50,32 +65,38 @@ interface ShiftCellData {
   status: string;
 }
 
-function ShiftPill({ shift }: { shift: ShiftCellData }) {
+function ShiftPill({ shift }: { shift: ShiftData }) {
   const isDraft = shift.status === "draft";
-  const isSala = shift.department === "sala";
-  const hours = shiftDuration(shift.start_time, shift.end_time);
+  const isSala  = shift.department === "sala";
+  const hours   = shiftDuration(shift.start_time, shift.end_time);
+  const start   = fmtTime(shift.start_time);
+  const end     = fmtTime(shift.end_time);
+
+  const base = cn(
+    isDraft
+      ? "border border-dashed border-amber-300 bg-amber-50 text-amber-700"
+      : isSala
+      ? "bg-indigo-100 text-indigo-800"
+      : "bg-orange-100 text-orange-800"
+  );
 
   return (
-    <div
-      className={cn(
-        "rounded-lg px-2 py-1.5 text-[11px] font-semibold leading-tight transition-all hover:shadow-sm",
-        isDraft
-          ? "border border-dashed border-amber-300 bg-amber-50 text-amber-700"
-          : isSala
-          ? "bg-indigo-100 text-indigo-800"
-          : "bg-orange-100 text-orange-800"
-      )}
-    >
-      <div className="flex items-center gap-1">
-        <Clock className="h-2.5 w-2.5 shrink-0" />
-        <span>{shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}</span>
+    <div className={cn(base, "rounded text-center leading-none px-0.5 py-0.5 sm:rounded-lg sm:px-2 sm:py-1.5 sm:text-left")}>
+      {/* Mobile: stacked start / end */}
+      <div className="sm:hidden">
+        <div className="text-[9px] font-bold tabular-nums">{start}</div>
+        <div className="text-[8px] font-medium tabular-nums opacity-75">{end}</div>
       </div>
-      <div className="mt-0.5 text-[10px] opacity-70">{hours}h · {isSala ? "Sala" : "Cucina"}</div>
+      {/* Desktop: inline range + hours */}
+      <div className="hidden sm:block">
+        <div className="text-[11px] font-semibold tabular-nums">{start}–{end}</div>
+        <div className="mt-0.5 text-[10px] opacity-70">{hours}h · {isSala ? "Sala" : "Cucina"}</div>
+      </div>
     </div>
   );
 }
 
-/* ─── Main component ─────────────────────────────────────────────────── */
+/* ─── Main ───────────────────────────────────────────────────────────── */
 
 type DeptFilter = "all" | "sala" | "cucina";
 
@@ -87,8 +108,9 @@ export default function SchedulerView() {
 
   const storeId = activeStore?.id ?? authStores[0]?.id;
 
-  const monday = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
+  const monday   = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
   const weekDates = useMemo(() => getWeekDates(monday), [monday]);
+  const today    = new Date().toISOString().split("T")[0];
 
   const { data: employees = [] } = useEmployeeList(storeId ? [storeId] : undefined);
 
@@ -122,16 +144,13 @@ export default function SchedulerView() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Per ogni giorno: rapporto slot-coperti / slot-richiesti
   const dailyCoverage = useMemo(() => {
     return weekDates.map((date) => {
-      // DB: day_of_week Mon=0..Sun=6 (same as edge function getDayOfWeek)
-      const d = new Date(date + "T00:00:00Z");
+      const d   = new Date(date + "T00:00:00Z");
       const dow = (d.getUTCDay() + 6) % 7;
       const dayCovReqs = coverageReqs.filter((c) => c.day_of_week === dow);
       if (dayCovReqs.length === 0) return null;
-      let covered = 0;
-      let total = 0;
+      let covered = 0, total = 0;
       for (const req of dayCovReqs) {
         const h = parseInt(req.hour_slot.split(":")[0], 10);
         const assigned = shifts.filter((s) => {
@@ -141,7 +160,7 @@ export default function SchedulerView() {
           const eh = parseInt(s.end_time.split(":")[0], 10) || 24;
           return h >= sh && h < eh;
         }).length;
-        total += req.min_staff_required;
+        total   += req.min_staff_required;
         covered += Math.min(assigned, req.min_staff_required);
       }
       return total > 0 ? Math.round((covered / total) * 100) : 100;
@@ -155,74 +174,75 @@ export default function SchedulerView() {
 
   const getShiftsForCell = (userId: string, date: string) =>
     shifts.filter(
-      (s) =>
-        s.user_id === userId &&
-        s.date === date &&
-        (showDraft || s.status === "published")
+      (s) => s.user_id === userId && s.date === date && (showDraft || s.status === "published")
     );
 
-  const weekLabel = `${fmtDate(weekDates[0])} – ${fmtDate(weekDates[6])}`;
-  const today = new Date().toISOString().split("T")[0];
-
   const canGenerate = ["admin", "store_manager", "super_admin"].includes(role ?? "");
+  const draftCount  = shifts.filter((s) => s.status === "draft").length;
+  const weekLabel   = `${fmtDateShort(weekDates[0])} – ${fmtDateShort(weekDates[6])}`;
 
-  const draftCount = shifts.filter((s) => s.status === "draft").length;
-  const publishedCount = shifts.filter((s) => s.status === "published").length;
-
+  /* ─── render ─────────────────────────────────────────────────────── */
   return (
-    <div className="flex h-full flex-col gap-4 animate-fade-up">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full flex-col gap-3 animate-fade-up">
+      <style>{`
+        .sched-grid { grid-template-columns: 36px repeat(7, 1fr); }
+        @media (min-width: 640px) {
+          .sched-grid { grid-template-columns: 160px repeat(7, minmax(88px, 1fr)); }
+        }
+      `}</style>
+
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Shift Scheduler</h1>
-          <p className="mt-0.5 text-[13px] text-slate-400">
-            {publishedCount} turni pubblicati · {draftCount} in bozza
+          <h1 className="text-lg font-bold text-slate-900 sm:text-xl">Scheduler</h1>
+          <p className="text-[11px] text-slate-400">
+            {draftCount > 0 ? `${draftCount} in bozza` : "Nessuna bozza"}
           </p>
         </div>
-
         {canGenerate && (
           <Link
             to="/team-calendar"
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-95"
+            className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:scale-95"
           >
-            <Sparkles className="h-4 w-4" />
-            Genera Mese
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Genera Mese</span>
+            <span className="sm:hidden">Genera</span>
           </Link>
         )}
       </div>
 
-      {/* Controls bar */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* ── Controls ── */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* Week navigator */}
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
+        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
           <button
             onClick={() => setWeekOffset((o) => o - 1)}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => setWeekOffset(0)}
-            className="rounded-lg px-3 py-1 text-[12px] font-medium text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+            className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-700 whitespace-nowrap"
           >
-            {weekOffset === 0 ? "Questa settimana" : weekLabel}
+            {weekOffset === 0 ? "Questa sett." : weekLabel}
           </button>
           <button
             onClick={() => setWeekOffset((o) => o + 1)}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
 
         {/* Dept filter */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {(["all", "sala", "cucina"] as DeptFilter[]).map((d) => (
             <button
               key={d}
               onClick={() => setDeptFilter(d)}
               className={cn(
-                "rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all",
+                "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all",
                 deptFilter === d
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "bg-white text-slate-500 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
@@ -237,182 +257,198 @@ export default function SchedulerView() {
         <button
           onClick={() => setShowDraft((v) => !v)}
           className={cn(
-            "ml-auto flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all",
+            "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all",
             showDraft
               ? "border-amber-200 bg-amber-50 text-amber-700"
-              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+              : "border-slate-200 bg-white text-slate-400 hover:border-slate-300"
           )}
         >
-          {showDraft ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-          Bozze
+          {showDraft ? "Bozze ✓" : "Bozze"}
         </button>
 
-        {/* Refresh */}
         <button
           onClick={() => refetch()}
-          className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 transition-colors hover:border-indigo-200 hover:text-indigo-600"
-          title="Aggiorna"
+          className="ml-auto rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:border-indigo-200 hover:text-indigo-600"
         >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
         </button>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-auto scrollbar-hide">
-        {/* Day headers */}
-        <div
-          className="sticky top-0 z-10 grid border-b border-slate-100 bg-white/95 backdrop-blur-sm"
-          style={{ gridTemplateColumns: `200px repeat(7, minmax(110px, 1fr))` }}
-        >
-          <div className="flex items-center px-4 py-3">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-              <Users className="h-3.5 w-3.5" />
-              Dipendente
-            </span>
-          </div>
-          {weekDates.map((date, i) => {
-            const isToday = date === today;
-            const pct = dailyCoverage[i];
-            const coverageColor = pct === null ? "" : pct >= 100 ? "bg-success" : pct >= 70 ? "bg-warning" : "bg-destructive";
-            return (
-              <div
-                key={date}
-                className={cn(
-                  "flex flex-col items-center justify-center py-3 px-1 border-l border-slate-100",
-                  isToday && "bg-indigo-50"
-                )}
-              >
-                <span className={cn(
-                  "text-[11px] font-semibold uppercase tracking-wide",
-                  isToday ? "text-indigo-600" : "text-slate-400"
-                )}>
-                  {DAYS[i]}
-                </span>
-                <span className={cn(
-                  "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-bold",
-                  isToday ? "bg-indigo-600 text-white" : "text-slate-700"
-                )}>
-                  {new Date(date + "T00:00:00Z").getUTCDate()}
-                </span>
-                {pct !== null && (
-                  <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", coverageColor)} title={`Copertura: ${pct}%`} />
-                )}
-              </div>
-            );
-          })}
-        </div>
+      {/* ── Grid ── */}
+      <div className="flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="h-full overflow-y-auto">
 
-        {/* Employee rows */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24 text-slate-400">
-            <RefreshCw className="mr-2 h-5 w-5 animate-spin text-indigo-400" />
-            <span className="text-[13px]">Caricamento turni…</span>
-          </div>
-        ) : filteredEmployees.length === 0 ? (
-          <div className="flex flex-col items-center py-20 text-slate-400">
-            <Users className="mb-3 h-8 w-8 text-indigo-200" />
-            <p className="text-[13px]">Nessun dipendente trovato</p>
-          </div>
-        ) : (
-          filteredEmployees.map((emp, empIdx) => (
-            <div
-              key={emp.user_id}
-              className={cn(
-                "grid border-b border-slate-50 hover:bg-slate-50/50 transition-colors",
-                empIdx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
-              )}
-              style={{ gridTemplateColumns: `200px repeat(7, minmax(110px, 1fr))` }}
-            >
-              {/* Employee name */}
-              <div className="flex items-center gap-2.5 border-r border-slate-100 px-4 py-3">
+          {/* Day headers — sticky top */}
+          <div className="sched-grid sticky top-0 z-10 grid border-b border-slate-100 bg-white/95 backdrop-blur-sm">
+            {/* Employee col header */}
+            <div className="flex items-center justify-center sm:justify-start sm:px-4 py-2 border-r border-slate-100">
+              <Users className="h-3.5 w-3.5 text-slate-300" />
+            </div>
+
+            {weekDates.map((date, i) => {
+              const isToday = date === today;
+              const pct     = dailyCoverage[i];
+              const dotColor =
+                pct === null ? "bg-slate-200"
+                : pct >= 100  ? "bg-emerald-400"
+                : pct >= 70   ? "bg-amber-400"
+                : "bg-red-400";
+              const dayNum = new Date(date + "T00:00:00Z").getUTCDate();
+
+              return (
                 <div
+                  key={date}
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-                    emp.department === "sala"
-                      ? "bg-indigo-100 text-indigo-700"
-                      : "bg-orange-100 text-orange-700"
+                    "flex flex-col items-center justify-center py-2 border-l border-slate-100",
+                    isToday && "bg-indigo-50"
                   )}
                 >
-                  {emp.full_name
-                    ?.split(" ")
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join("") ?? "?"}
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-[12.5px] font-semibold text-slate-800">
-                    {emp.full_name ?? "—"}
-                  </p>
-                  <p className="text-[10.5px] text-slate-400">{emp.weekly_contract_hours}h/sett</p>
-                </div>
-              </div>
-
-              {/* Day cells */}
-              {weekDates.map((date) => {
-                const cellShifts = getShiftsForCell(emp.user_id, date);
-                const isToday = date === today;
-                return (
-                  <div
-                    key={date}
-                    className={cn(
-                      "border-l border-slate-100 p-1.5 space-y-1 min-h-[64px]",
-                      isToday && "bg-indigo-50/50"
-                    )}
-                  >
-                    {cellShifts.length === 0 ? (
-                      <div className="flex h-full items-center justify-center">
-                        <span className="text-[11px] text-slate-200">—</span>
-                      </div>
-                    ) : (
-                      cellShifts.map((s) => (
-                        <ShiftPill key={s.id} shift={s as ShiftCellData} />
-                      ))
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))
-        )}
-
-        {/* Coverage summary row — always inside the scrollable grid for horizontal sync */}
-        {coverageReqs.length > 0 && !isLoading && (
-          <div
-            className="grid border-t-2 border-slate-200 bg-slate-50/80 sticky bottom-0 z-10"
-            style={{ gridTemplateColumns: `200px repeat(7, minmax(110px, 1fr))` }}
-          >
-            <div className="flex items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-              Copertura
-            </div>
-            {weekDates.map((date, i) => {
-              const pct = dailyCoverage[i];
-              if (pct === null) return <div key={date} className="border-l border-slate-100 px-2 py-2" />;
-              const color = pct >= 100 ? "bg-emerald-100 text-emerald-700" : pct >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
-              return (
-                <div key={date} className="flex items-center justify-center border-l border-slate-100 px-2 py-2">
-                  <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-bold", color)}>
-                    {pct}%
+                  {/* Mobile: single letter */}
+                  <span className={cn(
+                    "text-[9px] font-bold uppercase tracking-wider sm:hidden",
+                    isToday ? "text-indigo-500" : "text-slate-400"
+                  )}>
+                    {DAYS_SHORT[i]}
                   </span>
+                  {/* Desktop: three-letter */}
+                  <span className={cn(
+                    "hidden text-[10px] font-bold uppercase tracking-wider sm:block",
+                    isToday ? "text-indigo-600" : "text-slate-400"
+                  )}>
+                    {DAYS_LONG[i]}
+                  </span>
+
+                  {/* Date number */}
+                  <span className={cn(
+                    "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold sm:h-6 sm:w-6 sm:text-[13px]",
+                    isToday ? "bg-indigo-600 text-white" : "text-slate-700"
+                  )}>
+                    {dayNum}
+                  </span>
+
+                  {/* Coverage dot */}
+                  {pct !== null && (
+                    <span
+                      className={cn("mt-1 h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5", dotColor)}
+                      title={`Copertura: ${pct}%`}
+                    />
+                  )}
                 </div>
               );
             })}
           </div>
-        )}
+
+          {/* Employee rows */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20 text-slate-400">
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin text-indigo-400" />
+              <span className="text-[12px]">Caricamento…</span>
+            </div>
+          ) : filteredEmployees.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-slate-400">
+              <Users className="mb-2 h-7 w-7 text-indigo-200" />
+              <p className="text-[12px]">Nessun dipendente trovato</p>
+            </div>
+          ) : (
+            filteredEmployees.map((emp, empIdx) => (
+              <div
+                key={emp.user_id}
+                className={cn(
+                  "sched-grid grid border-b border-slate-50 transition-colors hover:bg-slate-50/60",
+                  empIdx % 2 === 0 ? "bg-white" : "bg-slate-50/20"
+                )}
+              >
+                {/* Employee cell */}
+                <div className="flex items-center justify-center sm:justify-start gap-2 border-r border-slate-100 px-1 sm:px-3 py-2">
+                  <div
+                    className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold sm:h-7 sm:w-7 sm:text-[10px]",
+                      emp.department === "sala"
+                        ? "bg-indigo-100 text-indigo-700"
+                        : "bg-orange-100 text-orange-700"
+                    )}
+                  >
+                    {initials(emp.full_name ?? "?")}
+                  </div>
+                  <div className="hidden min-w-0 sm:block">
+                    <p className="truncate text-[12px] font-semibold text-slate-800">
+                      {emp.full_name}
+                    </p>
+                    <p className="text-[10px] text-slate-400">{emp.weekly_contract_hours}h/sett</p>
+                  </div>
+                </div>
+
+                {/* Day cells */}
+                {weekDates.map((date) => {
+                  const cellShifts = getShiftsForCell(emp.user_id, date);
+                  const isToday = date === today;
+                  return (
+                    <div
+                      key={date}
+                      className={cn(
+                        "border-l border-slate-100 p-0.5 sm:p-1 space-y-0.5 min-h-[48px] sm:min-h-[60px]",
+                        isToday && "bg-indigo-50/40"
+                      )}
+                    >
+                      {cellShifts.length === 0 ? (
+                        <div className="flex h-full items-center justify-center">
+                          <span className="text-[10px] text-slate-200">–</span>
+                        </div>
+                      ) : (
+                        cellShifts.map((s) => (
+                          <ShiftPill key={s.id} shift={s as ShiftData} />
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          )}
+
+          {/* Coverage row */}
+          {coverageReqs.length > 0 && !isLoading && (
+            <div className="sched-grid sticky bottom-0 z-10 grid border-t-2 border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-center sm:justify-start sm:px-4 py-2 border-r border-slate-100">
+                <span className="hidden text-[9px] font-semibold uppercase tracking-widest text-slate-400 sm:block">
+                  Copertura
+                </span>
+              </div>
+              {weekDates.map((date, i) => {
+                const pct = dailyCoverage[i];
+                if (pct === null) return <div key={date} className="border-l border-slate-100 py-2" />;
+                const color =
+                  pct >= 100 ? "bg-emerald-100 text-emerald-700"
+                  : pct >= 70 ? "bg-amber-100 text-amber-700"
+                  : "bg-red-100 text-red-700";
+                return (
+                  <div key={date} className="flex items-center justify-center border-l border-slate-100 py-2">
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:text-[9px]", color)}>
+                      {pct}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-indigo-100" />Sala
+      {/* Legend + info */}
+      <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 sm:text-[11px]">
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-sm bg-indigo-100 sm:h-3 sm:w-3" />Sala
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-orange-100" />Cucina
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-sm bg-orange-100 sm:h-3 sm:w-3" />Cucina
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm border border-dashed border-amber-300 bg-amber-50" />Bozza
-        </span>
+        {showDraft && (
+          <span className="flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-amber-300 bg-amber-50 sm:h-3 sm:w-3" />Bozza
+          </span>
+        )}
         <span className="ml-auto">
-          {filteredEmployees.length} dipendenti · settimana {weekLabel}
+          {filteredEmployees.length} dip. · {weekLabel}
         </span>
       </div>
     </div>

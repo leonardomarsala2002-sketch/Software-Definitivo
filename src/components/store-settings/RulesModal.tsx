@@ -29,7 +29,6 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
     max_team_hours_cucina_per_week: rules.max_team_hours_cucina_per_week ?? 240,
     max_daily_team_hours_cucina: rules.max_daily_team_hours_cucina ?? 40,
     // Dipendente
-    min_daily_hours_per_employee: (rules as any).min_daily_hours_per_employee ?? 4,
     max_daily_hours_per_employee: rules.max_daily_hours_per_employee ?? 8,
     max_weekly_hours_per_employee: rules.max_weekly_hours_per_employee ?? 40,
     // Generali
@@ -44,7 +43,6 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
       max_daily_team_hours_sala: rules.max_daily_team_hours_sala ?? 40,
       max_team_hours_cucina_per_week: rules.max_team_hours_cucina_per_week ?? 240,
       max_daily_team_hours_cucina: rules.max_daily_team_hours_cucina ?? 40,
-      min_daily_hours_per_employee: (rules as any).min_daily_hours_per_employee ?? 4,
       max_daily_hours_per_employee: rules.max_daily_hours_per_employee ?? 8,
       max_weekly_hours_per_employee: rules.max_weekly_hours_per_employee ?? 40,
       max_split_shifts_per_employee_per_week: rules.max_split_shifts_per_employee_per_week ?? 3,
@@ -114,7 +112,6 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
         {/* ── DIPENDENTE ── */}
         <SectionHeader emoji="👤" label="Dipendente" />
         <div className="grid grid-cols-1 gap-2.5">
-          <RuleRow label="Min ore giorno" value={form.min_daily_hours_per_employee} onChange={set("min_daily_hours_per_employee")} min={1} max={12} disabled={readOnly} />
           <RuleRow label="Max ore giorno" value={form.max_daily_hours_per_employee} onChange={set("max_daily_hours_per_employee")} min={1} max={16} disabled={readOnly} />
           <RuleRow label="Max ore settimana" value={form.max_weekly_hours_per_employee} onChange={set("max_weekly_hours_per_employee")} min={8} max={60} disabled={readOnly} />
         </div>

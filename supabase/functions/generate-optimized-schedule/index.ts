@@ -442,7 +442,7 @@ async function generateAIStrategies(context: {
   const storeSettingsJSON = {
     regole_store: {
       max_ore_giornaliere_dipendente: context.rules.max_daily_hours_per_employee,
-      min_ore_giornaliere_dipendente: context.rules.min_daily_hours_per_employee,
+      min_ore_giornaliere_dipendente: 3,
       giorni_liberi_obbligatori: context.rules.mandatory_days_off_per_week,
       max_spezzati_settimana: context.rules.max_split_shifts_per_employee_per_week,
       max_ore_team_sala_giorno: context.rules.max_daily_team_hours_sala,
@@ -1020,8 +1020,8 @@ function autoCorrectViolations(
               if (rest < 11) restOk = false;
             }
             if (restOk && dailyH + 1 <= maxDaily && weeklyH + 1 <= maxWeekly) {
-              // Find a reasonable shift length covering this hour (at least min_daily_hours if possible)
-              const minShift = rules.min_daily_hours_per_employee;
+              // Minimum shift length is always 3h
+              const minShift = 3;
               // Build a shift from h to h+minShift (or h+1 if that exceeds constraints)
               let shiftEnd = Math.min(h + minShift, h + (maxDaily - dailyH), h + (maxWeekly - weeklyH));
               if (shiftEnd <= h) shiftEnd = h + 1;
