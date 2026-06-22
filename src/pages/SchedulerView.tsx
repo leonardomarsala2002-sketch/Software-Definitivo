@@ -2,10 +2,14 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, RefreshCw, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeList } from "@/hooks/useEmployees";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import type { ShiftRow } from "@/hooks/useShifts";
+import { useCreateShift, useUpdateShift, useDeleteShift } from "@/hooks/useShifts";
+import { useOpeningHours, useAllowedTimes } from "@/hooks/useStoreSettings";
+import { DayDetailDialog } from "@/components/team-calendar/DayDetailDialog";
 
 /* ─── helpers ───────────────────────────────────────────────────────── */
 
@@ -42,17 +46,11 @@ function shiftDuration(start: string, end: string): number {
 }
 
 function fmtTime(t: string): string {
-  // "09:00:00" → "09:00" → keep as "09:00"
   return t.slice(0, 5);
 }
 
 function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
 /* ─── Shift pill ─────────────────────────────────────────────────────── */
@@ -82,12 +80,10 @@ function ShiftPill({ shift }: { shift: ShiftData }) {
 
   return (
     <div className={cn(base, "rounded text-center leading-none px-0.5 py-0.5 sm:rounded-lg sm:px-2 sm:py-1.5 sm:text-left")}>
-      {/* Mobile: stacked start / end */}
       <div className="sm:hidden">
         <div className="text-[9px] font-bold tabular-nums">{start}</div>
         <div className="text-[8px] font-medium tabular-nums opacity-75">{end}</div>
       </div>
-      {/* Desktop: inline range + hours */}
       <div className="hidden sm:block">
         <div className="text-[11px] font-semibold tabular-nums">{start}–{end}</div>
         <div className="mt-0.5 text-[10px] opacity-70">{hours}h · {isSala ? "Sala" : "Cucina"}</div>
@@ -101,32 +97,41 @@ function ShiftPill({ shift }: { shift: ShiftData }) {
 type DeptFilter = "all" | "sala" | "cucina";
 
 export default function SchedulerView() {
-  const { activeStore, stores: authStores, role } = useAuth();
+  const { activeStore, stores: authStores, role, user } = useAuth();
   const [weekOffset, setWeekOffset] = useState(0);
   const [deptFilter, setDeptFilter] = useState<DeptFilter>("all");
   const [showDraft, setShowDraft] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [modalDept, setModalDept] = useState<"sala" | "cucina">("sala");
 
   const storeId = activeStore?.id ?? authStores[0]?.id;
 
-  const monday   = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
+  const monday    = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
   const weekDates = useMemo(() => getWeekDates(monday), [monday]);
-  const today    = new Date().toISOString().split("T")[0];
+  const today     = new Date().toISOString().split("T")[0];
 
   const { data: employees = [] } = useEmployeeList(storeId ? [storeId] : undefined);
+  const { data: openingHours = [] } = useOpeningHours(storeId);
+  const { data: allowedTimes = [] } = useAllowedTimes(storeId);
+
+  const createShift = useCreateShift();
+  const updateShift = useUpdateShift();
+  const deleteShift = useDeleteShift();
+  const qc = useQueryClient();
 
   const { data: shifts = [], isLoading, refetch } = useQuery({
     queryKey: ["scheduler-shifts", storeId, weekDates[0]],
     enabled: !!storeId,
-    queryFn: async () => {
+    queryFn: async (): Promise<ShiftRow[]> => {
       const { data, error } = await supabase
         .from("shifts")
-        .select("id, date, start_time, end_time, department, status, is_day_off, user_id")
+        .select("*")
         .eq("store_id", storeId!)
         .gte("date", weekDates[0])
         .lte("date", weekDates[6])
         .eq("is_day_off", false);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as ShiftRow[];
     },
   });
 
@@ -167,19 +172,50 @@ export default function SchedulerView() {
     });
   }, [weekDates, shifts, coverageReqs, deptFilter]);
 
+  // Sort: current user first, then alphabetically
   const filteredEmployees = useMemo(() => {
-    if (deptFilter === "all") return employees;
-    return employees.filter((e) => e.department === deptFilter);
-  }, [employees, deptFilter]);
+    const list = deptFilter === "all"
+      ? [...employees]
+      : employees.filter((e) => e.department === deptFilter);
+    return list.sort((a, b) => {
+      if (a.user_id === user?.id) return -1;
+      if (b.user_id === user?.id) return 1;
+      return (a.full_name ?? "").localeCompare(b.full_name ?? "");
+    });
+  }, [employees, deptFilter, user?.id]);
 
   const getShiftsForCell = (userId: string, date: string) =>
     shifts.filter(
       (s) => s.user_id === userId && s.date === date && (showDraft || s.status === "published")
     );
 
+  const allowedEntries = useMemo(
+    () => allowedTimes.filter((t) => t.department === modalDept && t.kind === "entry" && t.is_active).map((t) => t.hour).sort((a, b) => a - b),
+    [allowedTimes, modalDept]
+  );
+  const allowedExits = useMemo(
+    () => allowedTimes.filter((t) => t.department === modalDept && t.kind === "exit" && t.is_active).map((t) => t.hour).sort((a, b) => a - b),
+    [allowedTimes, modalDept]
+  );
+
+  const modalEmployees = useMemo(
+    () => employees.filter((e) => e.department === modalDept).sort((a, b) => {
+      if (a.user_id === user?.id) return -1;
+      if (b.user_id === user?.id) return 1;
+      return (a.full_name ?? "").localeCompare(b.full_name ?? "");
+    }),
+    [employees, modalDept, user?.id]
+  );
+
   const canGenerate = ["admin", "store_manager", "super_admin"].includes(role ?? "");
+  const canEdit     = canGenerate;
   const draftCount  = shifts.filter((s) => s.status === "draft").length;
   const weekLabel   = `${fmtDateShort(weekDates[0])} – ${fmtDateShort(weekDates[6])}`;
+
+  function handleDayClick(date: string) {
+    setSelectedDate(date);
+    setModalDept(deptFilter === "cucina" ? "cucina" : "sala");
+  }
 
   /* ─── render ─────────────────────────────────────────────────────── */
   return (
@@ -189,6 +225,7 @@ export default function SchedulerView() {
         @media (min-width: 640px) {
           .sched-grid { grid-template-columns: 160px repeat(7, minmax(88px, 1fr)); }
         }
+        .day-header-btn:hover { background: rgba(99,102,241,0.07); cursor: pointer; }
       `}</style>
 
       {/* ── Top bar ── */}
@@ -213,7 +250,6 @@ export default function SchedulerView() {
 
       {/* ── Controls ── */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Week navigator */}
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
           <button
             onClick={() => setWeekOffset((o) => o - 1)}
@@ -235,7 +271,6 @@ export default function SchedulerView() {
           </button>
         </div>
 
-        {/* Dept filter */}
         <div className="flex items-center gap-1">
           {(["all", "sala", "cucina"] as DeptFilter[]).map((d) => (
             <button
@@ -253,7 +288,6 @@ export default function SchedulerView() {
           ))}
         </div>
 
-        {/* Draft toggle */}
         <button
           onClick={() => setShowDraft((v) => !v)}
           className={cn(
@@ -278,10 +312,9 @@ export default function SchedulerView() {
       <div className="flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
         <div className="h-full overflow-y-auto">
 
-          {/* Day headers — sticky top */}
-          <div className="sched-grid sticky top-0 z-10 grid border-b border-slate-100 bg-white/95 backdrop-blur-sm">
-            {/* Employee col header */}
-            <div className="flex items-center justify-center sm:justify-start sm:px-4 py-2 border-r border-slate-100">
+          {/* Day headers */}
+          <div className="sched-grid sticky top-0 z-10 grid border-b-2 border-slate-200 bg-white/95 backdrop-blur-sm">
+            <div className="flex items-center justify-center sm:justify-start sm:px-4 py-2 border-r border-slate-200">
               <Users className="h-3.5 w-3.5 text-slate-300" />
             </div>
 
@@ -289,51 +322,43 @@ export default function SchedulerView() {
               const isToday = date === today;
               const pct     = dailyCoverage[i];
               const dotColor =
-                pct === null ? "bg-slate-200"
-                : pct >= 100  ? "bg-emerald-400"
-                : pct >= 70   ? "bg-amber-400"
+                pct === null   ? "bg-slate-200"
+                : pct >= 100   ? "bg-emerald-400"
+                : pct >= 70    ? "bg-amber-400"
                 : "bg-red-400";
               const dayNum = new Date(date + "T00:00:00Z").getUTCDate();
 
               return (
-                <div
+                <button
                   key={date}
+                  onClick={() => handleDayClick(date)}
                   className={cn(
-                    "flex flex-col items-center justify-center py-2 border-l border-slate-100",
-                    isToday && "bg-indigo-50"
+                    "day-header-btn flex flex-col items-center justify-center py-2 border-l border-slate-200 transition-colors",
+                    isToday ? "bg-indigo-50" : "hover:bg-indigo-50/60"
                   )}
                 >
-                  {/* Mobile: single letter */}
                   <span className={cn(
                     "text-[9px] font-bold uppercase tracking-wider sm:hidden",
                     isToday ? "text-indigo-500" : "text-slate-400"
                   )}>
                     {DAYS_SHORT[i]}
                   </span>
-                  {/* Desktop: three-letter */}
                   <span className={cn(
                     "hidden text-[10px] font-bold uppercase tracking-wider sm:block",
                     isToday ? "text-indigo-600" : "text-slate-400"
                   )}>
                     {DAYS_LONG[i]}
                   </span>
-
-                  {/* Date number */}
                   <span className={cn(
                     "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold sm:h-6 sm:w-6 sm:text-[13px]",
                     isToday ? "bg-indigo-600 text-white" : "text-slate-700"
                   )}>
                     {dayNum}
                   </span>
-
-                  {/* Coverage dot */}
                   {pct !== null && (
-                    <span
-                      className={cn("mt-1 h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5", dotColor)}
-                      title={`Copertura: ${pct}%`}
-                    />
+                    <span className={cn("mt-1 h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5", dotColor)} />
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -350,60 +375,74 @@ export default function SchedulerView() {
               <p className="text-[12px]">Nessun dipendente trovato</p>
             </div>
           ) : (
-            filteredEmployees.map((emp, empIdx) => (
-              <div
-                key={emp.user_id}
-                className={cn(
-                  "sched-grid grid border-b border-slate-50 transition-colors hover:bg-slate-50/60",
-                  empIdx % 2 === 0 ? "bg-white" : "bg-slate-50/20"
-                )}
-              >
-                {/* Employee cell */}
-                <div className="flex items-center justify-center sm:justify-start gap-2 border-r border-slate-100 px-1 sm:px-3 py-2">
-                  <div
-                    className={cn(
-                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold sm:h-7 sm:w-7 sm:text-[10px]",
-                      emp.department === "sala"
-                        ? "bg-indigo-100 text-indigo-700"
-                        : "bg-orange-100 text-orange-700"
-                    )}
-                  >
-                    {initials(emp.full_name ?? "?")}
-                  </div>
-                  <div className="hidden min-w-0 sm:block">
-                    <p className="truncate text-[12px] font-semibold text-slate-800">
-                      {emp.full_name}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{emp.weekly_contract_hours}h/sett</p>
-                  </div>
-                </div>
-
-                {/* Day cells */}
-                {weekDates.map((date) => {
-                  const cellShifts = getShiftsForCell(emp.user_id, date);
-                  const isToday = date === today;
-                  return (
+            filteredEmployees.map((emp, empIdx) => {
+              const isMe = emp.user_id === user?.id;
+              return (
+                <div
+                  key={emp.user_id}
+                  className={cn(
+                    "sched-grid grid border-b transition-colors hover:bg-slate-50/60",
+                    isMe
+                      ? "border-b-2 border-indigo-100 bg-indigo-50/30"
+                      : empIdx % 2 === 0
+                      ? "border-b border-slate-100 bg-white"
+                      : "border-b border-slate-100 bg-slate-50/30"
+                  )}
+                >
+                  {/* Employee cell */}
+                  <div className={cn(
+                    "flex items-center justify-center sm:justify-start gap-2 border-r px-1 sm:px-3 py-2",
+                    isMe ? "border-r-indigo-100" : "border-r-slate-100"
+                  )}>
                     <div
-                      key={date}
                       className={cn(
-                        "border-l border-slate-100 p-0.5 sm:p-1 space-y-0.5 min-h-[48px] sm:min-h-[60px]",
-                        isToday && "bg-indigo-50/40"
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold sm:h-7 sm:w-7 sm:text-[10px] ring-2",
+                        isMe ? "ring-indigo-300" : "ring-transparent",
+                        emp.department === "sala"
+                          ? "bg-indigo-100 text-indigo-700"
+                          : "bg-orange-100 text-orange-700"
                       )}
                     >
-                      {cellShifts.length === 0 ? (
-                        <div className="flex h-full items-center justify-center">
-                          <span className="text-[10px] text-slate-200">–</span>
-                        </div>
-                      ) : (
-                        cellShifts.map((s) => (
-                          <ShiftPill key={s.id} shift={s as ShiftData} />
-                        ))
-                      )}
+                      {initials(emp.full_name ?? "?")}
                     </div>
-                  );
-                })}
-              </div>
-            ))
+                    <div className="hidden min-w-0 sm:block">
+                      <p className={cn(
+                        "truncate text-[12px] font-semibold",
+                        isMe ? "text-indigo-700" : "text-slate-800"
+                      )}>
+                        {emp.full_name}{isMe && " (tu)"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">{emp.weekly_contract_hours}h/sett</p>
+                    </div>
+                  </div>
+
+                  {/* Day cells */}
+                  {weekDates.map((date) => {
+                    const cellShifts = getShiftsForCell(emp.user_id, date);
+                    const isToday = date === today;
+                    return (
+                      <div
+                        key={date}
+                        className={cn(
+                          "border-l border-slate-100 p-0.5 sm:p-1 space-y-0.5 min-h-[50px] sm:min-h-[64px]",
+                          isToday && "bg-indigo-50/30"
+                        )}
+                      >
+                        {cellShifts.length === 0 ? (
+                          <div className="flex h-full items-center justify-center">
+                            <span className="text-[10px] text-slate-200">–</span>
+                          </div>
+                        ) : (
+                          cellShifts.map((s) => (
+                            <ShiftPill key={s.id} shift={s as ShiftData} />
+                          ))
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })
           )}
 
           {/* Coverage row */}
@@ -423,7 +462,7 @@ export default function SchedulerView() {
                   : "bg-red-100 text-red-700";
                 return (
                   <div key={date} className="flex items-center justify-center border-l border-slate-100 py-2">
-                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:text-[9px]", color)}>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold", color)}>
                       {pct}%
                     </span>
                   </div>
@@ -434,7 +473,7 @@ export default function SchedulerView() {
         </div>
       </div>
 
-      {/* Legend + info */}
+      {/* Legend */}
       <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 sm:text-[11px]">
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 rounded-sm bg-indigo-100 sm:h-3 sm:w-3" />Sala
@@ -447,10 +486,35 @@ export default function SchedulerView() {
             <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-amber-300 bg-amber-50 sm:h-3 sm:w-3" />Bozza
           </span>
         )}
-        <span className="ml-auto">
-          {filteredEmployees.length} dip. · {weekLabel}
-        </span>
+        <span className="ml-auto">{filteredEmployees.length} dip. · {weekLabel}</span>
       </div>
+
+      {/* ── Day detail modal ── */}
+      {selectedDate && (
+        <div>
+          {/* Dept tab switcher shown above the dialog content */}
+          <DayDetailDialog
+            open={!!selectedDate}
+            onOpenChange={(v) => { if (!v) setSelectedDate(null); }}
+            date={selectedDate}
+            department={modalDept}
+            shifts={shifts}
+            employees={modalEmployees}
+            openingHours={openingHours}
+            allowedEntries={allowedEntries}
+            allowedExits={allowedExits}
+            canEdit={canEdit}
+            currentStoreId={storeId}
+            onCreateShift={(s) =>
+              createShift.mutate({ ...s, store_id: storeId!, department: modalDept, status: "draft", generation_run_id: null }, {
+                onSuccess: () => { qc.invalidateQueries({ queryKey: ["scheduler-shifts", storeId, weekDates[0]] }); },
+              })
+            }
+            onUpdateShift={(id, updates) => updateShift.mutate({ id, updates, storeId })}
+            onDeleteShift={(id) => deleteShift.mutate({ id, storeId })}
+          />
+        </div>
+      )}
     </div>
   );
 }
