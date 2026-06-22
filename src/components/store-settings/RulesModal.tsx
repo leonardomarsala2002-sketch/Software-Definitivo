@@ -31,6 +31,7 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
     // Dipendente
     min_daily_hours_per_employee: (rules as any).min_daily_hours_per_employee ?? 4,
     max_daily_hours_per_employee: rules.max_daily_hours_per_employee ?? 8,
+    max_weekly_hours_per_employee: rules.max_weekly_hours_per_employee ?? 40,
     // Generali
     max_split_shifts_per_employee_per_week: rules.max_split_shifts_per_employee_per_week ?? 3,
     mandatory_days_off_per_week: rules.mandatory_days_off_per_week ?? 1,
@@ -45,6 +46,7 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
       max_daily_team_hours_cucina: rules.max_daily_team_hours_cucina ?? 40,
       min_daily_hours_per_employee: (rules as any).min_daily_hours_per_employee ?? 4,
       max_daily_hours_per_employee: rules.max_daily_hours_per_employee ?? 8,
+      max_weekly_hours_per_employee: rules.max_weekly_hours_per_employee ?? 40,
       max_split_shifts_per_employee_per_week: rules.max_split_shifts_per_employee_per_week ?? 3,
       mandatory_days_off_per_week: rules.mandatory_days_off_per_week ?? 1,
     });
@@ -75,10 +77,10 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-muted/30 p-3">
           <div className="space-y-0.5">
             <Label htmlFor="gen-toggle" className="text-[13px] font-medium cursor-pointer">
-              Generazione automatica ogni Giovedì
+              Generazione automatica mensile
             </Label>
             <p className="text-[11px] text-muted-foreground leading-snug">
-              Turni della settimana successiva generati automaticamente ogni giovedì notte
+              Turni del mese successivo generati automaticamente ogni 25 del mese alle 09:00 UTC
             </p>
           </div>
           <Switch
@@ -114,6 +116,7 @@ export default function RulesModal({ open, onOpenChange, rules, onSave, isSaving
         <div className="grid grid-cols-1 gap-2.5">
           <RuleRow label="Min ore giorno" value={form.min_daily_hours_per_employee} onChange={set("min_daily_hours_per_employee")} min={1} max={12} disabled={readOnly} />
           <RuleRow label="Max ore giorno" value={form.max_daily_hours_per_employee} onChange={set("max_daily_hours_per_employee")} min={1} max={16} disabled={readOnly} />
+          <RuleRow label="Max ore settimana" value={form.max_weekly_hours_per_employee} onChange={set("max_weekly_hours_per_employee")} min={8} max={60} disabled={readOnly} />
         </div>
 
         <Separator />

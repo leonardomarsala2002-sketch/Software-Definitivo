@@ -273,9 +273,13 @@ function computeFitness(
     if (Math.abs(delta) > 5) {
       score += (Math.abs(delta) - 5) * PENALTY_DRIFT_PER_H;
     }
-    // Asymmetric penalty for employees too far BELOW contract (stronger than over-hours)
+    // Below contract by > 5h: HARD-like penalty (user requirement: max ±5h from contract)
+    if (delta < -5) {
+      score += (delta + 5) * 200;
+    }
+    // Below contract by 2-5h: strong soft penalty
     if (delta < -2) {
-      score += (delta + 2) * 40;
+      score += (delta + 2) * 80;
     }
     if (Math.abs(delta) <= 2) {
       score += BONUS_BALANCED;
@@ -2432,7 +2436,7 @@ function runIteration(
         const empWeeklyUsed = weeklyHours.get(emp.user_id) ?? 0;
         const balance = hourBalances.get(emp.user_id) ?? 0;
         const target = emp.weekly_contract_hours - balance;
-        return empWeeklyUsed < target - 4; // at least 4h under target
+        return empWeeklyUsed < target - 3; // trigger when more than 3h under target
       });
 
       if (underContractEmps.length > 0) {
@@ -2516,13 +2520,13 @@ function runIteration(
               const withinAvail = empAvail.some(a => entry >= a.start && exit <= a.end);
               if (!withinAvail) continue;
 
-              // STRICT overbooking check: respect max_staff exactly
+              // Soft overbooking check for contract-filling: allow max_staff + 1
               let wouldOverbook = false;
               for (let h = entry; h < exit; h++) {
                 const maxNeeded = maxStaffMap.get(h);
                 if (maxNeeded !== undefined) {
                   const current = staffAssigned.get(h) ?? 0;
-                  if (current >= maxNeeded) { wouldOverbook = true; break; }
+                  if (current >= maxNeeded + 1) { wouldOverbook = true; break; }
                 }
               }
               if (wouldOverbook) continue;

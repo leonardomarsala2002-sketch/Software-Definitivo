@@ -28,13 +28,11 @@ import {
   useUpdateOpeningHours,
   useSaveCoverage,
   useSaveAllowedTimes,
-  DAY_LABELS,
 } from "@/hooks/useStoreSettings";
 import RulesModal from "@/components/store-settings/RulesModal";
 import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
 import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
-import EngineRulesCard from "@/components/store-settings/EngineRulesCard";
 
 const isPreview =
   typeof window !== "undefined" &&
@@ -261,8 +259,6 @@ const StoreSettings = () => {
         </>
       )}
 
-      {/* Engine rules card – preview only */}
-      {isPreview && hasConfig && !isLoading && <EngineRulesCard />}
     </div>
   );
 };
