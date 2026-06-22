@@ -1631,7 +1631,9 @@ function runIteration(
       const ec = empConstraints.get(emp.user_id);
       // Use the MINIMUM mandatory days off from rules (floor clamped to 1, cap at 2)
       const rawDaysOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
-      const minDaysOff = Math.min(2, Math.max(1, rawDaysOff));
+      // In partial weeks (e.g. 2 days), cap days-off so at least 1 working day remains
+      const maxAllowedOff = Math.max(0, weekDates.length - 1);
+      const minDaysOff = Math.min(maxAllowedOff, Math.min(2, Math.max(1, rawDaysOff)));
       const empDaysOff = new Set<string>();
 
       // Find best days for this employee's days off
@@ -1839,8 +1841,12 @@ function runIteration(
       const plannedOff = prePlannedDaysOff.get(emp.user_id);
       if (plannedOff?.has(dateStr)) return false;
       // Days off constraint (per-employee or store-level)
+      // Use the same capped value as pre-planning (Math.min(2,...)) to avoid inconsistency
+      // where pre-planning assigns 2 days off but maxDaysWorked is 7-3=4 if rules say 3.
       const ec = empConstraints.get(emp.user_id);
-      const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
+      const rawOff = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+      const effectiveDaysOff = Math.min(2, Math.max(1, rawOff));
+      const maxDaysWorked = 7 - effectiveDaysOff;
       const worked = daysWorked.get(emp.user_id)!;
       if (worked.size >= maxDaysWorked) return false;
 
@@ -1872,7 +1878,8 @@ function runIteration(
         } else {
           const worked = daysWorked.get(emp.user_id)!;
           const ec = empConstraints.get(emp.user_id);
-          const maxDaysWorked = 7 - (ec?.custom_days_off ?? rules.mandatory_days_off_per_week);
+          const rawOff2 = ec?.custom_days_off ?? rules.mandatory_days_off_per_week;
+          const maxDaysWorked = 7 - Math.min(2, Math.max(1, rawOff2));
           if (worked.size >= maxDaysWorked) {
             excludeReasons.push(`${getEmpName(emp.user_id)}: max giorni lavorati (${worked.size}/${maxDaysWorked})`);
           } else {
@@ -1923,15 +1930,17 @@ function runIteration(
       const balance = hourBalances.get(emp.user_id) ?? 0;
       const adjustedTarget = emp.weekly_contract_hours - balance;
       const empMaxDaily = ec?.custom_max_daily_hours ?? rules.max_daily_hours_per_employee;
-      const empMaxWeekly = ec?.custom_max_weekly_hours ?? (emp.weekly_contract_hours + 5);
-      // If reserveForSplit > 0 and this is the first shift today, cap daily hours
-      // to leave room for a potential split shift later.
-      // ALSO: always reserve hours if employee has 0 splits and needs contract hours
+      // Use rules.max_weekly_hours_per_employee from DB if set, then contract+5 as fallback
+      const empMaxWeekly = ec?.custom_max_weekly_hours
+        ?? Math.max(rules.max_weekly_hours_per_employee ?? 0, emp.weekly_contract_hours + 5);
+      // Reserve daily hours for a split shift ONLY when the strategy explicitly requests it.
+      // Removing the forced Math.max(reserveForSplit,3) avoids artificially capping shifts
+      // to 3-5h when reserveForSplit=0 (non-split strategies).
       const empDaySplitCount0 = dailySplits.get(emp.user_id)?.get(dateStr) ?? 0;
       const empWeeklySplitCount0 = weeklySplits.get(emp.user_id) ?? 0;
       const empNeedsContractHours = empWeeklyUsed < adjustedTarget - 4;
-      const effectiveReserve = empDaySplitCount0 === 0 && empWeeklySplitCount0 === 0 && empNeedsContractHours
-        ? Math.max(reserveForSplit, 3) // always reserve at least 3h for a mandatory split
+      const effectiveReserve = empDaySplitCount0 === 0 && empWeeklySplitCount0 === 0 && empNeedsContractHours && reserveForSplit > 0
+        ? Math.max(reserveForSplit, 3) // reserve only when strategy explicitly sets reserveForSplit > 0
         : reserveForSplit;
       const cappedDaily = effectiveReserve > 0 && empDaySplitCount0 === 0
         ? Math.max(empMaxDaily - effectiveReserve, 3)
