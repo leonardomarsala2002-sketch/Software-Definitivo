@@ -194,6 +194,9 @@ export type Database = {
           revenue_actual: number
           covers_count: number
           budget_daily: number
+          dessert_pct: number | null
+          beverages_pct: number | null
+          sides_pct: number | null
           notes: string | null
           created_at: string
           updated_at: string
@@ -206,6 +209,9 @@ export type Database = {
           revenue_actual?: number
           covers_count?: number
           budget_daily?: number
+          dessert_pct?: number | null
+          beverages_pct?: number | null
+          sides_pct?: number | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -218,6 +224,9 @@ export type Database = {
           revenue_actual?: number
           covers_count?: number
           budget_daily?: number
+          dessert_pct?: number | null
+          beverages_pct?: number | null
+          sides_pct?: number | null
           notes?: string | null
           created_at?: string
           updated_at?: string
