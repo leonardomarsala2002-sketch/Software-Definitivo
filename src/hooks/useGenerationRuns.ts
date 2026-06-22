@@ -22,10 +22,11 @@ export interface GenerationRun {
   accepted_gaps: string[] | null;
 }
 
-// Carica i generation_runs per un intero mese (tutti i giorni del periodo)
+// Carica i generation_runs per un intero mese (tutti i giorni del periodo).
+// Uses gte/lte on week_start so weekly-chunked runs are all included.
 export function useMonthGenerationRuns(storeId: string | undefined, year: number, month: number) {
   const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = new Date(year, month, 0).getDate(); // day 0 of next month = last day of this month
+  const lastDay = new Date(year, month, 0).getDate();
   const periodEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
   return useQuery({
@@ -35,7 +36,8 @@ export function useMonthGenerationRuns(storeId: string | undefined, year: number
         .from("generation_runs")
         .select("*")
         .eq("store_id", storeId!)
-        .eq("week_start", periodStart)
+        .gte("week_start", periodStart)
+        .lte("week_start", periodEnd)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as GenerationRun[];
@@ -63,45 +65,102 @@ export function useWeekGenerationRuns(storeId: string | undefined, weekStart: st
   });
 }
 
+// Split a date range into 7-day chunks to stay within Edge Function compute limits.
+function buildWeeklyChunks(start: string, end: string): { start: string; end: string }[] {
+  const chunks: { start: string; end: string }[] = [];
+  const endDate = new Date(end + "T00:00:00Z");
+  let cur = new Date(start + "T00:00:00Z");
+  while (cur <= endDate) {
+    const chunkStart = cur.toISOString().split("T")[0];
+    const chunkEnd = new Date(cur);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + 6);
+    chunks.push({
+      start: chunkStart,
+      end: chunkEnd > endDate ? end : chunkEnd.toISOString().split("T")[0],
+    });
+    cur.setUTCDate(cur.getUTCDate() + 7);
+  }
+  return chunks;
+}
+
 export function useGenerateShifts() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (params: {
       store_id: string;
       department?: "sala" | "cucina";
-      // Mensile
       period_start: string;
       period_end: string;
       mode?: "full" | "patch" | "rebalance";
       affected_user_id?: string;
       locked_shift_ids?: string[];
     }) => {
-      const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
-        body: {
-          store_id:          params.store_id,
-          period_start_date: params.period_start,
-          period_end_date:   params.period_end,
-          mode:              params.mode,
-          affected_user_id:  params.affected_user_id,
-          locked_shift_ids:  params.locked_shift_ids,
-          department:        params.department,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      const startDate = new Date(params.period_start + "T00:00:00Z");
+      const endDate = new Date(params.period_end + "T00:00:00Z");
+      const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+      // Only chunk full generation over monthly periods; patch/rebalance use a single call.
+      const shouldChunk = totalDays > 7 && !params.mode;
+
+      if (!shouldChunk) {
+        const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
+          body: {
+            store_id:          params.store_id,
+            period_start_date: params.period_start,
+            period_end_date:   params.period_end,
+            mode:              params.mode,
+            affected_user_id:  params.affected_user_id,
+            locked_shift_ids:  params.locked_shift_ids,
+            department:        params.department,
+          },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return data;
+      }
+
+      // Monthly generation: split into weekly 7-day chunks to avoid WORKER_RESOURCE_LIMIT.
+      const chunks = buildWeeklyChunks(params.period_start, params.period_end);
+      let totalShifts = 0;
+      let lastData: any = null;
+      const allSuggestions: string[] = [];
+      for (const chunk of chunks) {
+        const { data, error } = await supabase.functions.invoke("generate-optimized-schedule", {
+          body: {
+            store_id:          params.store_id,
+            period_start_date: chunk.start,
+            period_end_date:   chunk.end,
+            department:        params.department,
+          },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        totalShifts += (data?.departments ?? []).reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
+        for (const dept of (data?.departments ?? [])) {
+          if (dept.suggestion) allSuggestions.push(dept.suggestion);
+        }
+        lastData = data;
+      }
+      return { ...lastData, totalShifts, suggestions: allSuggestions };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["shifts"] });
       qc.invalidateQueries({ queryKey: ["generation-runs"] });
       qc.invalidateQueries({ queryKey: ["generation-run-suggestions"] });
       qc.invalidateQueries({ queryKey: ["lending-suggestions"] });
-      const depts = data?.departments ?? [];
-      const totalShifts = depts.reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
+      const totalShifts = data?.totalShifts
+        ?? (data?.departments ?? []).reduce((acc: number, d: any) => acc + (d.shifts ?? 0), 0);
       if (data?.is_rebalance) {
         toast.success(`Ribilanciamento completato: ${totalShifts} turni rigenerati, ${data?.locked_shifts_kept ?? 0} turni preservati`);
       } else {
         toast.success(`Turni mensili generati: ${totalShifts} turni`);
+      }
+      // Surface staffing balance suggestions collected across all chunks
+      const rawSuggestions: string[] =
+        data?.suggestions ??
+        (data?.departments ?? []).filter((d: any) => d.suggestion).map((d: any) => d.suggestion as string);
+      const uniqueSuggestions = [...new Set(rawSuggestions)];
+      for (const suggestion of uniqueSuggestions) {
+        toast.warning(suggestion, { duration: 15000 });
       }
     },
     onError: (err: any) => {

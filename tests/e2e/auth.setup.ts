@@ -1,12 +1,12 @@
-/**
+﻿/**
  * Setup condiviso: salva lo stato di sessione per ogni ruolo in file JSON
- * così i test non rieseguono il login ogni volta.
+ * cosÃ¬ i test non rieseguono il login ogni volta.
  *
  * Eseguito automaticamente da Playwright prima dei test grazie al progetto
  * "setup" nella config (quando necessario).
  *
  * Credenziali: usa le variabili d'ambiente oppure i valori di default
- * che corrispondono agli account di test già presenti nel DB.
+ * che corrispondono agli account di test giÃ  presenti nel DB.
  */
 import { test as setup, expect } from "@playwright/test";
 import * as path from "path";
@@ -43,7 +43,7 @@ async function loginAs(
   await page.goto("/");
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
-  await page.getByRole("button", { name: /accedi|login/i }).click();
+  await page.locator("button[type='submit']").click();
   // Wait for successful navigation away from login
   await expect(page).not.toHaveURL(/\/login/);
   await page.context().storageState({ path: storageFile });
@@ -60,3 +60,4 @@ setup("save manager session", async ({ page }) => {
 setup("save admin session", async ({ page }) => {
   await loginAs(page, ACCOUNTS.admin.email, ACCOUNTS.admin.password, ACCOUNTS.admin.file);
 });
+

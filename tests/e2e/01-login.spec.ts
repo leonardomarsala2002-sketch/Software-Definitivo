@@ -1,5 +1,5 @@
-/**
- * Golden path 1 — Login per ogni ruolo.
+﻿/**
+ * Golden path 1 â€” Login per ogni ruolo.
  * Verifica che ogni account di test acceda alla dashboard corretta.
  */
 import { test, expect } from "@playwright/test";
@@ -39,7 +39,7 @@ for (const account of ACCOUNTS) {
     // Inserisci credenziali
     await page.getByLabel(/email/i).fill(account.email);
     await page.getByLabel(/password/i).fill(account.password);
-    await page.getByRole("button", { name: /accedi|login/i }).click();
+    await page.locator("button[type='submit']").click();
 
     // Dopo login deve uscire dalla pagina /login
     await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 });
@@ -55,7 +55,7 @@ for (const account of ACCOUNTS) {
     await page.goto("/");
     await page.getByLabel(/email/i).fill(account.email);
     await page.getByLabel(/password/i).fill(account.password);
-    await page.getByRole("button", { name: /accedi|login/i }).click();
+    await page.locator("button[type='submit']").click();
     await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 });
 
     // Cerca il bottone/menu di logout
@@ -78,7 +78,7 @@ test("login con credenziali errate mostra errore", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel(/email/i).fill("nobody@example.com");
   await page.getByLabel(/password/i).fill("WrongPassword123!");
-  await page.getByRole("button", { name: /accedi|login/i }).click();
+  await page.locator("button[type='submit']").click();
 
   // Deve rimanere su /login e mostrare un messaggio d'errore
   await expect(page).toHaveURL(/\/login/, { timeout: 8_000 });
@@ -86,3 +86,4 @@ test("login con credenziali errate mostra errore", async ({ page }) => {
     timeout: 8_000,
   });
 });
+

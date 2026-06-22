@@ -72,6 +72,8 @@ interface EmpPreferences {
   prefers_opening: boolean;
   prefers_closing: boolean;
   hour_distribution: string | null;
+  prefer_split_shifts: boolean;
+  max_consecutive_days: number;
 }
 
 const PREF_DAY_MAP: Record<string, number> = {
@@ -182,7 +184,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 const PENALTY_UNCOVERED = -100;
 const PENALTY_OVERCROWDED = -10;
-const PENALTY_DRIFT_PER_H = -30;
+const PENALTY_DRIFT_PER_H = -60;
 const PENALTY_REST_VIOLATION = -200;  // 11h rest violation (HARD)
 const PENALTY_NO_DAY_OFF = -500;      // Employee has 0 days off (HARD)
 const PENALTY_EQUITY_SPLIT = -15;     // Spezzati equity (strict: any diff penalized)
@@ -197,6 +199,7 @@ function computeFitness(
   weekDates: string[],
   hourBalances: Map<string, number>,
   department: "sala" | "cucina",
+  empPrefs?: Map<string, EmpPreferences>,
 ): { score: number; hourAdjustments: Record<string, number> } {
   let score = 0;
   const deptEmployees = employees.filter(e => e.department === department && e.is_active);
@@ -270,9 +273,9 @@ function computeFitness(
     if (Math.abs(delta) > 5) {
       score += (Math.abs(delta) - 5) * PENALTY_DRIFT_PER_H;
     }
-    // Symmetric penalty for employees too far BELOW contract
+    // Asymmetric penalty for employees too far BELOW contract (stronger than over-hours)
     if (delta < -2) {
-      score += (delta + 2) * 15;
+      score += (delta + 2) * 40;
     }
     if (Math.abs(delta) <= 2) {
       score += BONUS_BALANCED;
@@ -306,9 +309,15 @@ function computeFitness(
   }
 
   // 5b) Split shift reward: +6.0 per employee with at least one split (doubled incentive)
-  for (const [, splits] of splitCounts) {
+  // But penalize splits for employees who explicitly prefer not to have them.
+  for (const [userId, splits] of splitCounts) {
     if (splits > 0) {
-      score += 6.0;
+      const pref = empPrefs?.get(userId);
+      if (pref && !pref.prefer_split_shifts) {
+        score += splits * -25; // Unwanted split for this employee
+      } else {
+        score += 6.0;
+      }
     }
   }
 
@@ -1649,6 +1658,38 @@ function runIteration(
     }
   }
 
+  // ── ENFORCE max_consecutive_days per employee preference ─────────────
+  // After minimum days off are placed, ensure no run of consecutive work days
+  // exceeds the employee's max_consecutive_days preference. If a run is too long,
+  // add a day off at the best point (lowest demand) to break the streak.
+  for (const emp of deptEmployees) {
+    const empPref = empPrefs.get(emp.user_id);
+    const maxConsec = empPref?.max_consecutive_days ?? 7;
+    if (maxConsec >= weekDates.length) continue;
+
+    const empDaysOff = prePlannedDaysOff.get(emp.user_id) ?? new Set<string>();
+    let run = 0;
+    const runStart: string[] = [];
+    for (const dateStr of weekDates) {
+      const isOff = empDaysOff.has(dateStr) || !isAvailable(emp.user_id, dateStr, availability, exceptions);
+      if (isOff) {
+        run = 0;
+        runStart.length = 0;
+      } else {
+        run++;
+        runStart.push(dateStr);
+        if (run > maxConsec) {
+          // Pick the middle day of the over-limit run to place a day off
+          const breakDay = runStart[Math.floor(runStart.length / 2)];
+          empDaysOff.add(breakDay);
+          run = 0;
+          runStart.length = 0;
+        }
+      }
+    }
+    prePlannedDaysOff.set(emp.user_id, empDaysOff);
+  }
+
   // ── LOG: INPUT DATA SUMMARY ───────────────────────────────────────────
   {
     const DAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
@@ -2748,7 +2789,7 @@ function runIteration(
     mergedShifts.push(current);
   }
 
-  const { score, hourAdjustments } = computeFitness(mergedShifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department);
+  const { score, hourAdjustments } = computeFitness(mergedShifts, uncoveredSlots, employees, coverage, weekDates, hourBalances, department, empPrefs);
 
   return { shifts: mergedShifts, uncoveredSlots, fitnessScore: score, hourAdjustments, dayLogs };
 }
@@ -2925,6 +2966,9 @@ Deno.serve(async (req) => {
     // e i limiti periodo-livello proporzionalmente. I limiti giornalieri
     // restano invariati (max h/giorno, riposo 11h, ecc.).
     const periodDays = weekDates.length;
+    // Monthly mode flag: periods >14 days use reduced iteration counts to stay within
+    // Supabase Edge Function compute resource limits (WORKER_RESOURCE_LIMIT).
+    const isMonthly = periodDays > 14;
     if (periodDays !== 7) {
       const f = periodDays / 7;
       for (const emp of employees) {
@@ -3126,6 +3170,39 @@ Deno.serve(async (req) => {
         }, 0);
         const totalEmployeeHours = deptEmployees.reduce((sum, e) => sum + e.weekly_contract_hours, 0);
 
+        // ─── Pre-generation balance analysis ─────────────────────────────
+        // Compare weekly employee contract hours vs weekly coverage person-hours needed.
+        // Pre-adjust escalation base params so the engine starts from a realistic configuration.
+        const hoursRatio = totalCoverageHours > 0 ? totalEmployeeHours / totalCoverageHours : 1;
+        let preAdjustedDaysOff = rules.mandatory_days_off_per_week;
+        let preAdjustedSplits = rules.max_split_shifts_per_employee_per_week;
+        let balanceSuggestion: string | null = null;
+        if (hoursRatio > 1.15 && hoursRatio <= 1.3) {
+          // More employee hours than coverage needs → give extra days off so hours balance
+          const extraDaysOff = Math.min(2, Math.floor((hoursRatio - 1.0) / 0.15));
+          preAdjustedDaysOff = Math.min(3, preAdjustedDaysOff + extraDaysOff);
+        } else if (hoursRatio > 1.3 && deptEmployees.length > 0) {
+          // Significantly too many employees relative to coverage → surface suggestion
+          const extraDaysOff = Math.min(2, Math.floor((hoursRatio - 1.0) / 0.15));
+          preAdjustedDaysOff = Math.min(3, preAdjustedDaysOff + extraDaysOff);
+          const avgEmpHours = totalEmployeeHours / deptEmployees.length;
+          const excessHours = totalEmployeeHours - totalCoverageHours;
+          const excessEmployees = Math.max(1, Math.round(excessHours / Math.max(1, avgEmpHours)));
+          const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
+          balanceSuggestion = `Organico in eccesso in ${deptLabel}: considera di ridurre di ${excessEmployees} ${excessEmployees === 1 ? "dipendente" : "dipendenti"} per ottimizzare i costi.`;
+        } else if (hoursRatio < 0.85) {
+          // Too few employee hours relative to coverage needs → allow more splits
+          const extraSplits = Math.min(2, Math.floor((0.85 - hoursRatio) / 0.1));
+          preAdjustedSplits = Math.min(5, preAdjustedSplits + extraSplits);
+          if (hoursRatio < 0.7) {
+            const missingHours = totalCoverageHours - totalEmployeeHours;
+            const avgContract = deptEmployees.length > 0 ? totalEmployeeHours / deptEmployees.length : 40;
+            const neededEmployees = Math.ceil(missingHours / Math.max(1, avgContract));
+            const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
+            balanceSuggestion = `Organico insufficiente in ${deptLabel}: servono circa ${neededEmployees} ${neededEmployees === 1 ? "dipendente" : "dipendenti"} in più per coprire tutte le fasce orarie.`;
+          }
+        }
+
         const covByDay = new Map<number, number>();
         for (const c of deptCoverageForAI) {
           covByDay.set(c.day_of_week, (covByDay.get(c.day_of_week) ?? 0) + c.min_staff_required);
@@ -3165,7 +3242,11 @@ Deno.serve(async (req) => {
         const stratSplitsHigh = activeRuleTypes.has("strategy_splits_high");
         const stratSplitsLow = activeRuleTypes.has("strategy_splits_low");
 
-        const aiResult = await generateAIStrategies({
+        // For monthly periods skip Gemini to stay within compute resource limits;
+        // deterministic strategies are sufficient and far cheaper to generate.
+        const aiResult = isMonthly
+          ? { strategies: getDefaultStrategies().slice(0, 8), aiUsed: false }
+          : await generateAIStrategies({
           rules,
           employees: deptEmployees.map(e => ({
             user_id: e.user_id,
@@ -3237,13 +3318,15 @@ Deno.serve(async (req) => {
         // Round 4: spezzati +1 AND giorni liberi -1
         // Round 5: spezzati +3 (maximum flexibility)
         // Round 6: spezzati +2 AND giorni liberi -1 (last resort)
+        // Monthly mode: drastically fewer strategies per round to avoid WORKER_RESOURCE_LIMIT.
+        // Round 1 uses all strategies (only 8 for monthly), escalation rounds further limited.
         const escalationRounds = [
           { label: "Round 1 (regole originali)", daysOffDelta: 0, splitsDelta: 0, stratSlice: strategies.length },
-          { label: "Round 2 (spezzati +1)", daysOffDelta: 0, splitsDelta: 1, stratSlice: 10 },
-          { label: "Round 3 (spezzati +2)", daysOffDelta: 0, splitsDelta: 2, stratSlice: 10 },
-          { label: "Round 4 (spezzati +1, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 1, stratSlice: 10 },
-          { label: "Round 5 (spezzati +3)", daysOffDelta: 0, splitsDelta: 3, stratSlice: 8 },
-          { label: "Round 6 (spezzati +2, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 2, stratSlice: 8 },
+          { label: "Round 2 (spezzati +1)", daysOffDelta: 0, splitsDelta: 1, stratSlice: isMonthly ? 3 : 10 },
+          { label: "Round 3 (spezzati +2)", daysOffDelta: 0, splitsDelta: 2, stratSlice: isMonthly ? 3 : 10 },
+          { label: "Round 4 (spezzati +1, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 1, stratSlice: isMonthly ? 3 : 10 },
+          { label: "Round 5 (spezzati +3)", daysOffDelta: 0, splitsDelta: 3, stratSlice: isMonthly ? 2 : 8 },
+          { label: "Round 6 (spezzati +2, giorni liberi -1)", daysOffDelta: -1, splitsDelta: 2, stratSlice: isMonthly ? 2 : 8 },
         ];
 
         for (const round of escalationRounds) {
@@ -3257,14 +3340,11 @@ Deno.serve(async (req) => {
             if (preCheck.valid && bestResult.uncoveredSlots.length === 0) break;
           }
 
-          // Create adapted rules for this round
+          // Create adapted rules for this round.
+          // Use pre-adjusted values (from balance analysis) as base, then apply round delta on top.
           const adaptedRules = { ...rules };
-          if (round.daysOffDelta !== 0) {
-            adaptedRules.mandatory_days_off_per_week = Math.max(1, rules.mandatory_days_off_per_week + round.daysOffDelta);
-          }
-          if (round.splitsDelta > 0) {
-            adaptedRules.max_split_shifts_per_employee_per_week = rules.max_split_shifts_per_employee_per_week + round.splitsDelta;
-          }
+          adaptedRules.mandatory_days_off_per_week = Math.max(1, preAdjustedDaysOff + round.daysOffDelta);
+          adaptedRules.max_split_shifts_per_employee_per_week = preAdjustedSplits + Math.max(0, round.splitsDelta);
 
           const roundStrategies = round.daysOffDelta === 0 && round.splitsDelta === 0
             ? strategies
@@ -3316,7 +3396,7 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            const correctedFitness = computeFitness(rebalancedShifts, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const correctedFitness = computeFitness(rebalancedShifts, correctedUncovered, employees, coverageData, weekDates, hourBalances, dept, empPrefs);
             const correctedResult: IterationResult = {
               shifts: rebalancedShifts,
               uncoveredSlots: correctedUncovered,
@@ -3385,7 +3465,7 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            const finalFitness = computeFitness(finalRebalanced, finalUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const finalFitness = computeFitness(finalRebalanced, finalUncovered, employees, coverageData, weekDates, hourBalances, dept, empPrefs);
             bestResult = {
               shifts: finalRebalanced,
               uncoveredSlots: finalUncovered,
@@ -3521,7 +3601,7 @@ Deno.serve(async (req) => {
           }
 
           if (remainingUncovered.length < bestResult.uncoveredSlots.length) {
-            const newFitness = computeFitness(filledShifts, remainingUncovered, employees, coverageData, weekDates, hourBalances, dept);
+            const newFitness = computeFitness(filledShifts, remainingUncovered, employees, coverageData, weekDates, hourBalances, dept, empPrefs);
             bestResult = {
               shifts: filledShifts,
               uncoveredSlots: remainingUncovered,
@@ -3541,6 +3621,35 @@ Deno.serve(async (req) => {
             const batch = shifts.slice(i, i + batchSize);
             const { error: insErr } = await adminClient.from("shifts").insert(batch as any);
             if (insErr) throw new Error(`Insert shifts failed: ${insErr.message}`);
+          }
+        }
+
+        // ─── Post-generation per-employee hours quality check ────────────
+        // If the final schedule still leaves many employees significantly under contract,
+        // generate a suggestion even if the pre-generation ratio looked OK.
+        if (!balanceSuggestion && deptEmployees.length > 0) {
+          const deptEmpIds = new Set(deptEmployees.map(e => e.user_id));
+          const empActualHours = new Map<string, number>();
+          for (const s of shifts) {
+            if (s.is_day_off || !s.start_time || !s.end_time) continue;
+            if (!deptEmpIds.has(s.user_id)) continue;
+            const dur = parseHour(s.end_time) - parseHour(s.start_time);
+            empActualHours.set(s.user_id, (empActualHours.get(s.user_id) ?? 0) + dur);
+          }
+          const weekCount = Math.max(1, Math.round(iterDates.length / 7));
+          let underHoursCount = 0;
+          let overHoursCount = 0;
+          for (const emp of deptEmployees) {
+            const actual = empActualHours.get(emp.user_id) ?? 0;
+            const contractForPeriod = emp.weekly_contract_hours * weekCount;
+            if (contractForPeriod - actual > 10 * weekCount) underHoursCount++;
+            if (actual > contractForPeriod + 5 * weekCount) overHoursCount++;
+          }
+          const deptLabel = dept === "cucina" ? "Cucina" : "Sala";
+          if (underHoursCount >= Math.ceil(deptEmployees.length * 0.5)) {
+            balanceSuggestion = `${deptLabel}: ${underHoursCount} dipendenti risultano sotto-orario. Verifica le fasce di copertura o considera di ridurre l'organico di ${Math.max(1, Math.floor(underHoursCount / 2))} unità.`;
+          } else if (overHoursCount >= Math.ceil(deptEmployees.length * 0.5)) {
+            balanceSuggestion = `${deptLabel}: ${overHoursCount} dipendenti risultano in eccesso di ore. Considera di aggiungere ${Math.max(1, Math.floor(overHoursCount / 2))} dipendenti per distribuire il carico.`;
           }
         }
 
@@ -3933,6 +4042,7 @@ Deno.serve(async (req) => {
           fitness: fitnessScore,
           hourAdjustments,
           fallbackUsed,
+          suggestion: balanceSuggestion,
         });
       } catch (genErr) {
         await adminClient.from("generation_runs").update({

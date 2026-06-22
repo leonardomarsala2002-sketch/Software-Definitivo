@@ -155,6 +155,21 @@ function EmployeeDashboard() {
     },
   });
 
+  const { data: contractDetails } = useQuery({
+    queryKey: ["my-contract-dash", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("employee_details")
+        .select("weekly_contract_hours")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const contractHours = contractDetails?.weekly_contract_hours ?? 40;
+
   const { data: upcomingShifts = [] } = useQuery({
     queryKey: ["my-shifts-dash", user?.id, storeId],
     enabled: !!user?.id && !!storeId,
@@ -163,7 +178,7 @@ function EmployeeDashboard() {
       const in7 = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
       const { data } = await supabase
         .from("shifts")
-        .select("id, date, start_time, end_time, department, is_draft")
+        .select("id, date, start_time, end_time, department, status")
         .eq("user_id", user!.id)
         .eq("store_id", storeId!)
         .eq("is_day_off", false)
@@ -173,6 +188,25 @@ function EmployeeDashboard() {
       return data ?? [];
     },
   });
+
+  // Current Mon–Sun week hours
+  const currentWeekHours = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((day + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const ws = monday.toISOString().split("T")[0];
+    const we = sunday.toISOString().split("T")[0];
+    return upcomingShifts
+      .filter(s => s.date >= ws && s.date <= we && s.start_time && s.end_time)
+      .reduce((sum, s) => {
+        const sh = parseInt(s.start_time!.split(":")[0], 10);
+        const eh = parseInt(s.end_time!.split(":")[0], 10) || 24;
+        return sum + Math.max(0, eh - sh);
+      }, 0);
+  }, [upcomingShifts]);
 
   const { data: myRequests = [] } = useMyRequests(user?.id);
 
@@ -215,11 +249,12 @@ function EmployeeDashboard() {
         <p className="mt-0.5 text-[13px] text-muted-foreground">Ecco la tua situazione di oggi</p>
       </motion.div>
 
-      <motion.div variants={fadeItem} className="grid grid-cols-3 gap-3">
+      <motion.div variants={fadeItem} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: "Turni settimana", value: upcomingShifts.length, icon: <Calendar className="h-4 w-4" />, iconBg: "bg-accent", iconColor: "text-primary", href: "/team-calendar" },
           { label: "Approvate",       value: stats.approved,        icon: <CheckCircle2 className="h-4 w-4" />, iconBg: "bg-success/10", iconColor: "text-success",     href: "/requests" },
           { label: "In attesa",       value: stats.pending,         icon: <AlertTriangle className="h-4 w-4" />, iconBg: "bg-warning/10", iconColor: "text-warning",     href: "/requests" },
+          { label: "Ore sett.",       value: currentWeekHours,      icon: <Clock className="h-4 w-4" />, iconBg: currentWeekHours >= contractHours ? "bg-success/10" : "bg-muted", iconColor: currentWeekHours >= contractHours ? "text-success" : "text-muted-foreground", href: "/personal-calendar", suffix: `/${contractHours}h` },
         ].map((s) => (
           <Link
             key={s.label}
@@ -231,6 +266,9 @@ function EmployeeDashboard() {
             </span>
             <p className="text-xl font-bold text-foreground leading-none">
               <AnimatedNumber value={s.value} />
+              {"suffix" in s && s.suffix && (
+                <span className="text-[13px] font-medium text-muted-foreground">{s.suffix}</span>
+              )}
             </p>
             <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
           </Link>
@@ -266,7 +304,7 @@ function EmployeeDashboard() {
                       {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}
                     </p>
                   </div>
-                  {s.is_draft && (
+                  {s.status === "draft" && (
                     <span className="rounded-full border border-dashed border-warning/50 bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning">
                       Bozza
                     </span>
@@ -420,7 +458,7 @@ function AdminDashboard() {
         .eq("store_id", storeId!)
         .gte("date", weekDates[0])
         .lte("date", weekDates[6])
-        .eq("is_draft", false)
+        .eq("status", "published")
         .eq("is_day_off", false);
       if (error) throw error;
       return data ?? [];
@@ -435,7 +473,7 @@ function AdminDashboard() {
       const in3days = new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("shifts")
-        .select("id, date, start_time, end_time, department, is_draft, profiles(full_name)")
+        .select("id, date, start_time, end_time, department, status, profiles(full_name)")
         .eq("store_id", storeId!)
         .gte("date", today)
         .lte("date", in3days)
@@ -681,9 +719,9 @@ function AdminDashboard() {
                   </div>
                   <span className={cn(
                     "rounded-full px-2 py-0.5 text-[9px] font-semibold shrink-0",
-                    s.is_draft ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
+                    s.status === "draft" ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
                   )}>
-                    {s.is_draft ? "Bozza" : "Live"}
+                    {s.status === "draft" ? "Bozza" : "Live"}
                   </span>
                 </div>
               ))}
@@ -723,9 +761,9 @@ function AdminDashboard() {
                       <td className="px-4 py-3">
                         <span className={cn(
                           "rounded-full px-2.5 py-0.5 text-[10px] font-semibold",
-                          s.is_draft ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
+                          s.status === "draft" ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
                         )}>
-                          {s.is_draft ? "Bozza" : "Pubblicato"}
+                          {s.status === "draft" ? "Bozza" : "Pubblicato"}
                         </span>
                       </td>
                     </tr>

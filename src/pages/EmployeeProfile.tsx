@@ -89,7 +89,7 @@ export default function EmployeeProfile() {
       const in14 = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("shifts")
-        .select("id, date, start_time, end_time, department, is_draft")
+        .select("id, date, start_time, end_time, department, status")
         .eq("user_id", user!.id)
         .eq("store_id", storeId!)
         .eq("is_day_off", false)
@@ -224,7 +224,7 @@ export default function EmployeeProfile() {
                         {isSala ? "Sala" : "Cucina"}
                       </p>
                     </div>
-                    {s.is_draft && (
+                    {s.status === "draft" && (
                       <span className="rounded-full border border-dashed border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                         Bozza
                       </span>

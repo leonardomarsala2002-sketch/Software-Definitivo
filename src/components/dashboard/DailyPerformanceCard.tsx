@@ -79,7 +79,7 @@ export function DailyPerformanceCard() {
         .from("shifts")
         .select("date, start_time, end_time")
         .eq("store_id", storeId!)
-        .eq("is_draft", false)
+        .eq("status", "published")
         .eq("is_day_off", false)
         .gte("date", dates[0])
         .lte("date", dates[6]);

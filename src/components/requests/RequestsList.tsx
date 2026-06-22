@@ -97,6 +97,8 @@ export default function RequestsList({ requests, isLoading, profiles, isAdmin }:
                     className="h-7 w-7 text-success hover:text-success"
                     onClick={() => reviewReq.mutate({ id: r.id, status: "approved", reviewedBy: user!.id })}
                     disabled={reviewReq.isPending}
+                    aria-label="Approva"
+                    title="Approva"
                   >
                     <Check className="h-4 w-4" />
                   </Button>
@@ -106,6 +108,8 @@ export default function RequestsList({ requests, isLoading, profiles, isAdmin }:
                     className="h-7 w-7 text-destructive hover:text-destructive"
                     onClick={() => reviewReq.mutate({ id: r.id, status: "rejected", reviewedBy: user!.id })}
                     disabled={reviewReq.isPending}
+                    aria-label="Rifiuta"
+                    title="Rifiuta"
                   >
                     <X className="h-4 w-4" />
                   </Button>

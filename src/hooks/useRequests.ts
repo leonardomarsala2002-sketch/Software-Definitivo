@@ -80,7 +80,7 @@ export function useCreateRequest() {
               ? "permesso"
               : r.request_type as any;
 
-          await supabase.from("employee_exceptions").insert({
+          const { error: excErr } = await supabase.from("employee_exceptions").insert({
             user_id: r.user_id,
             store_id: r.store_id,
             exception_type: excType,
@@ -89,6 +89,7 @@ export function useCreateRequest() {
             notes: `Auto-approvata: ${r.request_type}${r.selected_hour != null ? ` h${r.selected_hour}` : ""}${r.notes ? " - " + r.notes : ""}`,
             created_by: r.user_id,
           } as any);
+          if (excErr) throw excErr;
         }
       }
     },
@@ -156,7 +157,7 @@ export function useReviewRequest() {
                 ? "permesso"
                 : r.request_type as any;
 
-            await supabase.from("employee_exceptions").insert({
+            const { error: excErr } = await supabase.from("employee_exceptions").insert({
               user_id: r.user_id,
               store_id: r.store_id,
               exception_type: excType,
@@ -165,6 +166,7 @@ export function useReviewRequest() {
               notes: `Auto: ${r.request_type}${r.selected_hour != null ? ` h${r.selected_hour}` : ""}${r.notes ? " - " + r.notes : ""}`,
               created_by: reviewedBy,
             } as any);
+            if (excErr) throw excErr;
           }
         }
       }

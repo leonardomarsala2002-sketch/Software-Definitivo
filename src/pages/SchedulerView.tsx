@@ -47,11 +47,11 @@ interface ShiftCellData {
   start_time: string;
   end_time: string;
   department: string;
-  is_draft: boolean;
+  status: string;
 }
 
 function ShiftPill({ shift }: { shift: ShiftCellData }) {
-  const isDraft = shift.is_draft;
+  const isDraft = shift.status === "draft";
   const isSala = shift.department === "sala";
   const hours = shiftDuration(shift.start_time, shift.end_time);
 
@@ -98,7 +98,7 @@ export default function SchedulerView() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("shifts")
-        .select("id, date, start_time, end_time, department, is_draft, is_day_off, user_id")
+        .select("id, date, start_time, end_time, department, status, is_day_off, user_id")
         .eq("store_id", storeId!)
         .gte("date", weekDates[0])
         .lte("date", weekDates[6])
@@ -107,6 +107,46 @@ export default function SchedulerView() {
       return data ?? [];
     },
   });
+
+  const { data: coverageReqs = [] } = useQuery({
+    queryKey: ["scheduler-coverage", storeId],
+    enabled: !!storeId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("store_coverage_requirements")
+        .select("day_of_week, hour_slot, department, min_staff_required")
+        .eq("store_id", storeId!);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Per ogni giorno: rapporto slot-coperti / slot-richiesti
+  const dailyCoverage = useMemo(() => {
+    return weekDates.map((date) => {
+      // DB: day_of_week Mon=0..Sun=6 (same as edge function getDayOfWeek)
+      const d = new Date(date + "T00:00:00Z");
+      const dow = (d.getUTCDay() + 6) % 7;
+      const dayCovReqs = coverageReqs.filter((c) => c.day_of_week === dow);
+      if (dayCovReqs.length === 0) return null;
+      let covered = 0;
+      let total = 0;
+      for (const req of dayCovReqs) {
+        const h = parseInt(req.hour_slot.split(":")[0], 10);
+        const assigned = shifts.filter((s) => {
+          if (s.date !== date || s.is_day_off || !s.start_time || !s.end_time) return false;
+          if (deptFilter !== "all" && s.department !== deptFilter) return false;
+          const sh = parseInt(s.start_time.split(":")[0], 10);
+          const eh = parseInt(s.end_time.split(":")[0], 10) || 24;
+          return h >= sh && h < eh;
+        }).length;
+        total += req.min_staff_required;
+        covered += Math.min(assigned, req.min_staff_required);
+      }
+      return total > 0 ? Math.round((covered / total) * 100) : 100;
+    });
+  }, [weekDates, shifts, coverageReqs, deptFilter]);
 
   const filteredEmployees = useMemo(() => {
     if (deptFilter === "all") return employees;
@@ -118,7 +158,7 @@ export default function SchedulerView() {
       (s) =>
         s.user_id === userId &&
         s.date === date &&
-        (showDraft || !s.is_draft)
+        (showDraft || s.status === "published")
     );
 
   const weekLabel = `${fmtDate(weekDates[0])} – ${fmtDate(weekDates[6])}`;
@@ -126,8 +166,8 @@ export default function SchedulerView() {
 
   const canGenerate = ["admin", "store_manager", "super_admin"].includes(role ?? "");
 
-  const draftCount = shifts.filter((s) => s.is_draft).length;
-  const publishedCount = shifts.filter((s) => !s.is_draft).length;
+  const draftCount = shifts.filter((s) => s.status === "draft").length;
+  const publishedCount = shifts.filter((s) => s.status === "published").length;
 
   return (
     <div className="flex h-full flex-col gap-4 animate-fade-up">
@@ -232,6 +272,8 @@ export default function SchedulerView() {
           </div>
           {weekDates.map((date, i) => {
             const isToday = date === today;
+            const pct = dailyCoverage[i];
+            const coverageColor = pct === null ? "" : pct >= 100 ? "bg-success" : pct >= 70 ? "bg-warning" : "bg-destructive";
             return (
               <div
                 key={date}
@@ -252,6 +294,9 @@ export default function SchedulerView() {
                 )}>
                   {new Date(date + "T00:00:00Z").getUTCDate()}
                 </span>
+                {pct !== null && (
+                  <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", coverageColor)} title={`Copertura: ${pct}%`} />
+                )}
               </div>
             );
           })}
@@ -328,6 +373,30 @@ export default function SchedulerView() {
               })}
             </div>
           ))
+        )}
+
+        {/* Coverage summary row — always inside the scrollable grid for horizontal sync */}
+        {coverageReqs.length > 0 && !isLoading && (
+          <div
+            className="grid border-t-2 border-slate-200 bg-slate-50/80 sticky bottom-0 z-10"
+            style={{ gridTemplateColumns: `200px repeat(7, minmax(110px, 1fr))` }}
+          >
+            <div className="flex items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Copertura
+            </div>
+            {weekDates.map((date, i) => {
+              const pct = dailyCoverage[i];
+              if (pct === null) return <div key={date} className="border-l border-slate-100 px-2 py-2" />;
+              const color = pct >= 100 ? "bg-emerald-100 text-emerald-700" : pct >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
+              return (
+                <div key={date} className="flex items-center justify-center border-l border-slate-100 px-2 py-2">
+                  <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-bold", color)}>
+                    {pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
