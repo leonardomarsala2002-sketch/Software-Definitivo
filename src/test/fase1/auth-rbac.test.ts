@@ -6,22 +6,14 @@ import { describe, it, expect } from "vitest";
 
 // ─── isPreviewEnvironment (mirrored from AuthContext) ────────────────────────
 
-function isPreviewEnvironment(hostname: string, isDev: boolean): boolean {
-  if (isDev) return true;
-  return (
-    hostname.includes("-preview--") ||
-    hostname.includes("lovableproject.com")
-  );
+function isPreviewEnvironment(isDev: boolean): boolean {
+  return isDev;
 }
 
 // ─── isDev check (mirrored from ProtectedRoute) ──────────────────────────────
 
-function isBootstrapVisible(hostname: string, isDev: boolean): boolean {
-  return (
-    isDev ||
-    hostname.includes("-preview--") ||
-    hostname.includes("lovableproject.com")
-  );
+function isBootstrapVisible(isDev: boolean): boolean {
+  return isDev;
 }
 
 // ─── ROLE_CYCLE (mirrored from AuthContext) ───────────────────────────────────
@@ -43,27 +35,12 @@ function isAuthorized(realRole: AppRole | null, storeCount: number): boolean {
 // ─── Tests: isPreviewEnvironment ──────────────────────────────────────────────
 
 describe("isPreviewEnvironment", () => {
-  it("returns true in Vite dev mode regardless of hostname", () => {
-    expect(isPreviewEnvironment("localhost", true)).toBe(true);
-    expect(isPreviewEnvironment("myapp.com", true)).toBe(true);
+  it("returns true in Vite dev mode", () => {
+    expect(isPreviewEnvironment(true)).toBe(true);
   });
 
-  it("returns true for Lovable preview hostnames", () => {
-    expect(isPreviewEnvironment("abc123-preview--lovableproject.com", false)).toBe(true);
-    expect(isPreviewEnvironment("myapp.lovableproject.com", false)).toBe(true);
-  });
-
-  it("returns false for production hostnames", () => {
-    expect(isPreviewEnvironment("myapp.com", false)).toBe(false);
-    expect(isPreviewEnvironment("gestionale.it", false)).toBe(false);
-    expect(isPreviewEnvironment("staging.gestionale.it", false)).toBe(false);
-  });
-
-  it("does NOT match production domains containing the word 'preview' (old bug)", () => {
-    // Old check: hostname.includes("preview") would match "preview.myapp.com"
-    // Fixed check: hostname.includes("-preview--") does NOT match it
-    expect(isPreviewEnvironment("preview.myapp.com", false)).toBe(false);
-    expect(isPreviewEnvironment("mypreviewsite.com", false)).toBe(false);
+  it("returns false in production", () => {
+    expect(isPreviewEnvironment(false)).toBe(false);
   });
 });
 
@@ -71,19 +48,11 @@ describe("isPreviewEnvironment", () => {
 
 describe("isBootstrapVisible (ProtectedRoute)", () => {
   it("shows bootstrap button in dev mode", () => {
-    expect(isBootstrapVisible("localhost", true)).toBe(true);
+    expect(isBootstrapVisible(true)).toBe(true);
   });
 
-  it("shows bootstrap button on Lovable preview", () => {
-    expect(isBootstrapVisible("abc-preview--lovableproject.com", false)).toBe(true);
-  });
-
-  it("hides bootstrap button on production hostname", () => {
-    expect(isBootstrapVisible("myapp.com", false)).toBe(false);
-  });
-
-  it("hides bootstrap button on hostname with 'preview' but not Lovable pattern", () => {
-    expect(isBootstrapVisible("preview.myapp.com", false)).toBe(false);
+  it("hides bootstrap button in production", () => {
+    expect(isBootstrapVisible(false)).toBe(false);
   });
 });
 

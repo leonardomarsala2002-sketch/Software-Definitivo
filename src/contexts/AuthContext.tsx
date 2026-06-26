@@ -16,18 +16,11 @@ interface StoreInfo {
 const ROLE_CYCLE: (AppRole | null)[] = ["super_admin", "admin", "store_manager", "employee", null];
 
 /**
- * Returns true only in Vite dev server (import.meta.env.DEV) or on Lovable preview hostnames.
- * Explicitly excludes localhost in production builds so deployed staging environments
- * cannot expose the role-cycling UI.
+ * Returns true only in Vite dev server (import.meta.env.DEV).
+ * Prevents role-cycling UI from being exposed in production.
  */
 function isPreviewEnvironment(): boolean {
-  if (typeof window === "undefined") return false;
-  if (import.meta.env.DEV) return true;
-  const host = window.location.hostname;
-  return (
-    host.includes("-preview--") ||
-    host.includes("lovableproject.com")
-  );
+  return import.meta.env.DEV;
 }
 
 interface AuthContextValue {

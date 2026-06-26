@@ -34,11 +34,7 @@ import OpeningHoursModal from "@/components/store-settings/OpeningHoursModal";
 import CoverageModal from "@/components/store-settings/CoverageModal";
 import AllowedTimesModal from "@/components/store-settings/AllowedTimesModal";
 
-const isPreview =
-  typeof window !== "undefined" &&
-  (window.location.hostname.includes("-preview--") ||
-    window.location.hostname.includes("lovableproject.com") ||
-    window.location.hostname === "localhost");
+const isPreview = import.meta.env.DEV;
 
 function SettingsSkeleton() {
   return (
